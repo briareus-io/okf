@@ -31,6 +31,14 @@ compatibility. Recheck if the executable or PATH changes during the task.
 
 ## Progressive disclosure
 
+For CLI 0.5 JSON operations, require the versioned `operation-start` and
+`operation-complete` records and check the actual process exit before treating
+the payload as complete. An absent trailer after interruption proves neither
+an empty result nor a complete scan. Use the trailer's examination and matching
+dimensions alongside query-summary evidence; a bounded successful read can
+still be partial. The trailer's `outcome` is an operation result, never a
+concept's authored lifecycle `status`.
+
 1. Establish the primary bundle and the scope needed for the question before querying. For catalog
    work, inspect registrations once and pass the selected `--bundle-id` on subsequent commands;
    add only the required `--scope-bundle` identities. A request spanning named bundles supplies

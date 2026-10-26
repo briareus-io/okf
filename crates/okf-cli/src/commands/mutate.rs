@@ -11,7 +11,7 @@ use okf_core::mutate::add::{add, AddOptions};
 use okf_core::mutate::edit::{edit, parse_kv, EditChange, EditSpec, SourceSelector};
 use okf_core::mutate::init::{init, InitOptions};
 use okf_core::mutate::mv::mv_with_ontology;
-use okf_core::mutate::refresh::refresh;
+use okf_core::mutate::refresh::refresh_with_policy;
 use okf_core::mutate::rm::rm_with_ontology;
 use okf_core::mutate::structured::StructuredEdits;
 use okf_core::mutate::verify::verify;
@@ -53,6 +53,9 @@ pub fn run_init(args: &InitArgs, json: bool) -> Result<i32> {
 
 /// `okf add <path> [bundle] [--type] [--title] [--description] [--attested]`.
 pub fn run_add(args: &AddArgs, json: bool) -> Result<i32> {
+    let _gate = args
+        .require_ontology_gate
+        .then(okf_core::mutate::transaction::strengthen_ontology_gate);
     let root = resolve_bundle(args.bundle.as_deref())?;
     let (_, ontology) = load_for(&root)?;
     check_stdin_consumers(
@@ -221,6 +224,9 @@ fn parse_parameters(args: &[String]) -> Result<Vec<(String, String, bool)>> {
 /// `okf edit <concept> [bundle]` with frontmatter (`--set/--unset/--add/--remove`) and body
 /// (`--set-body/--append-body/--clear-body`, `--*-section`) operations.
 pub fn run_edit(args: &EditArgs, json: bool) -> Result<i32> {
+    let _gate = args
+        .require_ontology_gate
+        .then(okf_core::mutate::transaction::strengthen_ontology_gate);
     let root = resolve_bundle(args.bundle.as_deref())?;
     check_stdin_consumers(
         args.set_body
@@ -513,6 +519,9 @@ fn change_json(c: &EditChange) -> serde_json::Value {
 
 /// `okf mv <old> <new> [bundle]`.
 pub fn run_mv(args: &MvArgs, json: bool) -> Result<i32> {
+    let _gate = args
+        .require_ontology_gate
+        .then(okf_core::mutate::transaction::strengthen_ontology_gate);
     let root = resolve_bundle(args.bundle.as_deref())?;
     let (_, ontology) = load_for(&root)?;
     let r = mv_with_ontology(&root, &args.old, &args.new, ontology.as_ref())?;
@@ -538,6 +547,9 @@ pub fn run_mv(args: &MvArgs, json: bool) -> Result<i32> {
 
 /// `okf rm <concept> [bundle] [--force]`.
 pub fn run_rm(args: &RmArgs, json: bool) -> Result<i32> {
+    let _gate = args
+        .require_ontology_gate
+        .then(okf_core::mutate::transaction::strengthen_ontology_gate);
     let root = resolve_bundle(args.bundle.as_deref())?;
     let (_, ontology) = load_for(&root)?;
     let r = rm_with_ontology(&root, &args.concept, args.force, ontology.as_ref())?;
@@ -564,6 +576,9 @@ pub fn run_rm(args: &RmArgs, json: bool) -> Result<i32> {
 
 /// `okf verify <concept> [bundle] --by <actor>`.
 pub fn run_verify(args: &VerifyArgs, json: bool) -> Result<i32> {
+    let _gate = args
+        .require_ontology_gate
+        .then(okf_core::mutate::transaction::strengthen_ontology_gate);
     let root = resolve_bundle(args.bundle.as_deref())?;
     let clock = SystemClock;
     let r = verify(&root, &args.concept, &args.by, &clock)?;
@@ -583,12 +598,25 @@ pub fn run_verify(args: &VerifyArgs, json: bool) -> Result<i32> {
 
 /// `okf refresh <concept> [bundle]`.
 pub fn run_refresh(args: &RefreshArgs, json: bool) -> Result<i32> {
+    let _gate = args
+        .require_ontology_gate
+        .then(okf_core::mutate::transaction::strengthen_ontology_gate);
+    if let Some(other) = args
+        .fail_on
+        .as_deref()
+        .filter(|value| !matches!(*value, "never" | "skipped" | "any"))
+    {
+        return Err(okf_core::error::OkfError::Usage(format!(
+            "invalid --fail-on {other:?}: expected never, skipped, or any"
+        )));
+    }
     let root = resolve_bundle(args.bundle.as_deref())?;
     let fs = RealFs;
     let git = RealGit;
     let clock = SystemClock;
     let engine = Engine::new(&root, &fs, &git, None);
-    let r = refresh(&root, &args.concept, &engine, &clock)?;
+    let reject_skips = matches!(args.fail_on.as_deref(), Some("skipped" | "any"));
+    let r = refresh_with_policy(&root, &args.concept, &engine, &clock, reject_skips)?;
     if json {
         let skipped: Vec<_> = r
             .skipped

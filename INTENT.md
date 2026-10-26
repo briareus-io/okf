@@ -14,6 +14,12 @@ The harness is deliberately **two layers**:
 The core must be usable by both humans and agents, so every command supports
 human output (text/markdown) and machine output (JSON).
 
+For CLI 0.5.0, commands retain their own payload records while JSON operations
+carry start and completion evidence. Completion describes execution and read
+coverage; it never changes the authored concept lifecycle. The
+[migration guide](docs/0.5.0-migration.md) records the incompatible CLI
+boundary. OKF document conformance remains v0.2.
+
 ---
 
 ## Design principles (decided)
@@ -49,7 +55,8 @@ human output (text/markdown) and machine output (JSON).
   the concept's frontmatter verbatim** (if a doc has a `version` key, the record has it too),
   plus a small set of computed fields (`id`, derived `trust_tier`). No fixed/whitelisted
   concept schema — the record is the frontmatter. Streams cleanly for
-  large bundles, no need to buffer a whole array. Human output stays text/markdown.
+  large bundles, no need to buffer a whole array. CLI 0.5 operations frame
+  payload records with start and completion evidence. Human output stays text/markdown.
 - **Stable machine contract.** Stable exit codes, stable per-line JSON shapes, and
   `okf schema` so an agent can discover the whole surface.
 

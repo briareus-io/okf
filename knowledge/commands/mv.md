@@ -1,24 +1,24 @@
 ---
 type: Command
-title: okf mv
-description: Moves or renames a concept and rewrites every inbound link.
 group: mutate
 mutates: true
 implemented_by:
 - /components/mutate
+title: okf mv
+description: Moves or renames a concept and rewrites every inbound link.
 sources:
 - resource: crates/okf-cli/src/commands/mutate.rs
   kind: git-path
   fingerprint:
-    blob_sha: 6805fef5102d8746ad060d24254e2e4423e69d38
+    blob_sha: 73e747e096148161676c75253cff3556a2deaff7
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
   fingerprint:
-    blob_sha: 126dddfab3fb8caa78cfd61396db89dbcc324a33
+    blob_sha: a99f651a30e3a6ad2859066a5b8f287e73391371
 - resource: crates/okf-cli/src/cli.rs
   kind: git-path
   fingerprint:
-    blob_sha: 28db6285f18a0400ab4b08c79c46322e58c2d833
+    blob_sha: fad8084ae5833fd506b4e8818e62e0a2d387c2d6
 last_modified: 2026-10-04T20:39:29Z
 ---
 # okf mv
@@ -37,6 +37,7 @@ single-bundle move cannot establish that every external consumer was repaired.
 | `<old>` | positional | yes | Existing concept id |
 | `<new>` | positional | yes | New concept id |
 | `<bundle>` | positional | no | Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory) |
+| `--require-ontology-gate` | bool | no | Require the ontology write gate even when bundle policy leaves it disabled (default: `false`) |
 
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 

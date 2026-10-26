@@ -227,15 +227,15 @@ fn catalog_lint_fix_respects_scope_and_each_bundles_ontology_and_settings() {
         std::fs::read_to_string(root.join("b/note.md")).unwrap(),
         original
     );
-    let all = run(&["--fix", "--catalog-scope"]);
-    assert!(all
-        .iter()
-        .any(|r| r["kind"] == "fix" && r["bundle"] == "test.b" && r["fixed"] == 1));
-    assert!(!all
-        .iter()
-        .any(|r| r["kind"] == "finding" && r["rule"] == "frontmatter-order"));
+    let scoped = Command::cargo_bin("okf")
+        .unwrap()
+        .current_dir(root)
+        .args(["lint", "--fix", "--catalog-scope"])
+        .output()
+        .unwrap();
+    assert_eq!(scoped.status.code(), Some(2));
     let b = std::fs::read_to_string(root.join("b/note.md")).unwrap();
-    assert!(b.starts_with("---\ntype: Note\nsecond: B\nfirst: A\ncustom: keep\n"));
+    assert_eq!(b, original);
     assert_eq!(
         std::fs::read_to_string(root.join("off/note.md")).unwrap(),
         original
@@ -253,8 +253,11 @@ fn catalog_lint_fix_respects_scope_and_each_bundles_ontology_and_settings() {
             old.frontmatter.get("verified")
         );
     }
-    assert!(run(&["--fix", "--scope-bundle", "test.b"])
-        .iter()
-        .filter(|r| r["kind"] == "fix")
-        .all(|r| r["fixed"] == 0));
+    let scoped = Command::cargo_bin("okf")
+        .unwrap()
+        .current_dir(root)
+        .args(["lint", "--fix", "--scope-bundle", "test.b"])
+        .output()
+        .unwrap();
+    assert_eq!(scoped.status.code(), Some(2));
 }

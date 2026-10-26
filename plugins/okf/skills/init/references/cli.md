@@ -1,12 +1,12 @@
 # okf CLI — init command reference
 
-> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.4.4, OKF spec 0.2). Do not hand-edit; regenerate instead.
+> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.5.0, OKF spec 0.2). Do not hand-edit; regenerate instead.
 
 This focused reference contains only commands selected for the `init` workflow. First pass the skill CLI compatibility preflight. Consult this reference when exact arguments or output shapes are needed. For a compatible CLI that rejects documented syntax, use that command's `--help` output as the runtime authority.
 
 Commands with a human form accept global `--json` for NDJSON; `schema` is always NDJSON. Bundle-aware commands take an optional trailing `bundle` path or a separate `--bundle-id` selector. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Catalog registration alone does not extend examination scope. Meta commands have no bundle, and `source-scan` takes an explicit arbitrary directory.
 
-Exit codes: 0 means success under the selected failure threshold, not necessarily no findings; 1 means findings or an unsuccessful resolution; 2 means usage errors; 3 means environment/I/O/YAML errors; 4 means an internal error. Inspect findings even with `--fail-on never`. NDJSON is one record per line, not a JSON array.
+Exit codes: 0 means success under the selected failure threshold, not necessarily no findings; 1 means findings or an unsuccessful resolution; 2 means usage errors; 3 means environment/I/O/YAML errors; 4 means an internal error. Inspect findings even with `--fail-on never`. NDJSON is one record per line, not a JSON array. In CLI 0.5, JSON operations begin with `operation-start` and normally end with `operation-complete`; require the terminal record and check the actual exit before accepting a complete result. A successful bounded read may still report partial examination or matching. Preview and dry-run operations do not publish authored content but may create coordination state.
 
 ## Global arguments
 
@@ -54,6 +54,12 @@ Authored concept metadata remains open. These computed records describe scope, i
     "id": "string",
     "schema_version": 1,
     "version": "string"
+  },
+  "drift": {
+    "concept": "string",
+    "expired": "timestamp|null",
+    "schema_version": 2,
+    "sources": "array<{resource:string,kind:string,state:drifted|unrecorded|missing|unavailable|unsupported,code:string,message:string}>"
   },
   "effective-settings": {
     "bundle": "string",
@@ -433,7 +439,7 @@ Supported global options: `--bundle-id`, `--json`.
 
 Inspect-only: `execution: not-run` is not a passing runtime attestation. Document verification and inspection of executable resources never establish a run verdict.
 
-### `okf lint`
+### `okf lint` · _conditionally mutates_
 
 Advisory checks (broken links, missing fields, orphans, ontology violations).
 
@@ -443,7 +449,7 @@ Advisory checks (broken links, missing fields, orphans, ontology violations).
 | `--fix` | bool | no | Normalize frontmatter order bundle-wide for the enabled frontmatter-order rule (default: `false`) |
 | `--fail-on <value>` | string | no | Severity threshold that makes the run fail (exit 1): never|info|warn|error|any (default: `error`) |
 
-Output stream: `finding,scope`.
+Output stream: `finding,scope,fix`.
 
 Supported global options: `--bundle-id`, `--catalog-scope`, `--json`, `--scope-bundle`.
 
@@ -455,8 +461,11 @@ Drift detection: recorded vs. recomputed source fingerprints (+ `stale_after`).
 
 | Argument | Type | Required | Description |
 |----------|------|----------|-------------|
-| `<bundle>` | positional | no | Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory) |
-| `--fail-on <value>` | string | no | Fail on any result: never (default) or any; info/warn/error are compatibility aliases (default: `never`) |
+| `<bundle>` | positional | no | Bundle directory |
+| `--fail-on <value>` | string | no | Existing discovery failure threshold; state policy is separate (default: `never`) |
+| `--only <value>` | list<string> | no | Display only these source-health states (comma-separated or repeatable) |
+| `--summary` | bool | no | Emit a count of examined, displayed, and omitted findings (default: `false`) |
+| `--fail-on-state <value>` | list<string> | no | Fail when any examined source has one of these states |
 
 Output stream: `drift`.
 
@@ -506,6 +515,7 @@ Add a new concept document, scaffolded from the ontology.
 | `--receipt <value>` | list<string> | no | Required executor receipt field (repeatable) |
 | `--attester-resource <value>` | string | no | Deterministic attester code resource |
 | `--generated-by <value>` | string | no | Actor that generated this content |
+| `--require-ontology-gate` | bool | no | Require the ontology write gate even when bundle policy leaves it disabled (default: `false`) |
 
 Output stream: `change`.
 
@@ -560,6 +570,7 @@ Edit a concept losslessly and invalidate its prior verification.
 | `--append-section <HEADING> <TEXT>` | list<string> | no | Append to a section, `<heading> <text>` (repeatable). Text accepts `@file`/`-` |
 | `--remove-section <value>` | list<string> | no | Remove a section (heading + content), `<heading>` (repeatable) |
 | `--rename-section <OLD> <NEW>` | list<string> | no | Rename a section heading, `<old> <new>` (repeatable) |
+| `--require-ontology-gate` | bool | no | Require the ontology write gate even when bundle policy leaves it disabled (default: `false`) |
 
 Output stream: `change`.
 
@@ -602,6 +613,8 @@ Define a new concept type with structured fields, references, and relationships.
 | `--from <value>` | string | no | Merge a concept-type definition from inline YAML, @file, a file path, or stdin (-) |
 | `--dry-run` | bool | no | Validate and preview the change without writing (default: `false`) |
 | `--attested` | bool | no | Mark the exact `Attested Computation` type as standard attested (default: `false`) |
+| `--check-dependent-bundles` | bool | no | Examine every registered consumer of a shared ontology sidecar (default: `false`) |
+| `--require-ontology-gate` | bool | no | Require the ontology write gate even when bundle policy leaves it disabled (default: `false`) |
 
 Output stream: `change`.
 
@@ -618,6 +631,8 @@ Apply coordinated concept and reusable field-type changes atomically.
 | `<bundle>` | positional | no | Bundle directory |
 | `--from <value>` | string | yes | Coordinated change document: inline YAML, @file, a file path, or stdin (-) |
 | `--dry-run` | bool | no | Validate and preview the change without writing (default: `false`) |
+| `--check-dependent-bundles` | bool | no | Examine every registered consumer of a shared ontology sidecar (default: `false`) |
+| `--require-ontology-gate` | bool | no | Require the ontology write gate even when bundle policy leaves it disabled (default: `false`) |
 
 Output stream: `change`.
 
@@ -635,12 +650,14 @@ Define a new reusable field type.
 | `<bundle>` | positional | no | Bundle directory |
 | `--from <value>` | string | yes | Complete field-type definition: inline YAML, @file, a file path, or stdin (-) |
 | `--dry-run` | bool | no | Validate and preview the change without writing (default: `false`) |
+| `--check-dependent-bundles` | bool | no | Examine every registered consumer of a shared ontology sidecar (default: `false`) |
+| `--require-ontology-gate` | bool | no | Require the ontology write gate even when bundle policy leaves it disabled (default: `false`) |
 
 Output stream: `change`.
 
 Supported global options: `--bundle-id`, `--json`.
 
-Reusable field types are ontology-wide definitions. Add/update `--from` accepts a whole definition; update replaces it completely. Inspect consumers before removal or tightening. `--dry-run` validates the proposed ontology without writing.
+Reusable field types are ontology-wide definitions. Add/update `--from` accepts a whole definition; update replaces it completely. Inspect consumers before removal or tightening. `--dry-run` validates the proposed ontology without publishing the sidecar; coordination state may be created.
 
 ### `okf ontology field-type remove` · _conditionally mutates_
 
@@ -651,12 +668,14 @@ Remove a reusable field type if the resulting ontology remains valid.
 | `<name>` | positional | yes | Reusable field-type name to remove |
 | `<bundle>` | positional | no | Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory) |
 | `--dry-run` | bool | no | Validate and preview the change without writing (default: `false`) |
+| `--check-dependent-bundles` | bool | no | Examine every registered consumer of a shared ontology sidecar (default: `false`) |
+| `--require-ontology-gate` | bool | no | Require the ontology write gate even when bundle policy leaves it disabled (default: `false`) |
 
 Output stream: `change`.
 
 Supported global options: `--bundle-id`, `--json`.
 
-Reusable field types are ontology-wide definitions. Add/update `--from` accepts a whole definition; update replaces it completely. Inspect consumers before removal or tightening. `--dry-run` validates the proposed ontology without writing.
+Reusable field types are ontology-wide definitions. Add/update `--from` accepts a whole definition; update replaces it completely. Inspect consumers before removal or tightening. `--dry-run` validates the proposed ontology without publishing the sidecar; coordination state may be created.
 
 ### `okf ontology field-type update` · _conditionally mutates_
 
@@ -668,12 +687,14 @@ Replace an existing reusable field type completely.
 | `<bundle>` | positional | no | Bundle directory |
 | `--from <value>` | string | yes | Complete field-type definition: inline YAML, @file, a file path, or stdin (-) |
 | `--dry-run` | bool | no | Validate and preview the change without writing (default: `false`) |
+| `--check-dependent-bundles` | bool | no | Examine every registered consumer of a shared ontology sidecar (default: `false`) |
+| `--require-ontology-gate` | bool | no | Require the ontology write gate even when bundle policy leaves it disabled (default: `false`) |
 
 Output stream: `change`.
 
 Supported global options: `--bundle-id`, `--json`.
 
-Reusable field types are ontology-wide definitions. Add/update `--from` accepts a whole definition; update replaces it completely. Inspect consumers before removal or tightening. `--dry-run` validates the proposed ontology without writing.
+Reusable field types are ontology-wide definitions. Add/update `--from` accepts a whole definition; update replaces it completely. Inspect consumers before removal or tightening. `--dry-run` validates the proposed ontology without publishing the sidecar; coordination state may be created.
 
 ### `okf refresh` · _mutates_
 
@@ -684,12 +705,13 @@ Re-record source fingerprints after a change is acknowledged.
 | `<concept>` | positional | yes | Concept id to refresh |
 | `<bundle>` | positional | no | Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory) |
 | `--fail-on <value>` | string | no | Fail (exit 1) when any source is skipped: never (default) | skipped | any (default: `never`) |
+| `--require-ontology-gate` | bool | no | Require the ontology write gate even when bundle policy leaves it disabled (default: `false`) |
 
 Output stream: `change`.
 
 Supported global options: `--bundle-id`, `--json`.
 
-Refresh updates supported source fingerprints across the concept, not content or standard source modification dates. Review those sources against the final content first, whether or not the content needed rewriting. JSON reports `updated`/`unchanged` counts and `skipped` entries with reasons. `--fail-on skipped` exits 1 when any source was skipped; successfully processed fingerprints may already have been written. Report unresolved sources instead of treating refresh as proof of complete synchronization.
+Refresh updates supported source fingerprints across the concept, not content or standard source modification dates. Review those sources against the final content first, whether or not the content needed rewriting. JSON reports `updated`/`unchanged` counts and `skipped` entries with reasons. Missing, unavailable, unsupported, or malformed required sources block the entire refresh before publication. `--fail-on skipped` rejects provenance-only skips before publication as well. Report unresolved sources instead of treating refresh as proof of complete synchronization.
 
 ## render
 

@@ -193,8 +193,12 @@ fn escape_destination(value: &str) -> String {
 ///
 /// Returns the paths written, in directory order.
 pub fn write_indexes(bundle: &Bundle) -> Result<Vec<PathBuf>> {
+    let guard = crate::mutate::transaction::writer_lock(&bundle.root)?;
+    // Reload after exclusion: callers may have inspected the bundle before acquiring it.
+    let bundle = crate::bundle::loader::load_bundle(&bundle.root)?;
     let mut written = Vec::new();
-    for idx in generate_indexes(bundle) {
+    let mut changes = Vec::new();
+    for idx in generate_indexes(&bundle) {
         let target = if idx.dir.as_os_str().is_empty() {
             bundle.root.join("index.md")
         } else {
@@ -233,16 +237,18 @@ pub fn write_indexes(bundle: &Bundle) -> Result<Vec<PathBuf>> {
                     .join(", ")
             )));
         }
-        if std::fs::read(&target).is_ok_and(|existing| existing == final_content.as_bytes()) {
+        let before = crate::mutate::transaction::read_optional(&target)?;
+        if before.as_deref() == Some(final_content.as_bytes()) {
             continue;
         }
-        let temp = target.with_extension("md.okf-tmp");
-        std::fs::write(&temp, final_content)
-            .map_err(|e| crate::error::OkfError::Io(format!("{}: {e}", temp.display())))?;
-        std::fs::rename(&temp, &target)
-            .map_err(|e| crate::error::OkfError::Io(format!("{}: {e}", target.display())))?;
+        changes.push(crate::mutate::transaction::FileChange {
+            path: target.strip_prefix(&bundle.root).unwrap().to_path_buf(),
+            before,
+            after: Some(final_content.into_bytes()),
+        });
         written.push(target);
     }
+    crate::mutate::transaction::commit_locked(&bundle.root, &guard, changes)?;
     Ok(written)
 }
 

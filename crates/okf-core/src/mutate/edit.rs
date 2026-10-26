@@ -10,7 +10,7 @@
 //! key=value` appends an item to a list field (creating the list, idempotent), and `--remove
 //! key=value` drops matching item(s). `add_sources` appends typed source mappings and
 //! `remove_sources` removes them by resource and, optionally, kind; structured `verified`
-//! entries still belong to the dedicated `verify` writer. Every successful edit invalidates
+//! entries still belong to the dedicated `verify` writer. Every meaningful content edit invalidates
 //! prior verification by removing `verified`; the document must be reviewed again.
 //!
 //! **Body ops.** `--set-body`/`--append-body`/`--clear-body` rewrite the whole body;
@@ -73,23 +73,64 @@ pub(crate) fn load_concept(root: &Path, id: &ConceptId) -> Result<Concept> {
 
 /// Serialize `concept` semantically and atomically write its validated id-derived path.
 pub(crate) fn save_concept(root: &Path, concept: &Concept) -> Result<PathBuf> {
-    super::transaction::ensure_idle(root)?;
+    let guard = super::transaction::writer_lock(root)?;
+    save_concept_locked(root, &guard, concept)
+}
+
+pub(crate) fn save_concept_locked(
+    root: &Path,
+    guard: &super::transaction::WriterGuard,
+    concept: &Concept,
+) -> Result<PathBuf> {
     let path = id_to_path(root, &concept.id)?;
     let text = render_validated(root, concept)?;
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| OkfError::Io(format!("{}: {e}", parent.display())))?;
-    }
-    atomic_write(&path, text.as_bytes())?;
+    let relative = path
+        .strip_prefix(root)
+        .map_err(|e| OkfError::Internal(e.to_string()))?;
+    let before = super::transaction::read_optional(&path)?;
+    super::transaction::commit_locked(
+        root,
+        guard,
+        vec![super::transaction::FileChange {
+            path: relative.to_path_buf(),
+            before,
+            after: Some(text.into_bytes()),
+        }],
+    )?;
     Ok(path)
 }
 
 /// Create a validated concept without replacing a file created by another writer.
 pub(crate) fn save_new_concept(root: &Path, concept: &Concept) -> Result<PathBuf> {
-    super::transaction::ensure_idle(root)?;
+    let guard = super::transaction::writer_lock(root)?;
+    save_new_concept_locked(root, &guard, concept)
+}
+
+pub(crate) fn save_new_concept_locked(
+    root: &Path,
+    guard: &super::transaction::WriterGuard,
+    concept: &Concept,
+) -> Result<PathBuf> {
     let path = id_to_path(root, &concept.id)?;
     let text = render_validated(root, concept)?;
-    atomic_write_mode(&path, text.as_bytes(), true)?;
+    if path.exists() {
+        return Err(OkfError::Usage(format!(
+            "concept already exists: {}",
+            concept.id
+        )));
+    }
+    let relative = path
+        .strip_prefix(root)
+        .map_err(|e| OkfError::Internal(e.to_string()))?;
+    super::transaction::commit_locked(
+        root,
+        guard,
+        vec![super::transaction::FileChange {
+            path: relative.to_path_buf(),
+            before: None,
+            after: Some(text.into_bytes()),
+        }],
+    )?;
     Ok(path)
 }
 
@@ -393,6 +434,7 @@ fn apply_remove_source(fm: &mut Frontmatter, selector: &SourceSelector) -> Resul
 /// result is deterministic regardless of flag order. Existing keys are updated in place; new
 /// keys are appended; untouched keys preserve value/order and body regions preserve text.
 pub fn edit(root: &Path, id: &str, spec: &EditSpec) -> Result<EditResult> {
+    let guard = super::transaction::writer_lock(root)?;
     if spec.is_empty() {
         return Err(OkfError::Usage("edit: no operations specified".to_string()));
     }
@@ -556,10 +598,24 @@ pub fn edit(root: &Path, id: &str, spec: &EditSpec) -> Result<EditResult> {
     }
 
     let after = render_validated(root, &concept)?;
+    if spec.dry_run {
+        super::gate::check_changes(
+            root,
+            &[super::transaction::FileChange {
+                path: id_to_path(root, &cid)?
+                    .strip_prefix(root)
+                    .map_err(|e| OkfError::Internal(e.to_string()))?
+                    .to_path_buf(),
+                before: Some(before.as_bytes().to_vec()),
+                after: Some(after.as_bytes().to_vec()),
+            }],
+            super::transaction::ontology_gate_strengthened(),
+        )?;
+    }
     let path = if spec.dry_run {
         id_to_path(root, &cid)?
     } else {
-        save_concept(root, &concept)?
+        save_concept_locked(root, &guard, &concept)?
     };
     Ok(EditResult {
         id: cid,

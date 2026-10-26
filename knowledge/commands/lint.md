@@ -1,24 +1,28 @@
 ---
 type: Command
-title: okf lint
-description: 'Advisory checks where the opinions live: broken links, missing descriptions, orphans, and ontology violations, at error/warn/info severities with a --fail-on threshold.'
 group: check
 mutates: false
 implemented_by:
 - /components/check
+title: okf lint
+description: 'Advisory checks where the opinions live: broken links, missing descriptions, orphans, and ontology violations, at error/warn/info severities with a --fail-on threshold.'
 sources:
 - resource: crates/okf-cli/src/commands/check.rs
   kind: git-path
   fingerprint:
-    blob_sha: a09a2fd8e2273f85b0f64bb012797968d9dc634f
+    blob_sha: 3a0c6b86996b70113dba53ddf52c81b7aac433cf
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
   fingerprint:
-    blob_sha: 126dddfab3fb8caa78cfd61396db89dbcc324a33
+    blob_sha: a99f651a30e3a6ad2859066a5b8f287e73391371
 - resource: crates/okf-cli/src/cli.rs
   kind: git-path
   fingerprint:
-    blob_sha: 28db6285f18a0400ab4b08c79c46322e58c2d833
+    blob_sha: fad8084ae5833fd506b4e8818e62e0a2d387c2d6
+- resource: crates/okf-core/src/mutate/gate.rs
+  kind: git-path
+  fingerprint:
+    blob_sha: 94338090c19cce174b9b258703279060a74a9544
 last_modified: 2026-10-04T20:39:29Z
 ---
 # okf lint
@@ -31,6 +35,12 @@ unsupported constraints and depth/finding-budget exhaustion remain visible. Loca
 checks diagnose omitted immediate children and concept-containing directories without rewriting
 curated navigation. Catalog-aware checks retain explicit examination scope.
 
+Read-only lint can examine explicit catalog scope. `lint --fix` in CLI 0.5
+requires one selected writable bundle and rejects catalog/scope flags. Each
+bundle's fixes are a separate transaction; a later failure cannot roll back an
+earlier invocation. Display severity does not weaken an independently enabled
+ontology write gate.
+
 ## Arguments
 
 | Argument | Type | Required | Description |
@@ -41,4 +51,4 @@ curated navigation. Catalog-aware checks retain explicit examination scope.
 
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 
-Output stream: `finding,scope`.
+Output stream: `finding,scope,fix`.

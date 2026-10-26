@@ -40,7 +40,8 @@ pub fn rm_with_ontology(
     force: bool,
     ontology: Option<&Ontology>,
 ) -> Result<RmResult> {
-    super::transaction::ensure_idle(root)?;
+    let guard = super::transaction::writer_lock(root)?;
+    super::transaction::check_ontology_snapshot(root, ontology)?;
     let cid = ConceptId::parse(id)?;
     let path = id_to_path(root, &cid)?;
     if !path.exists() {
@@ -70,7 +71,18 @@ pub fn rm_with_ontology(
         )));
     }
 
-    std::fs::remove_file(&path).map_err(|e| OkfError::Io(format!("{}: {e}", path.display())))?;
+    let relative = path
+        .strip_prefix(root)
+        .map_err(|e| OkfError::Internal(e.to_string()))?;
+    super::transaction::commit_locked(
+        root,
+        &guard,
+        vec![super::transaction::FileChange {
+            path: relative.to_path_buf(),
+            before: Some(std::fs::read(&path)?),
+            after: None,
+        }],
+    )?;
 
     Ok(RmResult {
         id: cid,

@@ -36,6 +36,8 @@ compatibility. Recheck if the executable or PATH changes during the task.
    orchestrate cross-bundle moves. Use a rooted graph
    only when relationships need explanation; avoid a full graph for a local move. Inventory
    supporting files with `okf artifact list <bundle>` only if affected.
+   For a guarded baseline without an operation document, use `okf changeset digest <bundle>`;
+   it can create coordination state and must not be described as a pure filesystem read.
 2. Design and review an explicit old-id → new-id mapping. Include inbound bare relative, `./`/`../`,
    absolute bundle links, standard internal source resources, and other known path-valued fields.
    External URLs and scope descriptors must remain unchanged.

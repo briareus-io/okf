@@ -7,20 +7,18 @@
 //! into standard source metadata. Because `okf stale` derives drift by comparing recorded vs. recomputed
 //! fingerprints, refreshing them is exactly what clears a concept's stale status.
 //!
-//! A source whose fingerprint cannot be recomputed (unknown kind, missing artifact, `url`
-//! with no network port) is left untouched and reported in [`RefreshResult::skipped`] rather
-//! than failing the whole operation.
+//! A declared fingerprint that cannot be recomputed blocks publication.
 use std::path::{Path, PathBuf};
 
 use serde_yaml::Value;
 
-use crate::error::Result;
+use crate::error::{OkfError, Result};
 use crate::fingerprint::{Engine, Fingerprinter};
 use crate::model::concept::ConceptId;
 use crate::model::source::Source;
 use crate::ports::clock::Clock;
 
-use super::edit::{load_concept, save_concept};
+use super::edit::{load_concept, save_concept_locked};
 
 /// A source whose fingerprint could not be recomputed.
 #[derive(Debug, Clone)]
@@ -44,20 +42,37 @@ pub struct RefreshResult {
     pub refreshed_at: String,
 }
 
-/// Recompute and rewrite the `sources[]` fingerprints of the concept `id`, and update its
-/// `last_modified`. `engine`'s `root` is the base that source resource paths resolve against.
+/// Recompute and rewrite eligible `sources[]` fingerprints of the concept `id`.
+/// `engine`'s `root` is the base that source resource paths resolve against.
 pub fn refresh(root: &Path, id: &str, engine: &Engine, clock: &dyn Clock) -> Result<RefreshResult> {
+    refresh_with_policy(root, id, engine, clock, false)
+}
+
+pub fn refresh_with_policy(
+    root: &Path,
+    id: &str,
+    engine: &Engine,
+    clock: &dyn Clock,
+    reject_provenance_skips: bool,
+) -> Result<RefreshResult> {
+    let guard = super::transaction::writer_lock(root)?;
     let cid = ConceptId::parse(id)?;
     let mut concept = load_concept(root, &cid)?;
 
     let mut updated = Vec::new();
     let mut unchanged = Vec::new();
     let mut skipped = Vec::new();
+    let mut failures = Vec::new();
 
     if let Some(sources_val) = concept.frontmatter.map.get("sources").cloned() {
         if let Value::Sequence(entries) = sources_val {
             let git_sources: Vec<_> = entries
                 .iter()
+                .enumerate()
+                .filter(|(index, entry)| {
+                    crate::check::stale::malformed_source_entry(entry, *index).is_none()
+                })
+                .map(|(_, entry)| entry)
                 .filter_map(Source::from_value)
                 .filter(|source| {
                     !source.resource.trim().is_empty()
@@ -72,22 +87,19 @@ pub fn refresh(root: &Path, id: &str, engine: &Engine, clock: &dyn Clock) -> Res
             engine.fingerprint_many(&git_sources);
             let mut rebuilt = Vec::with_capacity(entries.len());
             for (index, original) in entries.into_iter().enumerate() {
-                let Some(source) = Source::from_value(&original) else {
-                    skipped.push(SkippedSource {
-                        resource: format!("sources[{index}]"),
-                        reason: "malformed source: expected a mapping with resource".to_string(),
-                    });
-                    rebuilt.push(original);
-                    continue;
-                };
-                if source.resource.trim().is_empty() {
-                    skipped.push(SkippedSource {
-                        resource: format!("sources[{index}]"),
-                        reason: "malformed source: resource must be a non-empty string".to_string(),
-                    });
+                if let Some(reason) = crate::check::stale::malformed_source_entry(&original, index)
+                {
+                    failures.push(format!("malformed source: {reason}"));
                     rebuilt.push(original);
                     continue;
                 }
+                let Some(source) = Source::from_value(&original) else {
+                    failures.push(format!(
+                        "sources[{index}]: malformed source: expected a mapping with resource"
+                    ));
+                    rebuilt.push(original);
+                    continue;
+                };
                 if source.kind.as_kind_str().trim().is_empty() {
                     skipped.push(SkippedSource {
                         resource: source.resource.clone(),
@@ -95,6 +107,14 @@ pub fn refresh(root: &Path, id: &str, engine: &Engine, clock: &dyn Clock) -> Res
                             "standard source has no fingerprint `kind` extension; left unchanged"
                                 .to_string(),
                     });
+                    rebuilt.push(original);
+                    continue;
+                }
+                if matches!(source.kind, crate::model::source::SourceKind::Other(_)) {
+                    failures.push(format!(
+                        "sources[{index}]: unsupported fingerprint kind {:?}",
+                        source.kind.as_kind_str()
+                    ));
                     rebuilt.push(original);
                     continue;
                 }
@@ -113,10 +133,7 @@ pub fn refresh(root: &Path, id: &str, engine: &Engine, clock: &dyn Clock) -> Res
                         }
                     }
                     Err(e) => {
-                        skipped.push(SkippedSource {
-                            resource: source.resource.clone(),
-                            reason: e.to_string(),
-                        });
+                        failures.push(format!("sources[{index}] {}: {e}", source.resource));
                         rebuilt.push(original);
                     }
                 }
@@ -126,16 +143,29 @@ pub fn refresh(root: &Path, id: &str, engine: &Engine, clock: &dyn Clock) -> Res
                 .map
                 .insert("sources".to_string(), Value::Sequence(rebuilt));
         } else {
-            skipped.push(SkippedSource {
-                resource: "sources".to_string(),
-                reason: "malformed sources field: expected a sequence".to_string(),
-            });
+            failures.push("sources: malformed sources field: expected a sequence".to_string());
         }
     }
 
+    if !failures.is_empty() {
+        return Err(OkfError::Usage(format!(
+            "refresh required source failure; no fingerprints written: {}",
+            failures.join("; ")
+        )));
+    }
+    if reject_provenance_skips && !skipped.is_empty() {
+        return Err(OkfError::Usage(format!(
+            "refresh skipped {} provenance source(s); no fingerprints written",
+            skipped.len()
+        )));
+    }
     let refreshed_at = clock.now_rfc3339();
 
-    let path = save_concept(root, &concept)?;
+    let path = if updated.is_empty() {
+        super::edit::id_to_path(root, &cid)?
+    } else {
+        save_concept_locked(root, &guard, &concept)?
+    };
     Ok(RefreshResult {
         id: cid,
         path,

@@ -14,7 +14,17 @@ fn run(root: &std::path::Path, args: &[&str]) -> Output {
 }
 
 fn record(output: Output) -> Value {
-    serde_json::from_slice(&output.stdout).unwrap()
+    std::str::from_utf8(&output.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .find(|row| {
+            !matches!(
+                row["kind"].as_str(),
+                Some("operation-start" | "operation-complete")
+            )
+        })
+        .unwrap()
 }
 
 #[test]

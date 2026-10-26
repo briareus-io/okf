@@ -23,6 +23,12 @@ fn run(root: &Path, args: &[&str]) -> Vec<Value> {
             .unwrap()
             .lines()
             .map(|line| serde_json::from_str(line).unwrap())
+            .filter(|record: &Value| {
+                !matches!(
+                    record["kind"].as_str(),
+                    Some("operation-start" | "operation-complete")
+                )
+            })
             .collect()
     } else {
         Vec::new()

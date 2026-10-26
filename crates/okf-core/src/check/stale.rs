@@ -14,6 +14,7 @@
 //! [`FakeFs`]: crate::ports::fs::FakeFs
 //! [`FakeGit`]: crate::ports::git::FakeGit
 //! [`FixedClock`]: crate::ports::clock::FixedClock
+use serde_yaml::Value;
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
@@ -36,6 +37,10 @@ pub enum DriftKind {
     Unrecorded,
     /// The artifact could not be read / fingerprinted (missing file, git error, unknown kind).
     Missing,
+    /// A declared fingerprint kind has no implementation.
+    Unsupported,
+    /// The resource or fingerprint backend could not be examined conclusively.
+    Unavailable,
     /// The concept's `stale_after` timestamp has passed.
     Expired,
 }
@@ -46,6 +51,8 @@ impl DriftKind {
             DriftKind::Drifted => "drifted",
             DriftKind::Unrecorded => "unrecorded",
             DriftKind::Missing => "missing",
+            DriftKind::Unsupported => "unsupported",
+            DriftKind::Unavailable => "unavailable",
             DriftKind::Expired => "expired",
         }
     }
@@ -161,10 +168,22 @@ impl<'a> StaleChecker<'a> {
         let mut sources = Vec::new();
 
         if let Some(value) = concept.frontmatter.get("sources") {
-            for source in parse_sources(value) {
-                if let Some(drift) = self.check_source(engine, &source, cache) {
-                    sources.push(drift);
+            if let Some(entries) = value.as_sequence() {
+                for (index, entry) in entries.iter().enumerate() {
+                    if let Some(reason) = malformed_source_entry(entry, index) {
+                        sources.push(uninterpretable_source(reason));
+                    } else if let Some(source) = Source::from_value(entry) {
+                        if let Some(drift) = self.check_source(engine, &source, cache) {
+                            sources.push(drift);
+                        }
+                    } else {
+                        sources.push(uninterpretable_source(format!(
+                            "sources[{index}] is not a mapping"
+                        )));
+                    }
                 }
+            } else {
+                sources.push(uninterpretable_source("sources is not a list".into()));
             }
         }
 
@@ -185,7 +204,7 @@ impl<'a> StaleChecker<'a> {
     ) -> Option<SourceDrift> {
         // `kind` and `fingerprint` are extensions, so standard kind-less sources do not
         // promise fingerprint checks. Once a kind is set, absence of a baseline is a finding.
-        if source.kind.as_kind_str().trim().is_empty() && source.fingerprint.is_empty() {
+        if source.kind.as_kind_str().trim().is_empty() {
             return None;
         }
 
@@ -197,6 +216,17 @@ impl<'a> StaleChecker<'a> {
             current: None,
             message: String::new(),
         };
+
+        if matches!(&source.kind, SourceKind::Other(kind) if !kind.is_empty()) {
+            return Some(SourceDrift {
+                drift: DriftKind::Unsupported,
+                message: format!(
+                    "no fingerprint rule for source kind `{}`",
+                    source.kind.as_kind_str()
+                ),
+                ..base
+            });
+        }
 
         let key = cache_key(source);
         let current = cache
@@ -229,7 +259,15 @@ impl<'a> StaleChecker<'a> {
                 }
             }
             Err(message) => Some(SourceDrift {
-                drift: DriftKind::Missing,
+                drift: if matches!(
+                    source.kind,
+                    SourceKind::File | SourceKind::LineRange | SourceKind::MarkdownHeading
+                ) && message.to_ascii_lowercase().contains("no such file")
+                {
+                    DriftKind::Missing
+                } else {
+                    DriftKind::Unavailable
+                },
                 message: format!("cannot fingerprint artifact: {message}"),
                 ..base
             }),
@@ -250,6 +288,39 @@ impl<'a> StaleChecker<'a> {
             None
         }
     }
+}
+
+fn uninterpretable_source(message: String) -> SourceDrift {
+    SourceDrift {
+        resource: String::new(),
+        kind: String::new(),
+        drift: DriftKind::Unavailable,
+        recorded: Fingerprint::default(),
+        current: None,
+        message,
+    }
+}
+
+pub(crate) fn malformed_source_entry(entry: &Value, index: usize) -> Option<String> {
+    let Some(mapping) = entry.as_mapping() else {
+        return Some(format!("sources[{index}] is not a mapping"));
+    };
+    match mapping.get(Value::String("resource".into())) {
+        Some(Value::String(resource)) if !resource.trim().is_empty() => {}
+        _ => {
+            return Some(format!(
+                "sources[{index}].resource must be a non-empty string"
+            ))
+        }
+    }
+    if let Some(kind) = mapping.get(Value::String("kind".into())) {
+        if !matches!(kind, Value::String(value) if !value.trim().is_empty()) {
+            return Some(format!(
+                "sources[{index}].kind must be a non-empty string when declared"
+            ));
+        }
+    }
+    None
 }
 
 fn cache_key(source: &Source) -> (String, String) {
@@ -471,6 +542,90 @@ mod tests {
         let report = check(&bundle(vec![c]), &FakeFs::new(), &FakeGit::new());
         assert_eq!(report.concepts.len(), 1);
         assert_eq!(report.concepts[0].sources[0].drift, DriftKind::Missing);
+    }
+
+    #[test]
+    fn unsupported_kind_and_unavailable_backend_are_distinct_from_missing() {
+        let unsupported = concept(
+            "u",
+            "type: Note\nsources:\n- {resource: table, kind: sql}\n",
+        );
+        let unavailable = concept(
+            "v",
+            "type: Note\nsources:\n- {resource: 'https://example.invalid/x', kind: url}\n",
+        );
+        let report = check(
+            &bundle(vec![unsupported, unavailable]),
+            &FakeFs::new(),
+            &FakeGit::new(),
+        );
+        assert_eq!(report.concepts[0].sources[0].drift, DriftKind::Unsupported);
+        assert_eq!(report.concepts[1].sources[0].drift, DriftKind::Unavailable);
+    }
+
+    #[test]
+    fn malformed_sources_are_reported_as_unavailable_without_becoming_conformance_errors() {
+        let malformed = concept(
+            "m",
+            "type: Note\nsources:\n- 'not a mapping'\n- {resource: valid-provenance}\n",
+        );
+        let report = check(&bundle(vec![malformed]), &FakeFs::new(), &FakeGit::new());
+        assert_eq!(report.concepts.len(), 1);
+        assert_eq!(report.concepts[0].sources.len(), 1);
+        assert_eq!(report.concepts[0].sources[0].drift, DriftKind::Unavailable);
+        assert!(report.concepts[0].sources[0].message.contains("sources[0]"));
+    }
+
+    #[test]
+    fn malformed_mapping_resource_and_declared_kind_are_unavailable_but_kindless_provenance_is_not()
+    {
+        let malformed = concept("m", "type: Note\nsources:\n- {}\n- {resource: 42}\n- {resource: ' '}\n- {resource: valid.txt, kind: 7}\n- {resource: valid.txt, kind: ''}\n- {resource: valid.txt}\n");
+        let report = check(&bundle(vec![malformed]), &FakeFs::new(), &FakeGit::new());
+        let findings = &report.concepts[0].sources;
+        assert_eq!(findings.len(), 5);
+        assert!(findings
+            .iter()
+            .all(|source| source.drift == DriftKind::Unavailable));
+        for index in 0..5 {
+            assert!(findings[index]
+                .message
+                .contains(&format!("sources[{index}]")));
+        }
+        assert!(findings[0].message.contains("resource"));
+        assert!(findings[3].message.contains("kind"));
+    }
+
+    #[test]
+    fn backend_not_found_text_does_not_claim_source_absence() {
+        let source = concept(
+            "g",
+            "type: Note\nsources:\n- {resource: src/file.rs, kind: git-path}\n",
+        );
+        struct MissingBackend;
+        impl Git for MissingBackend {
+            fn worktree_root(&self, _: &Path) -> OkfResult<PathBuf> {
+                Err(crate::error::OkfError::Environment(
+                    "git executable not found".into(),
+                ))
+            }
+            fn hash_object(&self, _: &Path) -> OkfResult<String> {
+                unreachable!()
+            }
+            fn last_commit(&self, _: &Path) -> OkfResult<String> {
+                unreachable!()
+            }
+            fn show(&self, _: &str, _: &Path) -> OkfResult<Vec<u8>> {
+                unreachable!()
+            }
+            fn ls_tree(&self, _: &str) -> OkfResult<Vec<String>> {
+                unreachable!()
+            }
+        }
+        let clock = FixedClock(NOW.to_string());
+        let report =
+            StaleChecker::new(Path::new(""), &FakeFs::new(), &MissingBackend, None, &clock)
+                .check_bundle(&bundle(vec![source]));
+        assert_eq!(report.concepts[0].sources[0].drift, DriftKind::Unavailable);
     }
 
     #[test]

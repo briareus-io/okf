@@ -1,6 +1,6 @@
 //! Safe resolution, bounded retrieval, and explicit writes of OKF path-valued artifacts.
 
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
 use sha2::{Digest, Sha256};
@@ -102,70 +102,40 @@ pub fn put_artifact(
         ));
     }
     let root = root.canonicalize()?;
-    let mut parent = root.clone();
-    for component in rel.parent().unwrap_or(Path::new("")).components() {
-        parent.push(component);
-        match std::fs::symlink_metadata(&parent) {
-            Ok(meta) if meta.is_dir() && !meta.file_type().is_symlink() => {}
-            Ok(_) => {
-                return Err(OkfError::Usage(format!(
-                    "artifact destination parent must be a directory without symlinks: {}",
-                    parent.display()
-                )))
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => std::fs::create_dir(&parent)?,
-            Err(e) => return Err(e.into()),
+    let guard = crate::mutate::transaction::writer_lock(&root)?;
+    let destination = crate::mutate::transaction::checked_path(&root, &rel)?;
+    let before = crate::mutate::transaction::read_optional(&destination)?;
+    let replaced = before.is_some();
+    if replaced && !replace {
+        return Err(OkfError::Usage(format!(
+            "artifact already exists: {}; use --replace to overwrite it",
+            rel.display()
+        )));
+    }
+    if kind == ArtifactKind::Reserved {
+        let text = std::str::from_utf8(bytes)
+            .map_err(|_| OkfError::Usage("reserved Markdown artifacts must be UTF-8".into()))?;
+        let findings = crate::check::validate::validate_document(&rel.to_string_lossy(), text);
+        if !findings.is_empty() {
+            return Err(OkfError::Usage(format!(
+                "artifact would be nonconformant: {}",
+                findings
+                    .iter()
+                    .map(|v| v.message.as_str())
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            )));
         }
     }
-    let destination = root.join(&rel);
-    let replaced = match std::fs::symlink_metadata(&destination) {
-        Ok(meta) if meta.is_file() && !meta.file_type().is_symlink() => {
-            if !replace {
-                return Err(OkfError::Usage(format!(
-                    "artifact already exists: {}; use --replace to overwrite it",
-                    rel.display()
-                )));
-            }
-            true
-        }
-        Ok(_) => {
-            return Err(OkfError::Usage(format!(
-                "artifact destination must be a regular file without symlinks: {}",
-                rel.display()
-            )))
-        }
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
-        Err(e) => return Err(e.into()),
-    };
-    static NEXT_TEMP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    let (temp, mut file) = loop {
-        let sequence = NEXT_TEMP.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let temp = parent.join(format!(".okf-put-{}-{sequence}.tmp", std::process::id()));
-        match std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temp)
-        {
-            Ok(file) => break (temp, file),
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(e) => return Err(e.into()),
-        }
-    };
-    let write_result = (|| -> Result<()> {
-        file.write_all(bytes)?;
-        file.sync_all()?;
-        drop(file);
-        if replace {
-            std::fs::rename(&temp, &destination)?;
-        } else {
-            // Publishing with a hard link makes create-only atomic even if another writer
-            // creates the destination after the preflight check.
-            std::fs::hard_link(&temp, &destination)?;
-        }
-        Ok(())
-    })();
-    let _ = std::fs::remove_file(&temp);
-    write_result?;
+    crate::mutate::transaction::commit_locked(
+        &root,
+        &guard,
+        vec![crate::mutate::transaction::FileChange {
+            path: rel.clone(),
+            before,
+            after: Some(bytes.to_vec()),
+        }],
+    )?;
     Ok(ArtifactWrite {
         path: rel,
         kind,

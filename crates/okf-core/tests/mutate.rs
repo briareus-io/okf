@@ -758,7 +758,7 @@ fn refresh_recomputes_fingerprints_without_overwriting_standard_source_metadata(
         \x20 id: src-1\n\
         \x20 author: alice\n\
          - resource: weird\n\
-        \x20 kind: sql-query\n\
+        \x20 id: provenance-only\n\
          ---\n# Mileage\n",
     );
 
@@ -769,7 +769,7 @@ fn refresh_recomputes_fingerprints_without_overwriting_standard_source_metadata(
 
     let res = refresh::refresh(root, "computations/mileage", &engine, &clock).unwrap();
     assert_eq!(res.updated, vec!["src/x.py".to_string()]);
-    assert_eq!(res.skipped.len(), 1, "unknown kind is skipped, not fatal");
+    assert_eq!(res.skipped.len(), 1, "kindless provenance is skipped");
     assert_eq!(res.skipped[0].resource, "weird");
     assert_eq!(res.refreshed_at, "2026-09-07T12:00:00Z");
 
@@ -800,9 +800,67 @@ fn refresh_preserves_and_reports_malformed_source_entries() {
     let git = FakeGit::new();
     let engine = Engine::new(root, &fs, &git, None);
     let clock = FixedClock("2026-09-08T00:00:00Z".to_string());
-    let result = refresh::refresh(root, "x", &engine, &clock).unwrap();
-    assert_eq!(result.skipped.len(), 2);
+    let error = refresh::refresh(root, "x", &engine, &clock).unwrap_err();
+    assert!(error.to_string().contains("malformed source"));
     let after = read_file(root, "x.md");
     assert!(after.contains("- accidentally-a-string"), "{after}");
     assert!(after.contains("resource: ''"), "{after}");
+}
+
+#[test]
+fn refresh_rejects_unsupported_kind_before_publishing_successful_fingerprints() {
+    let tmp = temp_bundle();
+    let root = tmp.path();
+    let original = "---\ntype: T\nsources:\n- resource: src/x.py\n  kind: git-path\n  fingerprint: {blob_sha: old}\n- resource: query\n  kind: sql-query\n---\n";
+    write_file(root, "x.md", original);
+    let fs = FakeFs::new();
+    let git = FakeGit::new().with_hash_object(root.join("src/x.py"), "new");
+    let engine = Engine::new(root, &fs, &git, None);
+    let clock = FixedClock("2026-09-08T00:00:00Z".to_string());
+    let error = refresh::refresh(root, "x", &engine, &clock).unwrap_err();
+    assert!(error.to_string().contains("unsupported fingerprint kind"));
+    assert_eq!(read_file(root, "x.md"), original);
+}
+
+#[test]
+fn refresh_treats_empty_declared_kind_as_malformed_not_provenance() {
+    let tmp = temp_bundle();
+    let root = tmp.path();
+    let original = "---\ntype: T\nsources:\n- resource: data.csv\n  kind: ''\n---\n";
+    write_file(root, "x.md", original);
+    let fs = FakeFs::new();
+    let git = FakeGit::new();
+    let engine = Engine::new(root, &fs, &git, None);
+    let clock = FixedClock("2026-09-08T00:00:00Z".to_string());
+    assert!(refresh::refresh(root, "x", &engine, &clock)
+        .unwrap_err()
+        .to_string()
+        .contains("kind must be a non-empty string"));
+    assert_eq!(read_file(root, "x.md"), original);
+}
+
+#[test]
+fn refresh_rejects_non_string_source_fields_without_publication() {
+    let tmp = temp_bundle();
+    let root = tmp.path();
+    let original = "---\ntype: T\nsources:\n- resource: 42\n  kind: file\n- resource: valid.csv\n  kind: 7\n---\n";
+    write_file(root, "x.md", original);
+    let fs = FakeFs::new();
+    let git = FakeGit::new();
+    let engine = Engine::new(root, &fs, &git, None);
+    let clock = FixedClock("2026-09-08T00:00:00Z".to_string());
+    let error = refresh::refresh(root, "x", &engine, &clock).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("resource must be a non-empty string"),
+        "{error}"
+    );
+    assert!(
+        error
+            .to_string()
+            .contains("kind must be a non-empty string"),
+        "{error}"
+    );
+    assert_eq!(read_file(root, "x.md"), original);
 }

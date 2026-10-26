@@ -14,6 +14,12 @@ See `INTENT.md` for the design rationale and `ARCHITECTURE.md` for the crate/mod
 
 ## Install a release (no Rust required)
 
+**BREAKING CHANGE in CLI 0.5.0:** command input, machine output, diagnostics, and
+write behavior change. Read the [0.5.0 migration guide](docs/0.5.0-migration.md)
+and [release notes](releases/0.5.0.md) before updating a 0.4.x installation or
+automation. The OKF document specification remains v0.2. Install the 0.5.0
+plugin and CLI together; the plugin accepts stable CLI versions `>=0.5.0, <0.6.0`.
+
 Download the archive for your platform from [GitHub Releases](https://github.com/abatyuk/okf/releases):
 macOS Apple Silicon (`aarch64-apple-darwin`), macOS Intel (`x86_64-apple-darwin`),
 Linux ARM64 (`aarch64-unknown-linux-musl`), or Linux Intel/AMD (`x86_64-unknown-linux-musl`).
@@ -30,13 +36,13 @@ okf version
 ```
 
 Alternatively, download the standalone installer from a **published release**, inspect it,
-then run it with an explicit version. This example installs or updates to 0.4.4:
+then run it with an explicit version. This example installs or updates to 0.5.0:
 
 ```sh
 curl --fail --location --proto '=https' --proto-redir '=https' \
-  https://github.com/abatyuk/okf/releases/download/v0.4.4/install.sh -o install.sh
+  https://github.com/abatyuk/okf/releases/download/v0.5.0/install.sh -o install.sh
 # Review install.sh before running it.
-sh install.sh 0.4.4
+sh install.sh 0.5.0
 ```
 
 The optional installer detects your platform, verifies the archive checksum, checks that the
@@ -49,7 +55,7 @@ on PATH can take precedence; check `command -v okf` and `okf version`.
 
 Skills **only check compatibility** and show these instructions when necessary. They never
 run the installer or update the CLI. The current plugin supports stable CLI versions
-`>=0.4.4, <0.5.0`; the OKF document specification remains v0.2.
+`>=0.5.0, <0.6.0`; the OKF document specification remains v0.2.
 
 Starting with 0.4.1, macOS release binaries are Developer ID signed and notarized by Apple.
 The standalone executable has no stapled ticket, so Gatekeeper may need internet access
@@ -63,13 +69,18 @@ Local operations work offline. See [release maintenance](docs/releases.md) for t
 
 ## Build & install from source
 
+**BREAKING CHANGE:** `cargo xtask install` builds and installs the 0.5.0 CLI.
+Review the [migration guide](docs/0.5.0-migration.md) before running it over
+an existing installation.
+
 ```sh
 cargo xtask install          # build + install `okf` to ~/.cargo/bin, then regenerate docs
 ```
 
-`cargo xtask install` wraps `cargo install --path crates/okf-cli` and then regenerates the
+`cargo xtask install` wraps `cargo install --path crates/okf-cli --locked` and then regenerates the
 [generated references](#generated-references) so they match the freshly built CLI. Prefer it
 over a bare `cargo install`, which installs the binary but leaves the references untouched.
+The locked dependency set matches the tested workspace build.
 
 Build without installing:
 
@@ -113,7 +124,7 @@ okf add notes/hello --type Note --title "Hello"   # scaffold a concept from the 
 okf browse mybundle                   # read/synthesize the root index.md
 okf browse mybundle --directory notes # descend one directory without loading its concepts
 okf list mybundle                     # human table: id, type, trust tier, title
-okf list mybundle --json              # one JSON object per concept (NDJSON)
+okf list mybundle --json              # operation start, concept records, query evidence, completion
 okf search mybundle --text "travel policy" --match phrase --limit 10
 okf validate mybundle                 # conformance only (exit 1 if nonconformant)
 okf lint mybundle                     # advisory findings (broken links, missing desc, …)
@@ -127,6 +138,11 @@ okf docs mybundle --format index      # write progressive-disclosure index.md fi
 Bundle-aware commands take an **optional trailing positional**; when omitted it is resolved via
 the [configuration](#configuration) precedence below. Meta commands take no bundle,
 `source-scan` takes an explicit arbitrary directory, and graph roots use `--root`.
+
+For input conventions, structured results, source checks, and guarded writes, see
+[consistent command behavior](docs/consistent-command-contracts.md). The supporting guides
+cover [checking results and recovering writes](docs/command-contracts-validation.md) and
+[performance and bounded reads](docs/command-performance.md).
 
 ## Coordinated record changes
 
@@ -248,6 +264,11 @@ See [multi-bundle design](docs/multi-bundle-capability.md) and
 Pass `--json` for machine output: **newline-delimited JSON**, one object per line, streamable.
 Graph and rendered-document artifacts are wrapped in a record with their format and content;
 `schema` is already NDJSON with or without the flag.
+In CLI 0.5, JSON operations begin with `operation-start` and normally finish with
+`operation-complete`. Check the stream version, trailer, and actual exit code
+before accepting a result; the trailer records publication and applicable
+completeness dimensions. Bounded reads can exit successfully while reporting
+partial examination. Parse payload records between the control records.
 A `concept` record mirrors the concept's frontmatter **verbatim** plus collision-safe computed
 identity, trust, lifecycle, generation, and verification views:
 
@@ -259,9 +280,9 @@ identity, trust, lifecycle, generation, and verification views:
 `okf search --text ... --json` additionally returns ranked, bounded match evidence under
 `search.score` and `search.matches`.
 
-`okf schema` emits schema contract v2 as NDJSON: a header describing global flags and bundle
+`okf schema` emits a versioned schema contract as NDJSON: a header describing global flags and bundle
 resolution, followed by commands with mutation capability/conditions, typed arguments, defaults,
-possible values, stdin support, and output streams. Flag names use their actual kebab-case CLI
+possible values, stdin support, effects, and output streams. Flag names use their actual kebab-case CLI
 spelling.
 
 ## Commands
@@ -269,7 +290,7 @@ spelling.
 | Group | Commands |
 |-------|----------|
 | **meta** | `schema`, `version`, `catalog` |
-| **query** | `list`, `search`, `show`, `links`, `backlinks`, `graph`, `resolve`, `artifact list/resolve/show`, `ontology list`, `ontology show` |
+| **query** | `list`, `search`, `show`, `links`, `backlinks`, `graph`, `resolve`, `artifact list/resolve/show`, `ontology list/show`, `changeset plan/digest` |
 | **check** | `scan`, `source-scan`, `validate`, `lint`, `doctor`, `stale`, `affected`, `diff`, `stats`, `computation check` |
 | **mutate** | `init`, `add`, `edit`, `mv`, `rm`, `verify`, `refresh`, `ontology add/update/remove`, `ontology apply`, `changeset apply/recover` |
 | **render** | `docs` (`--format html\|md\|pdf\|graphml\|obsidian\|index`; only `index` mutates) |

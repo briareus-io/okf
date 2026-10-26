@@ -21,7 +21,7 @@ use crate::model::standard::valid_actor;
 use crate::ontology::field_types::resolve_field;
 use crate::ontology::schema::{ConceptType, FieldType, Ontology};
 
-use super::edit::{id_to_path, render_validated, save_new_concept};
+use super::edit::{id_to_path, render_validated, save_new_concept_locked};
 use super::structured::StructuredEdits;
 
 /// Inputs to `add` beyond the target path.
@@ -75,6 +75,8 @@ pub fn add(
     ontology: Option<&Ontology>,
     opts: &AddOptions,
 ) -> Result<AddResult> {
+    let guard = super::transaction::writer_lock(root)?;
+    super::transaction::check_ontology_snapshot(root, ontology)?;
     let mut legacy_keys: Vec<String> = opts
         .sets
         .iter()
@@ -346,10 +348,24 @@ pub fn add(
         body,
     };
     let after = render_validated(root, &concept)?;
+    if opts.dry_run {
+        super::gate::check_changes(
+            root,
+            &[super::transaction::FileChange {
+                path: path
+                    .strip_prefix(root)
+                    .map_err(|e| OkfError::Internal(e.to_string()))?
+                    .to_path_buf(),
+                before: None,
+                after: Some(after.as_bytes().to_vec()),
+            }],
+            super::transaction::ontology_gate_strengthened(),
+        )?;
+    }
     let path = if opts.dry_run {
         path
     } else {
-        save_new_concept(root, &concept)?
+        save_new_concept_locked(root, &guard, &concept)?
     };
 
     Ok(AddResult {

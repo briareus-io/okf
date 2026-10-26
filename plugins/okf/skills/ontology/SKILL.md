@@ -102,6 +102,12 @@ applies only to `additional_properties: false` on a custom object. Required fiel
 null, blank strings, and empty lists. Unknown extension constraints remain preserved and must be
 reported as unenforced. Inspect incomplete-check diagnostics before reporting lint success.
 
+In CLI 0.5, an optional ontology write gate is independent of lint severity and
+display settings. An out-of-bundle typed reference that cannot be checked
+produces `write-gate-incomplete` and blocks the write; the CLI does not offer
+an override. Explicit dependent-bundle checks for a shared sidecar examine
+those bundles' concepts but do not expand ordinary reference traversal.
+
 Declare concept references with explicit selectors, for example `relations[].target`; an ordinary
 path-looking string is opaque without a declaration. Use relationship kind and attribute selectors
 that pair with the reference in the same list occurrence. Named inverse relationships are views

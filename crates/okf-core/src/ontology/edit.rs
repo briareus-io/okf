@@ -340,6 +340,9 @@ pub fn render_ontology(path: &Path, ontology: &Ontology) -> Result<String> {
 }
 
 /// Render, validate, then publish an ontology with one atomic rename.
+/// Low-level standalone sidecar persistence, without a selected bundle's write policy.
+/// Bundle-aware applications must use the guarded transaction and gate APIs (as the CLI
+/// does), rather than infer a bundle root from an external sidecar's parent directory.
 pub fn save_ontology(path: &Path, ontology: &Ontology) -> Result<()> {
     let text = render_ontology(path, ontology)?;
     use std::io::Write;

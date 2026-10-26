@@ -8,10 +8,10 @@ use crate::output;
 use crate::structured::{parse_yaml, preview_diff, InputReader};
 use okf_core::bundle::resolve::resolve_bundle;
 use okf_core::error::{OkfError, Result};
+use okf_core::mutate::transaction::{self, FileChange};
 use okf_core::ontology::edit::{
     add_concept_type, apply_changes, merge_concept_type, remove_concept_type, remove_field,
-    remove_reference, remove_relationship, render_ontology, save_ontology,
-    validate_field_type_name,
+    remove_reference, remove_relationship, render_ontology, validate_field_type_name,
 };
 use okf_core::ontology::field_types::{resolve_field, resolve_type_name};
 use okf_core::ontology::load::ontology_path;
@@ -142,16 +142,27 @@ pub fn run_add(args: &OntEditArgs, json: bool) -> Result<i32> {
         ));
     }
     let root = resolve_bundle(args.bundle.as_deref())?;
-    let mut ontology = load_or_default(&root)?;
+    let (mut ontology, baseline, baseline_path) = load_current(&root, false)?;
     let ct = edit_definition(&ConceptType::default(), args)?;
     add_concept_type(&mut ontology, &args.name, ct)?;
-    finish(&root, &ontology, "add", &args.name, args.dry_run, json)
+    finish(
+        &root,
+        &ontology,
+        baseline,
+        baseline_path,
+        "add",
+        &args.name,
+        args.dry_run,
+        json,
+        args.check_dependent_bundles,
+        args.require_ontology_gate,
+    )
 }
 
 /// Modify named declarations while preserving all omitted entries.
 pub fn run_update(args: &OntEditArgs, json: bool) -> Result<i32> {
     let root = resolve_bundle(args.bundle.as_deref())?;
-    let mut ontology = require_ontology(&root)?;
+    let (mut ontology, baseline, baseline_path) = load_current(&root, true)?;
     let existing = ontology
         .concepts
         .get(&args.name)
@@ -167,14 +178,36 @@ pub fn run_update(args: &OntEditArgs, json: bool) -> Result<i32> {
     for key in &args.remove_relationship {
         remove_relationship(&mut ontology, &args.name, key)?;
     }
-    finish(&root, &ontology, "update", &args.name, args.dry_run, json)
+    finish(
+        &root,
+        &ontology,
+        baseline,
+        baseline_path,
+        "update",
+        &args.name,
+        args.dry_run,
+        json,
+        args.check_dependent_bundles,
+        args.require_ontology_gate,
+    )
 }
 
 pub fn run_remove(args: &OntRemoveArgs, json: bool) -> Result<i32> {
     let root = resolve_bundle(args.bundle.as_deref())?;
-    let mut ontology = require_ontology(&root)?;
+    let (mut ontology, baseline, baseline_path) = load_current(&root, true)?;
     remove_concept_type(&mut ontology, &args.name)?;
-    finish(&root, &ontology, "remove", &args.name, args.dry_run, json)
+    finish(
+        &root,
+        &ontology,
+        baseline,
+        baseline_path,
+        "remove",
+        &args.name,
+        args.dry_run,
+        json,
+        args.check_dependent_bundles,
+        args.require_ontology_gate,
+    )
 }
 
 pub fn run_field_type(cmd: &OntFieldTypeCmd, json: bool) -> Result<i32> {
@@ -221,7 +254,7 @@ pub fn run_field_type(cmd: &OntFieldTypeCmd, json: bool) -> Result<i32> {
         }
         return Ok(0);
     }
-    let (name, bundle, dry_run, op, input) = match cmd {
+    let (name, bundle, dry_run, op, input, check_dependents, require_gate) = match cmd {
         OntFieldTypeCmd::List(_) | OntFieldTypeCmd::Show(_) => unreachable!(),
         OntFieldTypeCmd::Add(a) => (
             &a.name,
@@ -229,6 +262,8 @@ pub fn run_field_type(cmd: &OntFieldTypeCmd, json: bool) -> Result<i32> {
             a.dry_run,
             "field-type-add",
             Some(&a.from),
+            a.check_dependent_bundles,
+            a.require_ontology_gate,
         ),
         OntFieldTypeCmd::Update(a) => (
             &a.name,
@@ -236,16 +271,23 @@ pub fn run_field_type(cmd: &OntFieldTypeCmd, json: bool) -> Result<i32> {
             a.dry_run,
             "field-type-update",
             Some(&a.from),
+            a.check_dependent_bundles,
+            a.require_ontology_gate,
         ),
-        OntFieldTypeCmd::Remove(a) => (&a.name, &a.bundle, a.dry_run, "field-type-remove", None),
+        OntFieldTypeCmd::Remove(a) => (
+            &a.name,
+            &a.bundle,
+            a.dry_run,
+            "field-type-remove",
+            None,
+            a.check_dependent_bundles,
+            a.require_ontology_gate,
+        ),
     };
     validate_field_type_name(name)?;
     let root = resolve_bundle(bundle.as_deref())?;
-    let mut ontology = if matches!(cmd, OntFieldTypeCmd::Add(_)) {
-        load_or_default(&root)?
-    } else {
-        require_ontology(&root)?
-    };
+    let (mut ontology, baseline, baseline_path) =
+        load_current(&root, !matches!(cmd, OntFieldTypeCmd::Add(_)))?;
     let exists = ontology.field_types.contains_key(name);
     if matches!(cmd, OntFieldTypeCmd::Add(_)) && exists {
         return Err(OkfError::Usage(format!(
@@ -266,15 +308,37 @@ pub fn run_field_type(cmd: &OntFieldTypeCmd, json: bool) -> Result<i32> {
     } else {
         ontology.field_types.shift_remove(name);
     }
-    finish(&root, &ontology, op, name, dry_run, json)
+    finish(
+        &root,
+        &ontology,
+        baseline,
+        baseline_path,
+        op,
+        name,
+        dry_run,
+        json,
+        check_dependents,
+        require_gate,
+    )
 }
 
 pub fn run_apply(args: &OntApplyArgs, json: bool) -> Result<i32> {
     let root = resolve_bundle(args.bundle.as_deref())?;
-    let mut ontology = load_or_default(&root)?;
+    let (mut ontology, baseline, baseline_path) = load_current(&root, false)?;
     let changes = read_definition(&mut InputReader::default(), &args.from)?;
     apply_changes(&mut ontology, &changes)?;
-    finish(&root, &ontology, "apply", "ontology", args.dry_run, json)
+    finish(
+        &root,
+        &ontology,
+        baseline,
+        baseline_path,
+        "apply",
+        "ontology",
+        args.dry_run,
+        json,
+        args.check_dependent_bundles,
+        args.require_ontology_gate,
+    )
 }
 
 fn edit_definition(existing: &ConceptType, args: &OntEditArgs) -> Result<ConceptType> {
@@ -422,39 +486,165 @@ fn read_definition(reader: &mut InputReader, input: &str) -> Result<Value> {
 fn finish(
     root: &std::path::Path,
     ontology: &Ontology,
+    baseline: Option<Vec<u8>>,
+    baseline_path: std::path::PathBuf,
     op: &str,
     name: &str,
     dry_run: bool,
     json: bool,
+    check_dependents: bool,
+    require_gate: bool,
 ) -> Result<i32> {
-    if !dry_run {
-        persist(root, ontology)?;
-        return report_change(op, name, json);
-    }
     let (settings, _) = okf_core::bundle::settings::load_for(root)?;
     let path = settings
         .ontology_path
         .unwrap_or_else(|| ontology_path(root));
-    let generated = render_ontology(&path, ontology)?;
-    let before = match std::fs::read_to_string(&path) {
-        Ok(text) => text,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(e) => {
-            return Err(OkfError::Environment(format!(
-                "cannot read {}: {e}",
-                path.display()
-            )))
+    let context = okf_core::bundle::context::current_context(Some(&root.to_string_lossy()), None)?;
+    let target = canonical_target(&path)?;
+    if target != baseline_path {
+        return Err(OkfError::Usage(
+            "baseline-conflict: ontology target changed during preparation; preview again".into(),
+        ));
+    }
+    let mut roots = vec![root.canonicalize()?];
+    let mut dependents = Vec::new();
+    let mut unavailable = Vec::new();
+    if let Some(catalog) = &context.catalog {
+        for entry in catalog.entries.values() {
+            if entry.root == roots[0] {
+                continue;
+            }
+            let candidate = okf_core::bundle::settings::ontology_path_for(&context, &entry.root)?;
+            if candidate
+                .as_deref()
+                .map(canonical_target)
+                .transpose()?
+                .as_deref()
+                == Some(target.as_path())
+            {
+                dependents.push(entry.id.clone());
+                if entry.available {
+                    roots.push(entry.root.clone());
+                } else {
+                    unavailable.push(entry.id.clone());
+                }
+            }
         }
+    }
+    if !dependents.is_empty() && !check_dependents {
+        return Err(OkfError::Usage(format!("shared ontology scope: requested={}; required={}; examined=none; unavailable={}; unknown external users are not covered; rerun with --check-dependent-bundles", root.display(), dependents.join(","), unavailable.join(","))));
+    }
+    if !unavailable.is_empty() {
+        return Err(OkfError::Environment(format!("shared ontology scope incomplete: requested={}; required={}; examined=none; unavailable={}; unknown external users are not covered", root.display(), dependents.join(","), unavailable.join(","))));
+    }
+    roots.sort();
+    roots.dedup();
+    let guards = roots
+        .iter()
+        .map(|root| transaction::writer_lock(root))
+        .collect::<Result<Vec<_>>>()?;
+    let locked_context =
+        okf_core::bundle::context::current_context(Some(&root.to_string_lossy()), None)?;
+    let locked_path = okf_core::bundle::settings::ontology_path_for(&locked_context, root)?
+        .unwrap_or_else(|| ontology_path(root));
+    if canonical_target(&locked_path)? != baseline_path {
+        return Err(OkfError::Usage(
+            "baseline-conflict: ontology target changed during preparation; preview again".into(),
+        ));
+    }
+    if let Some(catalog) = &locked_context.catalog {
+        for entry in catalog.entries.values() {
+            let candidate =
+                okf_core::bundle::settings::ontology_path_for(&locked_context, &entry.root)?;
+            if candidate
+                .as_deref()
+                .map(canonical_target)
+                .transpose()?
+                .as_deref()
+                == Some(target.as_path())
+                && !roots.contains(&entry.root)
+            {
+                return Err(OkfError::Usage(format!(
+                    "baseline-conflict: new shared ontology consumer {}; preview again",
+                    entry.id
+                )));
+            }
+        }
+    }
+    let before_bytes = transaction::read_optional(&target)?;
+    if before_bytes != baseline {
+        return Err(OkfError::Usage(
+            "ontology changed during preparation; preview again".into(),
+        ));
+    }
+    let generated = render_ontology(&path, ontology)?;
+    let before = before_bytes
+        .as_ref()
+        .map(|b| String::from_utf8_lossy(b).into_owned())
+        .unwrap_or_default();
+    let old = if before_bytes.is_some() {
+        Some(okf_core::ontology::load::parse_ontology(&before)?)
+    } else {
+        None
     };
+    for consumer in &roots {
+        okf_core::mutate::gate::check_ontology_change(
+            consumer,
+            old.as_ref(),
+            ontology,
+            require_gate,
+        )?;
+    }
+    if !dry_run {
+        let primary = root.canonicalize()?;
+        let guard = &guards[roots.iter().position(|r| r == &primary).unwrap()];
+        if target.starts_with(&primary) {
+            let relative = target
+                .strip_prefix(&primary)
+                .map_err(|e| OkfError::Internal(e.to_string()))?;
+            transaction::commit_locked(
+                &primary,
+                guard,
+                vec![FileChange {
+                    path: relative.to_path_buf(),
+                    before: before_bytes,
+                    after: Some(generated.into_bytes()),
+                }],
+            )?;
+        } else {
+            transaction::commit_external_ontology_locked(
+                &primary,
+                guard,
+                &target,
+                before_bytes,
+                generated.into_bytes(),
+            )?;
+        }
+        return report_change(op, name, json, root, &dependents, &roots);
+    }
     let diff = preview_diff(&path, &before, &generated);
     if json {
         output::print_line(
-            &json!({"kind":"change", "op":format!("ontology-{op}"), "name":name, "dry_run":true, "diff":diff, "before":before, "after":generated}),
+            &json!({"kind":"change", "op":format!("ontology-{op}"), "name":name, "dry_run":true, "diff":diff, "before":before, "after":generated, "requested_bundles":[root], "required_dependent_bundles":dependents, "examined_bundles":roots, "unknown_external_users_covered":false}),
         )?;
     } else {
         print!("{diff}");
     }
     Ok(0)
+}
+
+fn canonical_target(path: &std::path::Path) -> Result<std::path::PathBuf> {
+    if path.exists() {
+        return Ok(path.canonicalize()?);
+    }
+    let parent = path
+        .parent()
+        .ok_or_else(|| OkfError::Usage("ontology target has no parent".into()))?
+        .canonicalize()?;
+    Ok(parent.join(
+        path.file_name()
+            .ok_or_else(|| OkfError::Usage("ontology target has no name".into()))?,
+    ))
 }
 
 // ---- helpers ----
@@ -470,29 +660,45 @@ fn require_ontology(root: &std::path::Path) -> Result<Ontology> {
         })
 }
 
-fn load_or_default(root: &std::path::Path) -> Result<Ontology> {
-    Ok(okf_core::bundle::settings::load_for(root)?
-        .1
-        .unwrap_or_else(|| Ontology {
+fn load_current(
+    root: &std::path::Path,
+    required: bool,
+) -> Result<(Ontology, Option<Vec<u8>>, std::path::PathBuf)> {
+    let context = okf_core::bundle::context::current_context(Some(&root.to_string_lossy()), None)?;
+    let path = okf_core::bundle::settings::ontology_path_for(&context, root)?
+        .unwrap_or_else(|| ontology_path(root));
+    let bytes = transaction::read_optional(&path)?;
+    let ontology = match &bytes {
+        Some(bytes) => {
+            let text = std::str::from_utf8(bytes)
+                .map_err(|e| OkfError::Environment(format!("invalid ontology UTF-8: {e}")))?;
+            okf_core::ontology::load::parse_ontology(text)?
+        }
+        None if required => {
+            return Err(OkfError::Environment(format!(
+                "no ontology.yaml in bundle {}",
+                root.display()
+            )))
+        }
+        None => Ontology {
             okf_ontology: ONTOLOGY_VERSION.to_string(),
             ..Ontology::default()
-        }))
+        },
+    };
+    Ok((ontology, bytes, canonical_target(&path)?))
 }
 
-fn persist(root: &std::path::Path, ontology: &Ontology) -> Result<()> {
-    let (settings, _) = okf_core::bundle::settings::load_for(root)?;
-    save_ontology(
-        &settings
-            .ontology_path
-            .unwrap_or_else(|| ontology_path(root)),
-        ontology,
-    )
-}
-
-fn report_change(op: &str, name: &str, json: bool) -> Result<i32> {
+fn report_change(
+    op: &str,
+    name: &str,
+    json: bool,
+    root: &std::path::Path,
+    dependents: &[String],
+    examined: &[std::path::PathBuf],
+) -> Result<i32> {
     if json {
         output::print_line(
-            &json!({"kind": "change", "op": format!("ontology-{op}"), "name": name}),
+            &json!({"kind": "change", "op": format!("ontology-{op}"), "name": name, "requested_bundles":[root], "required_dependent_bundles":dependents, "examined_bundles":examined, "unknown_external_users_covered":false}),
         )?;
     } else {
         println!("ontology {op}: {name}");

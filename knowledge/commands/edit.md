@@ -1,20 +1,20 @@
 ---
 type: Command
-title: okf edit
-description: Losslessly edits a concept's frontmatter or body and invalidates its prior verification.
 group: mutate
 mutates: true
 implemented_by:
 - /components/mutate
+title: okf edit
+description: Losslessly edits a concept's frontmatter or body and invalidates its prior verification.
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
   fingerprint:
-    blob_sha: bab34f363d28125adac33f33fefc2c9e04329d73
+    blob_sha: a99f651a30e3a6ad2859066a5b8f287e73391371
 - resource: crates/okf-cli/src/cli.rs
   kind: git-path
   fingerprint:
-    blob_sha: 6938cba0788280234436282cdce1e4a880b25d22
+    blob_sha: fad8084ae5833fd506b4e8818e62e0a2d387c2d6
 - resource: crates/okf-cli/src/structured.rs
   kind: git-path
   fingerprint:
@@ -39,7 +39,7 @@ Structured edits use `--set-yaml key=value` to replace a complete value, `--set-
 to set an object property, and `--unset-path path` to remove one. Dotted scalar `--set` keys remain
 literal. `--patch` accepts an RFC 6902 YAML/JSON array for concrete JSON Pointer operations,
 including list edits, move/copy and test guards. Failed patches leave the file unchanged.
-`--dry-run` previews the resulting change without persistence. Meaningful mutations clear current
+`--dry-run` previews the resulting change without publishing authored content. Meaningful mutations clear current
 verification and update an existing generation timestamp; previews do neither. Unrelated values
 and body text survive, while YAML presentation may normalize.
 
@@ -70,6 +70,7 @@ and body text survive, while YAML presentation may normalize.
 | `--append-section <HEADING> <TEXT>` | list<string> | no | Append to a section, `<heading> <text>` (repeatable). Text accepts `@file`/`-` |
 | `--remove-section <value>` | list<string> | no | Remove a section (heading + content), `<heading>` (repeatable) |
 | `--rename-section <OLD> <NEW>` | list<string> | no | Rename a section heading, `<old> <new>` (repeatable) |
+| `--require-ontology-gate` | bool | no | Require the ontology write gate even when bundle policy leaves it disabled (default: `false`) |
 
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 

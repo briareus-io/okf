@@ -14,12 +14,56 @@ pub struct ChangeSet {
     pub operations: Vec<Operation>,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(tag = "op", rename_all = "kebab-case", deny_unknown_fields)]
+#[derive(Debug)]
 pub enum Operation {
     Create {
         path: String,
         content: String,
+    },
+    CreateStructured {
+        path: String,
+        frontmatter: serde_yaml::Mapping,
+        body: String,
+    },
+    Replace {
+        path: String,
+        content: String,
+    },
+    Edit {
+        concept: String,
+        patch: Vec<super::structured::PatchOperation>,
+        body: Option<String>,
+    },
+    Move {
+        from: String,
+        to: String,
+    },
+    Retarget {
+        from: String,
+        to: String,
+        within: Option<Vec<String>>,
+    },
+    Remove {
+        path: String,
+    },
+    RemoveAllowDangling {
+        path: String,
+    },
+    PutArtifact {
+        path: String,
+        content: String,
+        replace: bool,
+    },
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "op", rename_all = "kebab-case", deny_unknown_fields)]
+enum OperationInput {
+    Create {
+        path: String,
+        content: Option<String>,
+        frontmatter: Option<serde_yaml::Mapping>,
+        body: Option<String>,
     },
     Replace {
         path: String,
@@ -42,6 +86,8 @@ pub enum Operation {
     },
     Remove {
         path: String,
+        #[serde(default)]
+        allow_dangling: bool,
     },
     PutArtifact {
         path: String,
@@ -51,9 +97,70 @@ pub enum Operation {
     },
 }
 
+impl<'de> Deserialize<'de> for Operation {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        use serde::de::Error;
+        Ok(match OperationInput::deserialize(deserializer)? {
+            OperationInput::Create {
+                path,
+                content: Some(content),
+                frontmatter: None,
+                body: None,
+            } => Self::Create { path, content },
+            OperationInput::Create {
+                path,
+                content: None,
+                frontmatter: Some(frontmatter),
+                body,
+            } => Self::CreateStructured {
+                path,
+                frontmatter,
+                body: body.unwrap_or_default(),
+            },
+            OperationInput::Create { .. } => {
+                return Err(D::Error::custom(
+                    "create requires either content or frontmatter and optional body",
+                ))
+            }
+            OperationInput::Replace { path, content } => Self::Replace { path, content },
+            OperationInput::Edit {
+                concept,
+                patch,
+                body,
+            } => Self::Edit {
+                concept,
+                patch,
+                body,
+            },
+            OperationInput::Move { from, to } => Self::Move { from, to },
+            OperationInput::Retarget { from, to, within } => Self::Retarget { from, to, within },
+            OperationInput::Remove {
+                path,
+                allow_dangling: true,
+            } => Self::RemoveAllowDangling { path },
+            OperationInput::Remove {
+                path,
+                allow_dangling: false,
+            } => Self::Remove { path },
+            OperationInput::PutArtifact {
+                path,
+                content,
+                replace,
+            } => Self::PutArtifact {
+                path,
+                content,
+                replace,
+            },
+        })
+    }
+}
+
 pub struct Plan {
     pub base_digest: String,
     pub changes: Vec<FileChange>,
+    pub allowed_dangling: Vec<String>,
     before: BTreeMap<PathBuf, Vec<u8>>,
     interpretation: String,
 }
@@ -162,6 +269,38 @@ fn write_document(root: &Path, path: &str, content: &str, replace: bool) -> Resu
     } else {
         super::edit::save_new_concept(root, &concept)?;
     }
+    Ok(())
+}
+
+fn write_structured_document(
+    root: &Path,
+    path: &str,
+    frontmatter: &serde_yaml::Mapping,
+    body: &str,
+) -> Result<()> {
+    let (id, rel) = concept_path(path)?;
+    let target = transaction::checked_path(root, &rel)?;
+    if target.exists() {
+        return Err(usage(format!("create requires an absent concept: {path}")));
+    }
+    let mut map = indexmap::IndexMap::new();
+    for (key, value) in frontmatter {
+        let Some(key) = key.as_str() else {
+            return Err(usage("frontmatter keys must be strings"));
+        };
+        if key == "verified" {
+            return Err(usage(
+                "change-set content cannot supply verification; use verify after review",
+            ));
+        }
+        map.insert(key.to_owned(), value.clone());
+    }
+    let concept = crate::model::concept::Concept {
+        id,
+        frontmatter: crate::model::frontmatter::Frontmatter::from_map(map),
+        body: body.to_owned(),
+    };
+    super::edit::save_new_concept(root, &concept)?;
     Ok(())
 }
 
@@ -392,7 +531,7 @@ fn control_paths(root: &Path, ontology: Option<&Path>) -> Result<BTreeSet<PathBu
 
 /// Preview and apply share this exact preparation. No bundle files are changed here.
 pub fn prepare(root: &Path, set: &ChangeSet) -> Result<Plan> {
-    transaction::ensure_idle(root)?;
+    let _guard = transaction::writer_lock(root)?;
     if set.version != 1 || set.operations.is_empty() {
         return Err(usage(
             "change set requires version: 1 and nonempty operations",
@@ -405,6 +544,7 @@ pub fn prepare(root: &Path, set: &ChangeSet) -> Result<Plan> {
     let before = snapshot(root)?;
     let base_digest = digest(&before, &interpretation);
     let workspace = Workspace::new()?;
+    let _staging_evidence = transaction::suppress_publication_evidence();
     let stage = &workspace.0;
     for (path, content) in &before {
         let target = stage.join(path);
@@ -413,9 +553,16 @@ pub fn prepare(root: &Path, set: &ChangeSet) -> Result<Plan> {
     }
     let context = crate::bundle::context::current_context(Some(&root.to_string_lossy()), None)?;
     let previous_missing = missing(stage, ontology.as_ref(), &context)?;
+    let mut allowed_removed = BTreeSet::new();
+    let stage_gate = transaction::suppress_ontology_gate();
     for op in &set.operations {
         match op {
             Operation::Create { path, content } => write_document(stage, path, content, false)?,
+            Operation::CreateStructured {
+                path,
+                frontmatter,
+                body,
+            } => write_structured_document(stage, path, frontmatter, body)?,
             Operation::Replace { path, content } => write_document(stage, path, content, true)?,
             Operation::Edit {
                 concept,
@@ -463,6 +610,11 @@ pub fn prepare(root: &Path, set: &ChangeSet) -> Result<Plan> {
                 }
                 std::fs::remove_file(transaction::checked_path(stage, Path::new(path))?)?;
             }
+            Operation::RemoveAllowDangling { path } => {
+                let (id, relative) = concept_path(path)?;
+                allowed_removed.insert(id.0);
+                std::fs::remove_file(transaction::checked_path(stage, &relative)?)?;
+            }
             Operation::PutArtifact {
                 path,
                 content,
@@ -472,6 +624,7 @@ pub fn prepare(root: &Path, set: &ChangeSet) -> Result<Plan> {
             }
         }
     }
+    drop(stage_gate);
     let report = crate::check::validate::validate_bundle(stage)?;
     if !report.is_conformant() {
         return Err(usage(format!(
@@ -485,8 +638,21 @@ pub fn prepare(root: &Path, set: &ChangeSet) -> Result<Plan> {
         )));
     }
     let after_missing = missing(stage, ontology.as_ref(), &context)?;
+    let mut allowed_dangling = Vec::new();
     let introduced = after_missing
         .difference(&previous_missing)
+        .filter(|finding| {
+            let Some((from, raw)) = finding.split_once(": ") else {
+                return true;
+            };
+            let from = ConceptId::from_relative(from);
+            if allowed_removed.contains(&crate::model::link::resolve_link(&from, raw).0) {
+                allowed_dangling.push((*finding).clone());
+                false
+            } else {
+                true
+            }
+        })
         .cloned()
         .collect::<Vec<_>>();
     if !introduced.is_empty() {
@@ -518,26 +684,37 @@ pub fn prepare(root: &Path, set: &ChangeSet) -> Result<Plan> {
         })
         .collect();
     transaction::preflight(root, &changes)?;
+    super::gate::check_changes(root, &changes, transaction::ontology_gate_strengthened())?;
     Ok(Plan {
         base_digest,
         changes,
+        allowed_dangling,
         before,
         interpretation,
     })
 }
 
 pub fn apply(root: &Path, plan: Plan, expected: Option<&str>) -> Result<()> {
+    let guard = transaction::writer_lock(root)?;
     if expected.is_some_and(|value| value != plan.base_digest) {
         return Err(usage(
-            "change-set base digest differs from --expect; preview again",
+            "baseline-conflict: change-set base digest differs from --expect; preview again",
         ));
     }
     let interpretation = serde_json::to_string(&crate::bundle::settings::load_for(root)?.0)
         .map_err(|e| OkfError::Internal(e.to_string()))?;
     if snapshot(root)? != plan.before || interpretation != plan.interpretation {
         return Err(usage(
-            "bundle or interpretation changed during planning; preview again",
+            "baseline-conflict: bundle or interpretation changed during planning; preview again",
         ));
     }
-    transaction::commit(root, plan.changes)
+    transaction::commit_locked(root, &guard, plan.changes)
+}
+
+/// Acquire the same covered baseline used by changeset plan and apply, without staging edits.
+pub fn digest_read_only(root: &Path) -> Result<String> {
+    let _guard = transaction::writer_lock(root)?;
+    let interpretation = serde_json::to_string(&crate::bundle::settings::load_for(root)?.0)
+        .map_err(|e| OkfError::Internal(e.to_string()))?;
+    Ok(digest(&snapshot(root)?, &interpretation))
 }

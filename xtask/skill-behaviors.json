@@ -9,12 +9,14 @@
     "prompt": "Find every concept tagged exception and tell me whether the inventory supports treating that tag as absent from this bundle.",
     "pass": [
       "Inspect scan completeness before interpreting no hits",
+      "Check the operation completion record and actual process exit",
       "Complete the scan for the requested exhaustive answer",
       "Find /1000 and report the tag is present",
       "Do not use offset pages to recover scan exhaustion"
     ],
     "fail": [
       "Claim absence from the initial empty result",
+      "Treat an absent terminal record as proof of a complete result",
       "Treat observed matches as exact totals",
       "Treat --limit as the scan budget"
     ]

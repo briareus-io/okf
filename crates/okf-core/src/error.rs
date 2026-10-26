@@ -7,6 +7,9 @@ pub type Result<T> = std::result::Result<T, OkfError>;
 /// (0 vs 1) are decided by the CLI, not here.
 #[derive(Debug, Clone, Error)]
 pub enum OkfError {
+    /// An explicitly enabled write policy rejected a prepared mutation (exit 1).
+    #[error("policy rejected: {0}")]
+    Policy(String),
     /// Bad usage / arguments (exit 2).
     #[error("usage error: {0}")]
     Usage(String),
@@ -29,6 +32,7 @@ impl OkfError {
     pub fn at_path(self, path: &std::path::Path) -> Self {
         let context = |message| format!("{}: {message}", path.display());
         match self {
+            Self::Policy(message) => Self::Policy(context(message)),
             Self::Usage(message) => Self::Usage(context(message)),
             Self::Environment(message) => Self::Environment(context(message)),
             Self::Io(message) => Self::Io(context(message)),
@@ -53,6 +57,7 @@ impl OkfError {
     /// Exit class per ARCHITECTURE.md / INTENT.md.
     pub fn exit_code(&self) -> i32 {
         match self {
+            OkfError::Policy(_) => 1,
             OkfError::Usage(_) => 2,
             OkfError::Environment(_) | OkfError::Io(_) | OkfError::Yaml(_) => 3,
             OkfError::Internal(_) => 4,

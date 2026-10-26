@@ -26,7 +26,8 @@ fn raw_body_and_document_numbers_do_not_include_display_header() {
         String::from_utf8(out.stdout).unwrap()
     };
     assert_eq!(run(&["--body"]), body);
-    let json: serde_json::Value = serde_json::from_str(&run(&["--body", "--json"])).unwrap();
+    let json: serde_json::Value =
+        serde_json::from_str(run(&["--body", "--json"]).lines().nth(1).unwrap()).unwrap();
     assert_eq!(json["body"], body);
     assert_eq!(json["kind"], "body");
     let numbered = run(&["-n"]);
@@ -34,7 +35,8 @@ fn raw_body_and_document_numbers_do_not_include_display_header() {
     let heading = numbered.lines().find(|s| s.ends_with("# Heading")).unwrap();
     let number = heading.split_once(':').unwrap().0;
     assert_eq!(run(&["--lines", number]), format!("{heading}\n"));
-    let range: serde_json::Value = serde_json::from_str(&run(&["-n", "--json"])).unwrap();
+    let range: serde_json::Value =
+        serde_json::from_str(run(&["-n", "--json"]).lines().nth(1).unwrap()).unwrap();
     assert_eq!(range["start"], 1);
     assert_eq!(range["lines"][0]["text"], "---");
     okf()

@@ -203,6 +203,13 @@ fn print_content(
     json_output: bool,
 ) -> Result<i32> {
     if json_output {
+        if content.binary {
+            // A binary metadata response intentionally has no rendered text.
+        } else if content.truncated {
+            output::mark_partial("content", "content-bound");
+        } else {
+            output::mark_content_complete();
+        }
         output::print_line(&json!({
             "kind": "artifact-content",
             "resource": content.resolved.resource,

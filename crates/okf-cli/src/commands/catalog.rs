@@ -26,7 +26,8 @@ pub fn bundle_slot(command: &mut Command) -> Option<&mut Option<String>> {
         Command::Backlinks(a) | Command::Links(a) => &mut a.bundle,
         Command::Graph(a) => &mut a.bundle,
         Command::Resolve(a) => &mut a.bundle,
-        Command::Scan(a) | Command::Stale(a) | Command::Stats(a) => &mut a.bundle,
+        Command::Scan(a) | Command::Stats(a) => &mut a.bundle,
+        Command::Stale(a) => &mut a.bundle,
         Command::Lint(a) => &mut a.bundle,
         Command::Affected(a) => &mut a.bundle,
         Command::Diff(a) => &mut a.bundle,
@@ -41,6 +42,7 @@ pub fn bundle_slot(command: &mut Command) -> Option<&mut Option<String>> {
         Command::Docs(a) => &mut a.bundle,
         Command::Changeset(cmd) => match cmd {
             ChangeSetCmd::Plan(a) | ChangeSetCmd::Apply(a) => &mut a.bundle,
+            ChangeSetCmd::Digest(a) => &mut a.bundle,
             ChangeSetCmd::Recover(a) => &mut a.bundle,
         },
         Command::Artifact(cmd) => match cmd {
@@ -247,6 +249,11 @@ pub fn prepare(cli: &mut Cli) -> Result<Option<i32>> {
         return run_catalog(cli.json).map(Some);
     }
     let scoped = !cli.scope_bundle.is_empty() || cli.catalog_scope;
+    if scoped && matches!(&cli.command, Command::Lint(a) if a.fix) {
+        return Err(OkfError::Usage(
+            "lint --fix requires one selected bundle; scope flags are not supported".into(),
+        ));
+    }
     let revision = cli.revision.is_some();
     let scope_command = match cli.command {
         Command::Graph(_) => "graph",
@@ -434,21 +441,7 @@ fn run_scoped(cli: &Cli, context: &Context, graph: &CatalogGraph) -> Result<i32>
             })
         }
         Command::Affected(a) => {
-            use std::io::{BufRead, IsTerminal};
-            let mut raw = a.changed.clone();
-            if !std::io::stdin().is_terminal() {
-                for line in std::io::stdin().lock().lines() {
-                    let line = line?;
-                    if !line.trim().is_empty() {
-                        raw.push(line.trim().into());
-                    }
-                }
-            }
-            if raw.is_empty() {
-                return Err(OkfError::Usage(
-                    "affected requires --changed targets or stdin".into(),
-                ));
-            }
+            let raw = super::check::changed_inputs(a, &context.primary.root)?;
             let nodes = graph.affected_resources(context, &raw, a.transitive, a.depth);
             for node in &nodes {
                 print_node(node, "bundle-affected", cli.json)?;
@@ -594,22 +587,6 @@ fn run_lint_scoped(
     use okf_core::check::lint::{lint_bundle, meets_threshold, FailOn, Finding, Severity};
     use std::str::FromStr;
     let fail_on = FailOn::from_str(args.fail_on.as_deref().unwrap_or("error"))?;
-    // Scoped dispatch returns before the ordinary command writer lock is acquired.
-    // Lock every examined bundle in a stable order and retain the guards through linting.
-    let mut writer_guards = Vec::new();
-    if args.fix {
-        let mut roots = graph
-            .scope
-            .examined
-            .iter()
-            .map(|bundle| &bundle.root)
-            .collect::<Vec<_>>();
-        roots.sort();
-        roots.dedup();
-        for root in roots {
-            writer_guards.push(okf_core::mutate::transaction::writer_lock(root)?);
-        }
-    }
     let mut failed = false;
     let mut broken_link_severities = std::collections::BTreeMap::new();
     let mut ontology_severities = std::collections::BTreeMap::new();

@@ -23,6 +23,19 @@ fn success(root: &std::path::Path, args: &[&str]) -> Output {
 fn ontology(root: &std::path::Path) -> serde_yaml::Value {
     serde_yaml::from_str(&std::fs::read_to_string(root.join("ontology.yaml")).unwrap()).unwrap()
 }
+fn payload(bytes: &[u8]) -> serde_json::Value {
+    std::str::from_utf8(bytes)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .find(|row| {
+            !matches!(
+                row["kind"].as_str(),
+                Some("operation-start" | "operation-complete")
+            )
+        })
+        .unwrap()
+}
 
 #[test]
 fn ontology_inspection_exposes_selectors_relationships_and_authored_properties() {
@@ -44,7 +57,7 @@ fn ontology_inspection_exposes_selectors_relationships_and_authored_properties()
         assert!(human.contains(expected), "missing {expected:?}: {human}");
     }
     let out = success(root, &["ontology", "show", "Procedure", "--json"]);
-    let record: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let record = payload(&out.stdout);
     assert_eq!(record["trust"]["min_tier"], "verified");
     assert_eq!(record["extra"]["local"], "authored");
     assert_eq!(record["extends"], "Base");
@@ -65,11 +78,17 @@ fn reusable_field_type_inspection_shows_declarations_and_effective_constraints()
         .unwrap()
         .lines()
         .map(|line| serde_json::from_str(line).unwrap())
+        .filter(|record: &serde_json::Value| {
+            !matches!(
+                record["kind"].as_str(),
+                Some("operation-start" | "operation-complete")
+            )
+        })
         .collect();
     assert_eq!(records.len(), 2);
     assert_eq!(records[1]["name"], "Label");
     let out = success(root, &["ontology", "field-type", "show", "Label", "--json"]);
-    let record: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let record = payload(&out.stdout);
     assert_eq!(record["definition"]["extends"], "Text");
     assert_eq!(record["effective"]["base"], "string");
     assert_eq!(record["effective"]["constraints"]["min"], 1);
@@ -106,7 +125,7 @@ fn unrelated_ontology_update_preserves_literal_scalar_in_preview_and_write() {
         std::fs::read_to_string(root.join("ontology.yaml")).unwrap(),
         original
     );
-    let record: serde_json::Value = serde_json::from_slice(&preview.stdout).unwrap();
+    let record = payload(&preview.stdout);
     let generated = record["diff"]
         .as_str()
         .unwrap()
@@ -334,7 +353,7 @@ fn previews_preserve_comments_and_match_real_write_without_side_effects() {
         std::fs::read_to_string(root.join("ontology.yaml")).unwrap(),
         original
     );
-    let record: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let record = payload(&out.stdout);
     assert_eq!(record["dry_run"], true);
     let diff = record["diff"].as_str().unwrap();
     assert!(diff.contains("+# rationale"), "{diff}");

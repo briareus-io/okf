@@ -19,20 +19,27 @@ use okf_core::error::Result;
 /// Dispatch a parsed CLI invocation to its command handler, returning an exit code.
 pub fn run(mut cli: Cli) -> Result<i32> {
     match &cli.command {
-        Command::Computation(ComputationCmd::Check(a)) if a.details => eprintln!(
-            "okf: --details is retained for compatibility and has no effect for this command"
-        ),
+        Command::Computation(ComputationCmd::Check(a)) if a.details => {
+            return Err(okf_core::error::OkfError::Usage(
+                "computation check --details has no effect".into(),
+            ))
+        }
         Command::Affected(a) if a.depth.is_some() && !a.transitive => {
-            eprintln!("okf: --depth has no effect without --transitive")
+            return Err(okf_core::error::OkfError::Usage(
+                "affected --depth requires --transitive".into(),
+            ))
         }
         Command::Init(a) if a.title.is_some() && a.no_index => {
-            eprintln!("okf: --title has no effect with --no-index")
+            return Err(okf_core::error::OkfError::Usage(
+                "init --title conflicts with --no-index".into(),
+            ))
         }
         _ => {}
     }
 
     let failure_alias = match &cli.command {
-        Command::Scan(a) | Command::Stale(a) | Command::Stats(a) => a.fail_on.as_deref(),
+        Command::Scan(a) | Command::Stats(a) => a.fail_on.as_deref(),
+        Command::Stale(a) => a.fail_on.as_deref(),
         Command::Affected(a) => a.fail_on.as_deref(),
         Command::Diff(a) => a.fail_on.as_deref(),
         _ => None,
@@ -43,20 +50,6 @@ pub fn run(mut cli: Cli) -> Result<i32> {
     if let Some(code) = catalog::prepare(&mut cli)? {
         return Ok(code);
     }
-    // Hold the bundle writer lock through ordinary read-modify-write handlers.
-    // mv and changeset acquire it around their guarded transactional publication.
-    let _writer = if catalog::writes_command(&cli.command) && !matches!(cli.command, Command::Mv(_))
-    {
-        let path = catalog::bundle_slot(&mut cli.command).and_then(|p| p.clone());
-        let root = okf_core::bundle::resolve::resolve_bundle_target(path.as_deref())?;
-        if root.is_dir() {
-            Some(okf_core::mutate::transaction::writer_lock(&root)?)
-        } else {
-            None
-        }
-    } else {
-        None
-    };
     let json = cli.json;
     match &cli.command {
         // META

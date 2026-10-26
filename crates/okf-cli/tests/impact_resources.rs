@@ -78,7 +78,13 @@ fn single_bundle_changed_resources_seed_direct_and_transitive_review() {
     // Deleted artifacts retain their source lineage and remain useful impact seeds.
     std::fs::remove_file(root.join("data.csv")).unwrap();
     let output = run(root, &["affected", "--changed", "data.csv", "--json"]);
-    assert_eq!(records(&output)[0]["concept"], "/notes/direct");
+    assert_eq!(
+        records(&output)
+            .into_iter()
+            .find(|row| row["kind"] == "affected")
+            .unwrap()["concept"],
+        "/notes/direct"
+    );
 }
 
 #[test]

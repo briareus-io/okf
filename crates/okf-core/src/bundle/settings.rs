@@ -30,6 +30,14 @@ pub struct LintSettings {
     pub source_missing: Option<String>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WritePolicy {
+    #[serde(default)]
+    pub ontology_gate: bool,
+    pub ontology_severity: Option<String>,
+    pub blocking_threshold: Option<String>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ViewSettings {
     #[serde(default)]
     pub columns: Vec<String>,
@@ -69,6 +77,8 @@ pub struct BundleSettings {
     pub query: QuerySettings,
     #[serde(default)]
     pub lint: LintSettings,
+    #[serde(default)]
+    pub write_policy: WritePolicy,
     #[serde(default)]
     pub views: BTreeMap<String, ViewSettings>,
     #[serde(default)]
@@ -208,6 +218,24 @@ fn historical(root: &Path, path: &Path, revision: &str) -> Result<HistoricalFile
     Ok(HistoricalFile::Bytes(bytes))
 }
 fn validate_settings(settings: &BundleSettings) -> Result<()> {
+    for (key, value) in [
+        (
+            "ontology_severity",
+            &settings.write_policy.ontology_severity,
+        ),
+        (
+            "blocking_threshold",
+            &settings.write_policy.blocking_threshold,
+        ),
+    ] {
+        if let Some(value) = value {
+            if !matches!(value.as_str(), "info" | "warn" | "error") {
+                return Err(OkfError::Usage(format!(
+                    "invalid write_policy.{key} {value:?}; expected info, warn, or error"
+                )));
+            }
+        }
+    }
     if settings.query.scan_limit == Some(0)
         || settings.lint.finding_budget == Some(0)
         || settings.facets.max_distinct_values == 0

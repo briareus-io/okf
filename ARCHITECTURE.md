@@ -4,6 +4,13 @@ This document sketches the code structure for the OKF harness described in `INTE
 It is a design sketch, not final — module boundaries encode contracts decided in the intent,
 and open crate-level tensions are called out explicitly at the end.
 
+The 0.5.0 command work puts deterministic selection, diagnostics, source
+health, baseline preparation, and mutation checks in core. The CLI owns input
+precedence, schema, stream framing, and exit codes. Coordination files and
+publication journals are effects through the write boundary. The
+[migration guide](docs/0.5.0-migration.md) describes the observable
+changes. This sketch does not substitute for the generated CLI reference.
+
 ## Workspace shape
 
 A Cargo **workspace** with a thin binary over a fat library. The split *is* the "hands vs.

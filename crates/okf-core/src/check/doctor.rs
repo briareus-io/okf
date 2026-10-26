@@ -92,6 +92,12 @@ pub fn doctor(root: &Path, target: &str, fix_safe: bool, apply: bool) -> Result<
             "doctor: unsupported target {target:?}; expected 0.2"
         )));
     }
+    let guard = if fix_safe {
+        Some(crate::mutate::transaction::writer_lock(root)?)
+    } else {
+        None
+    };
+    let mut changes = Vec::new();
     let paths = walk_markdown(root)?;
     let mut findings = Vec::new();
     let mut documents: HashMap<PathBuf, Option<String>> = HashMap::new();
@@ -151,8 +157,11 @@ pub fn doctor(root: &Path, target: &str, fix_safe: bool, apply: bool) -> Result<
                     }
                 };
                 if apply {
-                    let abs = root.join(path);
-                    atomic_write(&abs, replacement.as_bytes())?;
+                    changes.push(crate::mutate::transaction::FileChange {
+                        path: path.clone(),
+                        before: Some(content.as_bytes().to_vec()),
+                        after: Some(replacement.as_bytes().to_vec()),
+                    });
                     documents.insert(path.clone(), Some(replacement));
                 }
                 push(
@@ -456,6 +465,9 @@ pub fn doctor(root: &Path, target: &str, fix_safe: bool, apply: bool) -> Result<
         let digest = sha256_hex(identity.as_bytes());
         finding.id = format!("DOC-{}", &digest[..12]);
     }
+    if apply && fix_safe {
+        crate::mutate::transaction::commit_locked(root, guard.as_ref().unwrap(), changes)?;
+    }
     Ok(DoctorReport {
         target: target.to_string(),
         concepts_inspected: bundle.concepts.len(),
@@ -489,10 +501,4 @@ fn push(
         proposed_action: action.map(str::to_string),
         applied,
     });
-}
-
-fn atomic_write(path: &Path, content: &[u8]) -> Result<()> {
-    let temp = path.with_extension("md.okf-doctor-tmp");
-    std::fs::write(&temp, content).map_err(|e| OkfError::Io(format!("{}: {e}", temp.display())))?;
-    std::fs::rename(&temp, path).map_err(|e| OkfError::Io(format!("{}: {e}", path.display())))
 }

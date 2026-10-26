@@ -40,7 +40,7 @@ concepts:
         String::from_utf8(output.stdout).unwrap()
     };
     let compact = run(&["links", "a", "--json"]);
-    assert_eq!(compact.lines().count(), 3);
+    assert_eq!(compact.lines().count(), 5);
     let detailed = run(&["links", "a", "--details", "--json"]);
     let records: Vec<serde_json::Value> = detailed
         .lines()

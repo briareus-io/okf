@@ -1,12 +1,12 @@
 # okf CLI — ontology command reference
 
-> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.4.4, OKF spec 0.2). Do not hand-edit; regenerate instead.
+> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.5.0, OKF spec 0.2). Do not hand-edit; regenerate instead.
 
 This focused reference contains only commands selected for the `ontology` workflow. First pass the skill CLI compatibility preflight. Consult this reference when exact arguments or output shapes are needed. For a compatible CLI that rejects documented syntax, use that command's `--help` output as the runtime authority.
 
 Commands with a human form accept global `--json` for NDJSON; `schema` is always NDJSON. Bundle-aware commands take an optional trailing `bundle` path or a separate `--bundle-id` selector. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Catalog registration alone does not extend examination scope. Meta commands have no bundle, and `source-scan` takes an explicit arbitrary directory.
 
-Exit codes: 0 means success under the selected failure threshold, not necessarily no findings; 1 means findings or an unsuccessful resolution; 2 means usage errors; 3 means environment/I/O/YAML errors; 4 means an internal error. Inspect findings even with `--fail-on never`. NDJSON is one record per line, not a JSON array.
+Exit codes: 0 means success under the selected failure threshold, not necessarily no findings; 1 means findings or an unsuccessful resolution; 2 means usage errors; 3 means environment/I/O/YAML errors; 4 means an internal error. Inspect findings even with `--fail-on never`. NDJSON is one record per line, not a JSON array. In CLI 0.5, JSON operations begin with `operation-start` and normally end with `operation-complete`; require the terminal record and check the actual exit before accepting a complete result. A successful bounded read may still report partial examination or matching. Preview and dry-run operations do not publish authored content but may create coordination state.
 
 ## Global arguments
 
@@ -348,7 +348,7 @@ Without `--json`, show includes the serialized frontmatter and full Markdown bod
 
 ## check
 
-### `okf lint`
+### `okf lint` · _conditionally mutates_
 
 Advisory checks (broken links, missing fields, orphans, ontology violations).
 
@@ -358,7 +358,7 @@ Advisory checks (broken links, missing fields, orphans, ontology violations).
 | `--fix` | bool | no | Normalize frontmatter order bundle-wide for the enabled frontmatter-order rule (default: `false`) |
 | `--fail-on <value>` | string | no | Severity threshold that makes the run fail (exit 1): never|info|warn|error|any (default: `error`) |
 
-Output stream: `finding,scope`.
+Output stream: `finding,scope,fix`.
 
 Supported global options: `--bundle-id`, `--catalog-scope`, `--json`, `--scope-bundle`.
 
@@ -398,6 +398,8 @@ Define a new concept type with structured fields, references, and relationships.
 | `--from <value>` | string | no | Merge a concept-type definition from inline YAML, @file, a file path, or stdin (-) |
 | `--dry-run` | bool | no | Validate and preview the change without writing (default: `false`) |
 | `--attested` | bool | no | Mark the exact `Attested Computation` type as standard attested (default: `false`) |
+| `--check-dependent-bundles` | bool | no | Examine every registered consumer of a shared ontology sidecar (default: `false`) |
+| `--require-ontology-gate` | bool | no | Require the ontology write gate even when bundle policy leaves it disabled (default: `false`) |
 
 Output stream: `change`.
 
@@ -414,6 +416,8 @@ Apply coordinated concept and reusable field-type changes atomically.
 | `<bundle>` | positional | no | Bundle directory |
 | `--from <value>` | string | yes | Coordinated change document: inline YAML, @file, a file path, or stdin (-) |
 | `--dry-run` | bool | no | Validate and preview the change without writing (default: `false`) |
+| `--check-dependent-bundles` | bool | no | Examine every registered consumer of a shared ontology sidecar (default: `false`) |
+| `--require-ontology-gate` | bool | no | Require the ontology write gate even when bundle policy leaves it disabled (default: `false`) |
 
 Output stream: `change`.
 
@@ -431,12 +435,14 @@ Define a new reusable field type.
 | `<bundle>` | positional | no | Bundle directory |
 | `--from <value>` | string | yes | Complete field-type definition: inline YAML, @file, a file path, or stdin (-) |
 | `--dry-run` | bool | no | Validate and preview the change without writing (default: `false`) |
+| `--check-dependent-bundles` | bool | no | Examine every registered consumer of a shared ontology sidecar (default: `false`) |
+| `--require-ontology-gate` | bool | no | Require the ontology write gate even when bundle policy leaves it disabled (default: `false`) |
 
 Output stream: `change`.
 
 Supported global options: `--bundle-id`, `--json`.
 
-Reusable field types are ontology-wide definitions. Add/update `--from` accepts a whole definition; update replaces it completely. Inspect consumers before removal or tightening. `--dry-run` validates the proposed ontology without writing.
+Reusable field types are ontology-wide definitions. Add/update `--from` accepts a whole definition; update replaces it completely. Inspect consumers before removal or tightening. `--dry-run` validates the proposed ontology without publishing the sidecar; coordination state may be created.
 
 ### `okf ontology field-type remove` · _conditionally mutates_
 
@@ -447,12 +453,14 @@ Remove a reusable field type if the resulting ontology remains valid.
 | `<name>` | positional | yes | Reusable field-type name to remove |
 | `<bundle>` | positional | no | Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory) |
 | `--dry-run` | bool | no | Validate and preview the change without writing (default: `false`) |
+| `--check-dependent-bundles` | bool | no | Examine every registered consumer of a shared ontology sidecar (default: `false`) |
+| `--require-ontology-gate` | bool | no | Require the ontology write gate even when bundle policy leaves it disabled (default: `false`) |
 
 Output stream: `change`.
 
 Supported global options: `--bundle-id`, `--json`.
 
-Reusable field types are ontology-wide definitions. Add/update `--from` accepts a whole definition; update replaces it completely. Inspect consumers before removal or tightening. `--dry-run` validates the proposed ontology without writing.
+Reusable field types are ontology-wide definitions. Add/update `--from` accepts a whole definition; update replaces it completely. Inspect consumers before removal or tightening. `--dry-run` validates the proposed ontology without publishing the sidecar; coordination state may be created.
 
 ### `okf ontology field-type update` · _conditionally mutates_
 
@@ -464,12 +472,14 @@ Replace an existing reusable field type completely.
 | `<bundle>` | positional | no | Bundle directory |
 | `--from <value>` | string | yes | Complete field-type definition: inline YAML, @file, a file path, or stdin (-) |
 | `--dry-run` | bool | no | Validate and preview the change without writing (default: `false`) |
+| `--check-dependent-bundles` | bool | no | Examine every registered consumer of a shared ontology sidecar (default: `false`) |
+| `--require-ontology-gate` | bool | no | Require the ontology write gate even when bundle policy leaves it disabled (default: `false`) |
 
 Output stream: `change`.
 
 Supported global options: `--bundle-id`, `--json`.
 
-Reusable field types are ontology-wide definitions. Add/update `--from` accepts a whole definition; update replaces it completely. Inspect consumers before removal or tightening. `--dry-run` validates the proposed ontology without writing.
+Reusable field types are ontology-wide definitions. Add/update `--from` accepts a whole definition; update replaces it completely. Inspect consumers before removal or tightening. `--dry-run` validates the proposed ontology without publishing the sidecar; coordination state may be created.
 
 ### `okf ontology remove` · _conditionally mutates_
 
@@ -480,6 +490,8 @@ Remove a concept type.
 | `<name>` | positional | yes | Concept type name to remove |
 | `<bundle>` | positional | no | Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory) |
 | `--dry-run` | bool | no | Validate and preview the change without writing (default: `false`) |
+| `--check-dependent-bundles` | bool | no | Examine every registered consumer of a shared ontology sidecar (default: `false`) |
+| `--require-ontology-gate` | bool | no | Require the ontology write gate even when bundle policy leaves it disabled (default: `false`) |
 
 Output stream: `change`.
 
@@ -505,6 +517,8 @@ Modify an existing concept type and its named declarations.
 | `--from <value>` | string | no | Merge a concept-type definition from inline YAML, @file, a file path, or stdin (-) |
 | `--dry-run` | bool | no | Validate and preview the change without writing (default: `false`) |
 | `--attested` | bool | no | Mark the exact `Attested Computation` type as standard attested (default: `false`) |
+| `--check-dependent-bundles` | bool | no | Examine every registered consumer of a shared ontology sidecar (default: `false`) |
+| `--require-ontology-gate` | bool | no | Require the ontology write gate even when bundle policy leaves it disabled (default: `false`) |
 
 Output stream: `change`.
 

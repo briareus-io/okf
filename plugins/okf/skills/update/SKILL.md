@@ -24,11 +24,21 @@ compatibility. Recheck if the executable or PATH changes during the task.
 
 ## Detect and classify
 
+CLI 0.5 requires explicit `--changed -` to combine a changed-target argument
+with piped changed targets. Use `--changed-base repo` for repository-worktree
+paths or `--changed-base filesystem` for explicit filesystem paths; the default
+remains bundle-relative. `--depth` requires `--transitive`. For JSON output,
+check the versioned operation completion record and actual process exit before
+acting on a result. Display-only diagnostic filters do not change the checked
+population or failure policy.
+
 Use the relevant detectors and keep their meanings separate:
 
 - `okf stale <bundle> --fail-on any` reports expiry and source findings: `unrecorded` means no
-  baseline, `missing` means fingerprinting failed, and `drifted` means a recorded baseline changed.
-  Without `--fail-on any`, findings still exit successfully. Standard kind-less provenance and
+  baseline, `missing` means an established absent resource, `unavailable` means computation
+  could not complete, `unsupported` means no implementation for the declared kind, and
+  `drifted` means a recorded baseline changed. Without `--fail-on any`, findings still exit
+  successfully unless an explicit state policy applies. Standard kindless provenance and
   top-level resources are not automatically fingerprinted.
 - Standard source `last_modified`, credibility, and usage signals inform review but are not the same
   as local fingerprint drift.
@@ -61,8 +71,10 @@ actual concept-content change. A concept may have more than one.
 3. After checking changed sources against the final content, run `okf refresh <concept-id> <bundle>
    --fail-on skipped` if local fingerprints are in use. This applies after a substantive rewrite as
    well as after confirming unchanged content. Never refresh an unreviewed source merely to clear
-   drift; refresh operates on the concept's supported sources. Inspect skipped/error results and
-   keep unresolved sources in the report. Refresh updates the fingerprint extension only. It does
+   drift; refresh operates on the concept's supported sources. In CLI 0.5, a missing,
+   unavailable, or unsupported required source blocks the whole single-concept refresh
+   before publication. Inspect skipped/error results and keep unresolved sources in the
+   report. Refresh updates the fingerprint extension only. It does
    not alter standard `sources[].last_modified`, regenerate content, change status, or cure an
    expired `stale_after`.
 4. Change `stale_after` or lifecycle status only from evidence and an authorized lifecycle decision;

@@ -31,7 +31,7 @@ use crate::ontology::schema::Ontology;
 use crate::query::selector::Selector;
 
 use super::edit::{id_to_path, render_validated};
-use super::transaction::{commit, FileChange};
+use super::transaction::{commit_locked, FileChange};
 
 /// What `mv` changed.
 #[derive(Debug, Clone)]
@@ -58,6 +58,8 @@ pub fn mv_with_ontology(
     new_id: &str,
     ontology: Option<&Ontology>,
 ) -> Result<MvResult> {
+    let guard = super::transaction::writer_lock(root)?;
+    super::transaction::check_ontology_snapshot(root, ontology)?;
     let old = ConceptId::parse(old_id)?;
     let new = ConceptId::parse(new_id)?;
     if old == new {
@@ -165,7 +167,7 @@ pub fn mv_with_ontology(
         before: Some(std::fs::read(&old_path)?),
         after: None,
     });
-    commit(root, changes)?;
+    commit_locked(root, &guard, changes)?;
 
     Ok(MvResult {
         from: old,
@@ -547,6 +549,7 @@ pub fn retarget(
     ontology: Option<&Ontology>,
     referrers: Option<&[ConceptId]>,
 ) -> Result<Vec<ConceptId>> {
+    let guard = super::transaction::writer_lock(root)?;
     let old = ConceptId::parse(old)?;
     let new = ConceptId::parse(new)?;
     let bundle = load_bundle(root)?;
@@ -588,7 +591,7 @@ pub fn retarget(
             });
         }
     }
-    commit(root, changes)?;
+    commit_locked(root, &guard, changes)?;
     Ok(rewritten)
 }
 

@@ -24,6 +24,12 @@ fn ndjson(bytes: &[u8]) -> Vec<Value> {
         .lines()
         .filter(|l| !l.trim().is_empty())
         .map(|l| serde_json::from_str::<Value>(l).expect("valid JSON line"))
+        .filter(|record| {
+            !matches!(
+                record["kind"].as_str(),
+                Some("operation-start" | "operation-complete" | "query-summary")
+            )
+        })
         .collect()
 }
 
@@ -59,7 +65,7 @@ fn list_is_exactly_unfiltered_search_in_json_mode() {
         .unwrap();
     assert!(list.status.success());
     assert!(search.status.success());
-    assert_eq!(list.stdout, search.stdout);
+    assert_eq!(ndjson(&list.stdout), ndjson(&search.stdout));
 }
 
 #[test]
@@ -697,7 +703,7 @@ fn schema_is_valid_ndjson_with_all_commands() {
     let records = ndjson(&out.stdout);
     assert_eq!(records[0]["kind"], "schema");
     assert_eq!(records[0]["tool"], "okf");
-    assert_eq!(records[0]["ndjson_schema"], "2");
+    assert_eq!(records[0]["ndjson_schema"], "3");
 
     let commands: Vec<&str> = records
         .iter()
@@ -1119,8 +1125,8 @@ fn structured_sources_can_be_added_and_refresh_can_fail_on_skips() {
     okf()
         .args(["refresh", "notes/x", root, "--fail-on", "any"])
         .assert()
-        .code(1)
-        .stderr(predicates::str::contains("skipped missing.txt"));
+        .code(2)
+        .stderr(predicates::str::contains("missing.txt"));
 }
 
 #[test]

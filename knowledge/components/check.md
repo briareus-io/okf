@@ -1,7 +1,5 @@
 ---
 type: Component
-title: check module
-description: Conformance, optional-family, lifecycle, drift, and compatibility diagnostics.
 layer: core
 depends_on:
 - /components/bundle
@@ -12,16 +10,18 @@ depends_on:
 - /components/parse
 - /components/ports
 - /components/query
+title: check module
+description: Conformance, optional-family, lifecycle, drift, and compatibility diagnostics.
 last_modified: 2026-10-04T20:39:29Z
 sources:
 - resource: crates/okf-core/src/check/lint/mod.rs
   kind: git-path
   fingerprint:
-    blob_sha: 5f3c08e23d20676ece7e1c824807ad0ae03f4cda
+    blob_sha: 4282f317c5e2124314442b8e3820a6fd353548d9
 - resource: crates/okf-core/src/check/lint/rules/ontology_violation.rs
   kind: git-path
   fingerprint:
-    blob_sha: 8548d2ba01a234dc9fe404d6674069ba9d4fc3c3
+    blob_sha: 6962acf83c0e81a6fdece9489d06656d4d69bccd
 - resource: crates/okf-core/src/check/lint/rules/index_coverage.rs
   kind: git-path
   fingerprint:
@@ -30,6 +30,10 @@ sources:
   kind: git-path
   fingerprint:
     blob_sha: 18eedacd345b0d45bd56718f8f8011799fcd62d4
+- resource: crates/okf-core/src/check/stale.rs
+  kind: git-path
+  fingerprint:
+    blob_sha: b8f20b40cee8ce839c7acd73c40e32b698844a41
 ---
 # check module
 
@@ -42,3 +46,10 @@ A depth or finding budget stop reports an incomplete check. Index coverage check
 concept and concept-containing-directory links, honors configured exclusions, and remains
 read-only. Neither local navigation policy nor optional ontology constraints tighten portable
 OKF conformance.
+
+The 0.5.0 source-health contract keeps drift, absent baseline, established
+missing resource, unavailable computation, unsupported fingerprint kind, and
+expiry distinct. A kindless source remains provenance without a fingerprint
+health assertion. Diagnostic display filters do not change examination or
+failure policy; configured lint severities are independent of an optional
+write gate.

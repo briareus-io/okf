@@ -1,12 +1,12 @@
 # okf CLI — review-verify command reference
 
-> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.4.4, OKF spec 0.2). Do not hand-edit; regenerate instead.
+> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.5.0, OKF spec 0.2). Do not hand-edit; regenerate instead.
 
 This focused reference contains only commands selected for the `review-verify` workflow. First pass the skill CLI compatibility preflight. Consult this reference when exact arguments or output shapes are needed. For a compatible CLI that rejects documented syntax, use that command's `--help` output as the runtime authority.
 
 Commands with a human form accept global `--json` for NDJSON; `schema` is always NDJSON. Bundle-aware commands take an optional trailing `bundle` path or a separate `--bundle-id` selector. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Catalog registration alone does not extend examination scope. Meta commands have no bundle, and `source-scan` takes an explicit arbitrary directory.
 
-Exit codes: 0 means success under the selected failure threshold, not necessarily no findings; 1 means findings or an unsuccessful resolution; 2 means usage errors; 3 means environment/I/O/YAML errors; 4 means an internal error. Inspect findings even with `--fail-on never`. NDJSON is one record per line, not a JSON array.
+Exit codes: 0 means success under the selected failure threshold, not necessarily no findings; 1 means findings or an unsuccessful resolution; 2 means usage errors; 3 means environment/I/O/YAML errors; 4 means an internal error. Inspect findings even with `--fail-on never`. NDJSON is one record per line, not a JSON array. In CLI 0.5, JSON operations begin with `operation-start` and normally end with `operation-complete`; require the terminal record and check the actual exit before accepting a complete result. A successful bounded read may still report partial examination or matching. Preview and dry-run operations do not publish authored content but may create coordination state.
 
 ## Global arguments
 
@@ -38,6 +38,12 @@ Authored concept metadata remains open. These computed records describe scope, i
     "id": "string",
     "schema_version": 1,
     "version": "string"
+  },
+  "drift": {
+    "concept": "string",
+    "expired": "timestamp|null",
+    "schema_version": 2,
+    "sources": "array<{resource:string,kind:string,state:drifted|unrecorded|missing|unavailable|unsupported,code:string,message:string}>"
   },
   "effective-settings": {
     "bundle": "string",
@@ -261,7 +267,7 @@ Supported global options: `--bundle-id`, `--json`.
 
 Inspect-only: `execution: not-run` is not a passing runtime attestation. Document verification and inspection of executable resources never establish a run verdict.
 
-### `okf lint`
+### `okf lint` · _conditionally mutates_
 
 Advisory checks (broken links, missing fields, orphans, ontology violations).
 
@@ -271,7 +277,7 @@ Advisory checks (broken links, missing fields, orphans, ontology violations).
 | `--fix` | bool | no | Normalize frontmatter order bundle-wide for the enabled frontmatter-order rule (default: `false`) |
 | `--fail-on <value>` | string | no | Severity threshold that makes the run fail (exit 1): never|info|warn|error|any (default: `error`) |
 
-Output stream: `finding,scope`.
+Output stream: `finding,scope,fix`.
 
 Supported global options: `--bundle-id`, `--catalog-scope`, `--json`, `--scope-bundle`.
 
@@ -283,8 +289,11 @@ Drift detection: recorded vs. recomputed source fingerprints (+ `stale_after`).
 
 | Argument | Type | Required | Description |
 |----------|------|----------|-------------|
-| `<bundle>` | positional | no | Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory) |
-| `--fail-on <value>` | string | no | Fail on any result: never (default) or any; info/warn/error are compatibility aliases (default: `never`) |
+| `<bundle>` | positional | no | Bundle directory |
+| `--fail-on <value>` | string | no | Existing discovery failure threshold; state policy is separate (default: `never`) |
+| `--only <value>` | list<string> | no | Display only these source-health states (comma-separated or repeatable) |
+| `--summary` | bool | no | Emit a count of examined, displayed, and omitted findings (default: `false`) |
+| `--fail-on-state <value>` | list<string> | no | Fail when any examined source has one of these states |
 
 Output stream: `drift`.
 
@@ -316,6 +325,7 @@ Append a `verified` entry (the write-side of trust).
 | `<concept>` | positional | yes | Concept id to verify |
 | `<bundle>` | positional | no | Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory) |
 | `--by <value>` | string | yes | The reviewing actor (e.g. `human:andrey` or `process:ci`) |
+| `--require-ontology-gate` | bool | no | Require the ontology write gate even when bundle policy leaves it disabled (default: `false`) |
 
 Output stream: `change`.
 

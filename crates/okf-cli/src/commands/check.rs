@@ -2,7 +2,8 @@
 use std::io::{BufRead, IsTerminal};
 
 use crate::cli::{
-    AffectedArgs, BundleArgs, DiffArgs, DoctorArgs, FailOnArgs, LintArgs, SourceScanArgs,
+    AffectedArgs, BundleArgs, ChangedBase, DiffArgs, DoctorArgs, FailOnArgs, LintArgs,
+    SourceScanArgs, StaleArgs,
 };
 use crate::output;
 use okf_core::bundle::loader::{load_bundle, load_bundle_metadata};
@@ -15,6 +16,7 @@ use okf_core::check::validate::validate_bundle;
 use okf_core::error::{OkfError, Result};
 use okf_core::graph::affected::{affected_with_sources, AffectedOptions};
 use okf_core::graph::build::build_graph;
+use okf_core::ports::git::Git;
 use okf_core::ports::git::RealGit;
 use okf_core::query::diff::diff;
 use okf_core::query::stats::stats;
@@ -204,36 +206,95 @@ pub fn run_lint(args: &LintArgs, json: bool) -> Result<i32> {
 }
 
 /// `okf stale [bundle] [--fail-on <sev>]` — informational unless `--fail-on` is set.
-pub fn run_stale(args: &FailOnArgs, json: bool) -> Result<i32> {
+pub fn run_stale(args: &StaleArgs, json: bool) -> Result<i32> {
     let root = resolve_bundle(args.bundle.as_deref())?;
     let bundle = load_bundle_metadata(&root)?;
     let report = check_stale(&bundle);
+    let provenance_only = bundle
+        .concepts
+        .iter()
+        .flat_map(|concept| {
+            concept
+                .frontmatter
+                .get("sources")
+                .and_then(|value| value.as_sequence())
+                .into_iter()
+                .flatten()
+        })
+        .filter(|entry| entry.as_mapping().is_some_and(|mapping| {
+            matches!(mapping.get(serde_yaml::Value::String("resource".into())), Some(serde_yaml::Value::String(resource)) if !resource.trim().is_empty())
+                && !mapping.contains_key(serde_yaml::Value::String("kind".into()))
+        }))
+        .count();
 
+    let examined = report
+        .concepts
+        .iter()
+        .map(|c| c.sources.len() + usize::from(c.expired.is_some()))
+        .sum::<usize>();
+    let matches_state = |state: &str, states: &[crate::cli::SourceState]| {
+        states.is_empty() || states.iter().any(|s| s.as_str() == state)
+    };
+    let displayed = report
+        .concepts
+        .iter()
+        .map(|c| {
+            c.sources
+                .iter()
+                .filter(|s| matches_state(s.drift.as_str(), &args.only))
+                .count()
+                + usize::from(c.expired.is_some() && matches_state("expired", &args.only))
+        })
+        .sum::<usize>();
     if json {
         for cd in &report.concepts {
             let sources: Vec<_> = cd
                 .sources
                 .iter()
-                .map(|s| json!({"resource": s.resource, "kind": s.kind, "drift": s.drift.as_str(), "message": s.message}))
+                .filter(|s| matches_state(s.drift.as_str(), &args.only))
+                .map(|s| json!({"resource": s.resource, "kind": s.kind, "state": s.drift.as_str(), "drift": s.drift.as_str(), "code": format!("source-{}", s.drift.as_str()), "message": s.message}))
                 .collect();
+            let expired = if matches_state("expired", &args.only) {
+                cd.expired.clone()
+            } else {
+                None
+            };
+            if sources.is_empty() && expired.is_none() {
+                continue;
+            }
             output::print_line(&json!({
                 "kind": "drift",
+                "schema_version": 2,
                 "concept": cd.concept,
-                "expired": cd.expired,
+                "expired": expired,
                 "sources": sources,
             }))?;
         }
-    } else if report.is_empty() {
-        output::print_text_line(format_args!("in sync: nothing drifted"))?;
+    } else if displayed == 0 {
+        output::print_text_line(format_args!(
+            "{}",
+            if report.is_empty() {
+                "in sync: nothing drifted"
+            } else {
+                "no displayed findings (filtered)"
+            }
+        ))?;
     } else {
         for cd in &report.concepts {
-            if let Some(exp) = &cd.expired {
+            if let Some(exp) = cd
+                .expired
+                .as_ref()
+                .filter(|_| matches_state("expired", &args.only))
+            {
                 output::print_text_line(format_args!(
                     "{}\texpired\tstale_after {exp}",
                     cd.concept
                 ))?;
             }
             for s in &cd.sources {
+                if !matches_state(s.drift.as_str(), &args.only) {
+                    continue;
+                }
                 output::print_text_line(format_args!(
                     "{}\t{}\t{}\t{}",
                     cd.concept,
@@ -244,7 +305,25 @@ pub fn run_stale(args: &FailOnArgs, json: bool) -> Result<i32> {
             }
         }
     }
-    discovery_exit(&args.fail_on, report.is_empty())
+    if args.summary {
+        if json {
+            output::print_line(
+                &json!({"kind":"diagnostic-summary","schema_version":1,"examined":examined,"displayed":displayed,"omitted":examined-displayed,"provenance_only":provenance_only}),
+            )?;
+        } else {
+            output::print_text_line(format_args!("examined={examined} displayed={displayed} omitted={} provenance_only={provenance_only}", examined-displayed))?;
+        }
+    }
+    if !args.fail_on_state.is_empty() {
+        Ok(i32::from(report.concepts.iter().any(|c| {
+            (c.expired.is_some() && matches_state("expired", &args.fail_on_state))
+                || c.sources
+                    .iter()
+                    .any(|s| matches_state(s.drift.as_str(), &args.fail_on_state))
+        })))
+    } else {
+        discovery_exit(&args.fail_on, report.is_empty())
+    }
 }
 
 /// `okf affected [bundle] --changed <..> [--transitive] [--depth N]` (also reads stdin).
@@ -253,23 +332,7 @@ pub fn run_affected(args: &AffectedArgs, json: bool) -> Result<i32> {
     let bundle = load_bundle(&root)?;
     let (_, ontology) = okf_core::bundle::settings::load_for(&root)?;
 
-    let mut changed = args.changed.clone();
-    // Also accept changed links piped on stdin (one per line), combined with `--changed`.
-    if !std::io::stdin().is_terminal() {
-        let stdin = std::io::stdin();
-        for line in stdin.lock().lines() {
-            let line = line.map_err(|e| OkfError::Io(e.to_string()))?;
-            let t = line.trim();
-            if !t.is_empty() {
-                changed.push(t.to_string());
-            }
-        }
-    }
-    if changed.is_empty() {
-        return Err(OkfError::Usage(
-            "affected: provide at least one --changed link (or pipe them on stdin)".to_string(),
-        ));
-    }
+    let changed = changed_inputs(args, &root)?;
 
     let graph = build_graph(&bundle, ontology.as_ref());
     let opts = AffectedOptions {
@@ -290,6 +353,85 @@ pub fn run_affected(args: &AffectedArgs, json: bool) -> Result<i32> {
         }
     }
     discovery_exit(&args.fail_on, ids.is_empty())
+}
+
+/// Resolve the one declared input namespace before either standalone or catalog analysis.
+pub fn changed_inputs(args: &AffectedArgs, bundle_root: &Path) -> Result<Vec<String>> {
+    let explicit_stdin = args.changed.iter().filter(|s| s.as_str() == "-").count();
+    if explicit_stdin > 1 {
+        return Err(OkfError::Usage("--changed - may occur only once".into()));
+    }
+    let mut raw: Vec<String> = args
+        .changed
+        .iter()
+        .filter(|s| s.as_str() != "-")
+        .cloned()
+        .collect();
+    if explicit_stdin == 1 || (args.changed.is_empty() && !std::io::stdin().is_terminal()) {
+        for line in std::io::stdin().lock().lines() {
+            let line = line.map_err(|e| OkfError::Io(e.to_string()))?;
+            let value = line.trim();
+            if !value.is_empty() {
+                raw.push(value.to_string());
+            }
+        }
+    }
+    if raw.is_empty() {
+        return Err(OkfError::Usage(
+            "affected requires --changed targets or explicit stdin".into(),
+        ));
+    }
+    if args.changed_base == ChangedBase::Bundle {
+        return Ok(raw);
+    }
+    let base = match args.changed_base {
+        ChangedBase::Repo => RealGit.worktree_root(bundle_root).map_err(|e| {
+            OkfError::Usage(format!(
+                "repository root unavailable for --changed-base repo: {e}"
+            ))
+        })?,
+        ChangedBase::Filesystem => std::env::current_dir()?,
+        ChangedBase::Bundle => unreachable!(),
+    };
+    let bundle_root = okf_core::bundle::catalog::absolute(bundle_root)?;
+    let base = okf_core::bundle::catalog::absolute(&base)?;
+    raw.into_iter()
+        .map(|input| {
+            if input.contains(":/") {
+                return Err(OkfError::Usage(format!(
+                    "qualified changed target requires --changed-base bundle: {input}"
+                )));
+            }
+            let (path, suffix) = split_changed_suffix(&input);
+            if path.is_empty() {
+                return Err(OkfError::Usage(format!("empty changed path: {input}")));
+            }
+            let absolute = okf_core::bundle::catalog::normalize(&base.join(path));
+            let relative = lexical_relative(&bundle_root, &absolute);
+            Ok(format!("{}{}", relative.display(), suffix))
+        })
+        .collect()
+}
+
+fn split_changed_suffix(value: &str) -> (&str, &str) {
+    match value.find(['#', '?']) {
+        Some(i) => (&value[..i], &value[i..]),
+        None => (value, ""),
+    }
+}
+
+fn lexical_relative(base: &Path, target: &Path) -> std::path::PathBuf {
+    let base: Vec<_> = base.components().collect();
+    let target: Vec<_> = target.components().collect();
+    let shared = base.iter().zip(&target).take_while(|(a, b)| a == b).count();
+    let mut result = std::path::PathBuf::new();
+    for _ in shared..base.len() {
+        result.push("..");
+    }
+    for component in &target[shared..] {
+        result.push(component.as_os_str());
+    }
+    result
 }
 
 /// `okf diff <git-ref> [bundle] [--fail-on <sev>]`.

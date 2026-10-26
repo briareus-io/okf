@@ -38,7 +38,8 @@ pub fn run_schema(_json: bool) -> Result<i32> {
         "tool": "okf",
         "tool_version": env!("CARGO_PKG_VERSION"),
         "okf_spec": OKF_SPEC,
-        "ndjson_schema": "2",
+        "ndjson_schema": "3",
+        "operation_stream": {"schema_version":1,"stream_version":1,"start":{"kind":"operation-start","cardinality":1,"position":"first"},"complete":{"kind":"operation-complete","cardinality":1,"position":"last"},"applies_to":"all commands except schema, version, and parse errors","extension_policy":"optional payload fields and records may be added within a stream version; required records, ordering, and closed enums require a new version"},
         "global_args": cli.get_arguments()
             .filter(|arg| arg.is_global_set() && arg.get_id() != "help" && arg.get_id() != "version")
             .map(|arg| arg_record("", arg)).collect::<Vec<_>>(),
@@ -75,6 +76,11 @@ pub fn run_schema(_json: bool) -> Result<i32> {
 /// identify typed identities and statuses without imposing metadata schemas on concepts.
 fn output_record_contracts() -> Value {
     json!({
+        "operation-start": {"schema_version":1,"command":"string","stream_version":1},
+        "operation-complete": {"schema_version":1,"outcome":"ok|partial|failed","exit_code":"integer","publication":"not-applicable|not-published|committed|recovery-required","commit_reached":"boolean|null (when recovery-required)","completeness":"{examination,matching,delivery,expansion,content: complete|partial|not-applicable; consistency: working-tree|immutable-revision|guarded-baseline}","reasons":"array<diagnostic-code>"},
+        "baseline": {"schema_version":1,"bundle":"path","base_digest":"opaque string"},
+        "drift": {"schema_version":2,"concept":"string","expired":"timestamp|null","sources":"array<{resource:string,kind:string,state:drifted|unrecorded|missing|unavailable|unsupported,code:string,message:string}>"},
+        "diagnostic-summary": {"schema_version":1,"examined":"integer","displayed":"integer","omitted":"integer"},
         "changeset-file": {"path":"path","operation":"create|replace|remove","before_bytes":"integer|null","after_bytes":"integer|null","diff":"string|null"},
         "changeset-summary": {"base_digest":"string","files":"integer","applied":"boolean","publication":"journaled-per-file"},
         "changeset-recovery": {"paths":"array<path>"},
@@ -141,6 +147,7 @@ fn command_record(full_name: &str, cmd: &ClapCommand) -> Value {
         .collect();
 
     let mutates_when = match full_name {
+        "lint" => json!({"fix": true}),
         "doctor" => json!({"fix-safe": true, "yes": true, "dry-run": false}),
         "docs" => json!({"format": "index"}),
         _ if cmd
@@ -170,6 +177,34 @@ fn command_record(full_name: &str, cmd: &ClapCommand) -> Value {
         "summary": summary,
         "args": args,
         "output": output,
+        "stream_contract": if matches!(full_name, "schema" | "version") { Value::Null } else { json!({"version":1,"mandatory":["operation-start","operation-complete"],"ordering":"start,payload*,complete","payload_families":stream.split(',').collect::<Vec<_>>(),"required_completion":true}) },
+        "effects": effects(full_name),
+    })
+}
+
+fn effects(name: &str) -> Value {
+    let (_, mutates, _) = meta(name);
+    let authored = if mutates {
+        match name {
+            "lint" => json!({"when":{"fix":true}}),
+            "doctor" => json!({"when":{"fix-safe":true,"yes":true,"dry-run":false}}),
+            "docs" => json!({"when":{"format":"index"}}),
+            "changeset apply" => json!({"when":{"dry-run":false}}),
+            _ => json!({"when":"successful non-no-op publication"}),
+        }
+    } else {
+        json!(false)
+    };
+    let coordination = matches!(
+        name,
+        "changeset plan" | "changeset digest" | "changeset apply" | "changeset recover"
+    ) || mutates;
+    json!({
+        "authored_bundle_writes":authored,
+        "coordination_metadata_writes":coordination,
+        "temporary_staging_writes":if name == "changeset digest" {json!(false)} else {json!(coordination)},
+        "external_output_file_writes":false,
+        "network_access": if name == "artifact show" {json!({"when":"explicit supported URL resource"})} else {json!(false)},
     })
 }
 
@@ -361,13 +396,14 @@ fn meta(name: &str) -> (&'static str, bool, &'static str) {
         "ontology show" => ("query", false, "ontology_type"),
         "ontology field-type list" | "ontology field-type show" => ("query", false, "ontology_field_type"),
         "changeset plan" => ("query", false, "changeset-file,changeset-summary"),
+        "changeset digest" => ("query", false, "baseline"),
         "changeset apply" => ("mutate", true, "changeset-file,changeset-summary"),
         "changeset recover" => ("mutate", true, "changeset-recovery"),
 
         "scan" => ("check", false, "scan"),
         "source-scan" => ("check", false, "source-file"),
         "validate" => ("check", false, "violation"),
-        "lint" => ("check", false, "finding,scope"),
+        "lint" => ("check", true, "finding,scope,fix"),
         "stale" => ("check", false, "drift"),
         "affected" => ("check", false, "affected,scope,bundle-affected"),
         "diff" => ("check", false, "diff"),

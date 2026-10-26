@@ -61,12 +61,16 @@ fn main() {
             run_docs(false);
         }
         Some("install") => {
+            eprintln!(
+                "BREAKING CHANGE: OKF CLI 0.5 changes command input, NDJSON completion, diagnostics, and write behavior. Review releases/0.5.0.md and docs/0.5.0-migration.md before installing."
+            );
             if local_signing::enabled() {
                 let install_root = local_signing::install_root(&root);
                 cargo(
                     &root,
                     &[
                         "install",
+                        "--locked",
                         "--path",
                         "crates/okf-cli",
                         "--force",
@@ -76,7 +80,10 @@ fn main() {
                 );
                 local_signing::sign(&install_root.join("bin/okf"));
             } else {
-                cargo(&root, &["install", "--path", "crates/okf-cli", "--force"]);
+                cargo(
+                    &root,
+                    &["install", "--locked", "--path", "crates/okf-cli", "--force"],
+                );
             }
             run_docs(false);
         }
@@ -397,7 +404,11 @@ fn cli_reference(header: &Value, commands: &[&Value], skill: Option<&str>) -> St
          Exit codes: 0 means success under the selected failure threshold, not necessarily no \
          findings; 1 means findings or an unsuccessful resolution; 2 means usage errors; \
          3 means environment/I/O/YAML errors; 4 means an internal error. Inspect findings even with \
-         `--fail-on never`. NDJSON is one record per line, not a JSON array.\n\n",
+         `--fail-on never`. NDJSON is one record per line, not a JSON array. In CLI 0.5, \
+         JSON operations begin with `operation-start` and normally end with `operation-complete`; \
+         require the terminal record and check the actual exit before accepting a complete result. \
+         A successful bounded read may still report partial examination or matching. Preview and \
+         dry-run operations do not publish authored content but may create coordination state.\n\n",
     );
 
     out.push_str("## Global arguments\n\n");
@@ -506,7 +517,7 @@ fn command_guidance(name: &str) -> &'static str {
             Operations run on an isolated copy; the final bundle must be conformant and introduce no dangling supported local references. \
             Checks cover local Markdown/artifact links and file, line-range, and markdown-heading sources; Git, URL, and producer-specific sources are not checked. \
             Existing unrelated broken references may remain. Concept replacement/edit invalidates verification; content cannot supply verification. \
-            Plan and `apply --dry-run` print all file diffs plus a base digest without writing bundle files. \
+            Plan and `apply --dry-run` print all file diffs plus a base digest without publishing authored bundle content; coordination state may be created. \
             Use `apply --expect <base-digest>` to guard a reviewed baseline, with the same reviewed change document. \
             Publication is journaled and atomic per file, not an atomic snapshot for concurrent readers. \
             Cooperating CLI writers refuse a pending transaction. Cross-bundle writes and configuration changes are unsupported. \
@@ -623,7 +634,7 @@ fn command_guidance(name: &str) -> &'static str {
         "ontology field-type add" | "ontology field-type update" | "ontology field-type remove" =>
             "Reusable field types are ontology-wide definitions. Add/update `--from` accepts a whole \
             definition; update replaces it completely. Inspect consumers before removal or tightening. \
-            `--dry-run` validates the proposed ontology without writing.",
+            `--dry-run` validates the proposed ontology without publishing the sidecar; coordination state may be created.",
         "ontology apply" => "`--from` accepts `field_types` and `concepts` maps, merging named \
             declarations and preserving omitted ones. Top-level `remove` has `field_types` and \
             `concepts` lists; per-concept `remove` has `fields`, `references`, and `relationships` \
@@ -656,8 +667,9 @@ fn command_guidance(name: &str) -> &'static str {
         "refresh" => "Refresh updates supported source fingerprints across the concept, not content or \
             standard source modification dates. Review those sources against the final content first, \
             whether or not the content needed rewriting. JSON reports `updated`/`unchanged` counts and \
-            `skipped` entries with reasons. `--fail-on skipped` exits 1 when any source was skipped; \
-            successfully processed fingerprints may already have been written. Report unresolved \
+            `skipped` entries with reasons. Missing, unavailable, unsupported, or malformed \
+            required sources block the entire refresh before publication. `--fail-on skipped` \
+            rejects provenance-only skips before publication as well. Report unresolved \
             sources instead of treating refresh as proof of complete synchronization.",
         "computation check" => "Inspect-only: `execution: not-run` is not a passing runtime attestation. \
             Document verification and inspection of executable resources never establish a run verdict.",

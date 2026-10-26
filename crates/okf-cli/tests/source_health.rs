@@ -60,6 +60,12 @@ fn records(output: &Output) -> Vec<Value> {
         .unwrap()
         .lines()
         .map(|line| serde_json::from_str(line).unwrap())
+        .filter(|record: &Value| {
+            !matches!(
+                record["kind"].as_str(),
+                Some("operation-start" | "operation-complete")
+            )
+        })
         .collect()
 }
 
@@ -105,6 +111,125 @@ fn unrecorded_source_is_reported_until_refresh_and_then_detects_changes() {
 }
 
 #[test]
+fn stale_state_filter_does_not_change_failure_policy_or_examined_count() {
+    let root = bundle();
+    add(
+        root.path(),
+        r#"{"resource":"contracts/x/references/s.json","kind":"file"}"#,
+    );
+    let output = run(
+        root.path(),
+        &[
+            "stale",
+            "--json",
+            "--only",
+            "missing",
+            "--summary",
+            "--fail-on-state",
+            "unrecorded",
+        ],
+    );
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    let records = records(&output);
+    assert!(!records.iter().any(|record| record["kind"] == "drift"));
+    let summary = records
+        .iter()
+        .find(|record| record["kind"] == "diagnostic-summary")
+        .unwrap();
+    assert_eq!(summary["examined"], 1);
+    assert_eq!(summary["displayed"], 0);
+    assert_eq!(summary["omitted"], 1);
+    let unsupported = run(root.path(), &["stale", "--json", "--only", "nonsense"]);
+    assert_eq!(unsupported.status.code(), Some(2));
+}
+
+#[test]
+fn malformed_source_entry_reports_unavailable_without_failing_validation() {
+    let root = bundle();
+    std::fs::write(
+        root.path().join("contracts/x/c.md"),
+        "---\ntype: Note\nsources:\n- not-a-mapping\n---\n",
+    )
+    .unwrap();
+    successful(root.path(), &["validate"]);
+    let stale = run(
+        root.path(),
+        &["stale", "--json", "--fail-on-state", "unavailable"],
+    );
+    assert_eq!(stale.status.code(), Some(1), "{stale:?}");
+    let finding = records(&stale)
+        .into_iter()
+        .find(|record| record["kind"] == "drift")
+        .unwrap();
+    assert_eq!(finding["schema_version"], 2);
+    assert_eq!(finding["sources"][0]["state"], "unavailable");
+    assert!(finding["sources"][0]["message"]
+        .as_str()
+        .unwrap()
+        .contains("sources[0]"));
+}
+
+#[test]
+fn malformed_source_mappings_remain_visible_while_valid_provenance_is_skipped() {
+    let root = bundle();
+    std::fs::write(root.path().join("contracts/x/c.md"), "---\ntype: Note\nsources:\n- {}\n- {resource: 42}\n- {resource: file.txt, kind: 7}\n- {resource: file.txt, kind: ''}\n- {resource: file.txt}\n---\n").unwrap();
+    successful(root.path(), &["validate"]);
+    let stale = run(
+        root.path(),
+        &[
+            "stale",
+            "--json",
+            "--summary",
+            "--fail-on-state",
+            "unavailable",
+        ],
+    );
+    assert_eq!(stale.status.code(), Some(1), "{stale:?}");
+    let rows = records(&stale);
+    let drift = rows.iter().find(|row| row["kind"] == "drift").unwrap();
+    let sources = drift["sources"].as_array().unwrap();
+    assert_eq!(sources.len(), 4);
+    assert!(sources
+        .iter()
+        .all(|source| source["state"] == "unavailable"));
+    let summary = rows
+        .iter()
+        .find(|row| row["kind"] == "diagnostic-summary")
+        .unwrap();
+    assert_eq!(summary["provenance_only"], 1);
+    let lint = run(root.path(), &["lint", "--json"]);
+    assert_eq!(lint.status.code(), Some(1));
+    let unavailable: Vec<_> = records(&lint)
+        .into_iter()
+        .filter(|row| row["rule"] == "source-unavailable")
+        .collect();
+    assert_eq!(unavailable.len(), 4);
+}
+
+#[test]
+fn refresh_refuses_non_string_source_fields_without_writing() {
+    let root = bundle();
+    let path = root.path().join("contracts/x/c.md");
+    let original =
+        "---\ntype: Note\nsources:\n- {resource: 42}\n- {resource: file.txt, kind: 7}\n---\n";
+    std::fs::write(&path, original).unwrap();
+    let refresh = run(root.path(), &["refresh", "/contracts/x/c", "--json"]);
+    assert_eq!(refresh.status.code(), Some(2), "{refresh:?}");
+    assert!(String::from_utf8_lossy(&refresh.stderr).contains("sources[0]"));
+    assert!(String::from_utf8_lossy(&refresh.stderr).contains("sources[1]"));
+    assert_eq!(std::fs::read_to_string(path).unwrap(), original);
+    let control = std::str::from_utf8(&refresh.stdout)
+        .unwrap()
+        .lines()
+        .last()
+        .unwrap();
+    assert_eq!(
+        serde_json::from_str::<Value>(control).unwrap()["publication"],
+        "not-published"
+    );
+}
+
+#[test]
 fn missing_unrecorded_source_fails_health_checks_and_refresh_has_one_error_prefix() {
     let root = bundle();
     add(
@@ -126,7 +251,7 @@ fn missing_unrecorded_source_fails_health_checks_and_refresh_has_one_error_prefi
         root.path(),
         &["refresh", "/contracts/x/c", "--fail-on", "skipped"],
     );
-    assert_eq!(refresh.status.code(), Some(1));
+    assert_eq!(refresh.status.code(), Some(2));
     let message = format!(
         "{}{}",
         String::from_utf8_lossy(&refresh.stdout),

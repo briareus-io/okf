@@ -192,7 +192,7 @@ fn standalone_affected_caches_discovery_success_and_failure() {
         assert_eq!(fixture.calls().len(), 1);
         assert_eq!(
             String::from_utf8(out.stdout).unwrap().lines().count(),
-            if failure { 0 } else { 20 }
+            if failure { 2 } else { 22 }
         );
     }
 }
@@ -213,8 +213,11 @@ fn refresh_batches_duplicate_sources_and_failed_discovery() {
             cmd.env("FAIL_DISCOVERY", "1");
         }
         let out = cmd.output().unwrap();
-        success(&out);
-        let record: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert_eq!(
+            out.status.code(),
+            Some(if failure { 2 } else { 0 }),
+            "{out:?}"
+        );
         let calls = fixture.calls();
         assert_eq!(
             calls
@@ -226,8 +229,17 @@ fn refresh_batches_duplicate_sources_and_failed_discovery() {
         );
         if failure {
             assert_eq!(calls.len(), 1);
-            assert_eq!(record["skipped"].as_array().unwrap().len(), 40);
+            assert!(String::from_utf8_lossy(&out.stderr).contains("no fingerprints written"));
+            assert_eq!(std::str::from_utf8(&out.stdout).unwrap().lines().count(), 2);
         } else {
+            let record: serde_json::Value = serde_json::from_str(
+                std::str::from_utf8(&out.stdout)
+                    .unwrap()
+                    .lines()
+                    .nth(1)
+                    .unwrap(),
+            )
+            .unwrap();
             assert_eq!(
                 calls
                     .iter()

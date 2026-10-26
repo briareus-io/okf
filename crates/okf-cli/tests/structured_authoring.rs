@@ -117,7 +117,14 @@ fn add_and_edit_previews_validate_and_show_diff_without_writes() {
         ],
     );
     success(&output);
-    let record: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let record: serde_json::Value = serde_json::from_str(
+        std::str::from_utf8(&output.stdout)
+            .unwrap()
+            .lines()
+            .nth(1)
+            .unwrap(),
+    )
+    .unwrap();
     assert_eq!(record["kind"], "change");
     assert_eq!(record["op"], "edit");
     assert_eq!(record["dry_run"], true);

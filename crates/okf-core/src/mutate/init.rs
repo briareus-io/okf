@@ -63,6 +63,8 @@ pub fn init(root: &Path, opts: &InitOptions) -> Result<InitResult> {
         )));
     }
     std::fs::create_dir_all(root).map_err(|e| OkfError::Io(format!("{}: {e}", root.display())))?;
+    let guard = super::transaction::writer_lock(root)?;
+    let mut changes = Vec::new();
 
     let mut index_path = None;
     if opts.index {
@@ -79,8 +81,11 @@ pub fn init(root: &Path, opts: &InitOptions) -> Result<InitResult> {
                 .unwrap_or_else(|| "Knowledge bundle".to_string());
             let body =
                 format!("---\nokf_version: \"0.2\"\n---\n# {title}\n\nAn OKF knowledge bundle.\n");
-            std::fs::write(&path, body)
-                .map_err(|e| OkfError::Io(format!("{}: {e}", path.display())))?;
+            changes.push(super::transaction::FileChange {
+                path: PathBuf::from("index.md"),
+                before: None,
+                after: Some(body.into_bytes()),
+            });
             index_path = Some(path);
         }
     }
@@ -90,12 +95,16 @@ pub fn init(root: &Path, opts: &InitOptions) -> Result<InitResult> {
         let path = root.join(ONTOLOGY_FILENAME);
         if !path.exists() {
             let body = format!("okf_ontology: \"{ONTOLOGY_VERSION}\"\n");
-            std::fs::write(&path, body)
-                .map_err(|e| OkfError::Io(format!("{}: {e}", path.display())))?;
+            changes.push(super::transaction::FileChange {
+                path: PathBuf::from(ONTOLOGY_FILENAME),
+                before: None,
+                after: Some(body.into_bytes()),
+            });
             ontology_path = Some(path);
         }
     }
 
+    super::transaction::commit_locked(root, &guard, changes)?;
     Ok(InitResult {
         root: root.to_path_buf(),
         created_dir,

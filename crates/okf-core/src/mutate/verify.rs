@@ -20,7 +20,7 @@ use crate::model::concept::ConceptId;
 use crate::model::standard::valid_actor;
 use crate::ports::clock::Clock;
 
-use super::edit::{load_concept, save_concept};
+use super::edit::{load_concept, save_concept_locked};
 
 /// What `verify` appended.
 #[derive(Debug, Clone)]
@@ -34,6 +34,7 @@ pub struct VerifyResult {
 /// Append a `verified` entry for `actor` (e.g. `human:andrey`) to the concept at `id`,
 /// timestamped by `clock`. Losslessly rewrites the file.
 pub fn verify(root: &Path, id: &str, actor: &str, clock: &dyn Clock) -> Result<VerifyResult> {
+    let guard = super::transaction::writer_lock(root)?;
     if !valid_actor(actor) {
         return Err(OkfError::Usage(
             "verify: --by must be <producer>/<version>, human:<id>, or process:<id>".to_string(),
@@ -72,7 +73,7 @@ pub fn verify(root: &Path, id: &str, actor: &str, clock: &dyn Clock) -> Result<V
         }
     }
 
-    let path = save_concept(root, &concept)?;
+    let path = save_concept_locked(root, &guard, &concept)?;
     Ok(VerifyResult {
         id: cid,
         path,

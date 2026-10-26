@@ -373,7 +373,7 @@ pub fn run_search_in_scope(
         || !expands.is_empty()
         || args.scan_limit.is_some()
         || args.full_scan;
-    if json_output && (extended || !complete) {
+    if json_output {
         output::print_line(
             &json!({"kind":"query-summary","schema_version":1,"total_matches":if complete{Some(matched)}else{None},"observed_matches":matched,"returned":page.len(),"offset":offset,"limit":args.limit,"has_more":has_more,"next_offset":if has_more{Some(offset+page.len())}else{None},"scan_complete":complete,"partial":!complete,"examined_documents":examined,"scan_limit":scan_limit,"filters":args.facet_filter,"scope":scope.iter().map(|(id,root,version)|json!({"bundle":id,"root":root,"version":version,"mutable":version=="working-tree"})).collect::<Vec<_>>(),"interpretation":roots.iter().map(|(s,_)|s).collect::<Vec<_>>() }),
         )?;
@@ -478,6 +478,7 @@ pub fn run_show(args: &ShowArgs, json: bool) -> Result<i32> {
                 }
             } else if args.body {
                 if json {
+                    output::mark_content_complete();
                     output::print_line(&json!({
                         "kind": "body", "id": concept.id.0, "body": concept.body,
                     }))?;

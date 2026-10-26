@@ -10,6 +10,12 @@ fn rows(output: &[u8]) -> Vec<Value> {
     String::from_utf8_lossy(output)
         .lines()
         .map(|l| serde_json::from_str(l).unwrap())
+        .filter(|record: &Value| {
+            !matches!(
+                record["kind"].as_str(),
+                Some("operation-start" | "operation-complete")
+            )
+        })
         .collect()
 }
 

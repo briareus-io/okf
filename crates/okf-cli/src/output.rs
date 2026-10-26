@@ -15,6 +15,195 @@ use std::io::{BufWriter, Write};
 thread_local! {
     static STDOUT: RefCell<BufWriter<std::io::Stdout>> =
         RefCell::new(BufWriter::with_capacity(64 * 1024, std::io::stdout()));
+    static OPERATION: RefCell<Option<Operation>> = const { RefCell::new(None) };
+}
+
+#[derive(Debug)]
+struct Operation {
+    command: String,
+    publication: &'static str,
+    track_publication: bool,
+    consistency: &'static str,
+    examination: &'static str,
+    matching: &'static str,
+    delivery: &'static str,
+    expansion: &'static str,
+    content: &'static str,
+    reasons: Vec<String>,
+    commit_reached: Option<Option<bool>>,
+}
+
+/// Start one versioned JSON operation stream after argument parsing succeeds.
+pub fn begin(command: &str, json: bool, write: bool, revision: bool) -> Result<()> {
+    if !json {
+        return Ok(());
+    }
+    let matching = if matches!(command, "list" | "search") {
+        "complete"
+    } else {
+        "not-applicable"
+    };
+    let publication_applicable = write
+        || command.starts_with("changeset ")
+        || matches!(
+            command,
+            "init" | "add" | "edit" | "mv" | "rm" | "verify" | "refresh" | "artifact put"
+        )
+        || command.starts_with("ontology ")
+            && !matches!(
+                command,
+                "ontology list"
+                    | "ontology show"
+                    | "ontology field-type list"
+                    | "ontology field-type show"
+            );
+    OPERATION.with(|state| {
+        *state.borrow_mut() = Some(Operation {
+            command: command.to_string(),
+            publication: if publication_applicable {
+                "not-published"
+            } else {
+                "not-applicable"
+            },
+            track_publication: write,
+            consistency: if publication_applicable {
+                "guarded-baseline"
+            } else if revision {
+                "immutable-revision"
+            } else {
+                "working-tree"
+            },
+            examination: "complete",
+            matching,
+            delivery: "complete",
+            expansion: "not-applicable",
+            content: "not-applicable",
+            reasons: Vec::new(),
+            commit_reached: None,
+        })
+    });
+    raw_line(
+        &serde_json::json!({"kind":"operation-start","schema_version":1,"command":command,"stream_version":1}),
+    )
+}
+
+pub fn mark_committed() {
+    OPERATION.with(|state| {
+        if let Some(op) = state.borrow_mut().as_mut() {
+            op.publication = "committed";
+        }
+    });
+}
+
+pub fn mark_recovery_required(commit_reached: Option<bool>) {
+    OPERATION.with(|state| {
+        if let Some(op) = state.borrow_mut().as_mut() {
+            op.publication = "recovery-required";
+            op.commit_reached = Some(commit_reached);
+        }
+    });
+}
+
+pub fn mark_partial(dimension: &str, reason: &str) {
+    OPERATION.with(|state| {
+        if let Some(op) = state.borrow_mut().as_mut() {
+            match dimension {
+                "examination" => {
+                    op.examination = "partial";
+                    if op.matching == "complete" {
+                        op.matching = "partial";
+                    }
+                }
+                "matching" => op.matching = "partial",
+                "delivery" => op.delivery = "partial",
+                "expansion" => op.expansion = "partial",
+                "content" => op.content = "partial",
+                _ => return,
+            }
+            if !op.reasons.iter().any(|existing| existing == reason) {
+                op.reasons.push(reason.into());
+            }
+        }
+    });
+}
+
+pub fn mark_content_complete() {
+    OPERATION.with(|state| {
+        if let Some(op) = state.borrow_mut().as_mut() {
+            op.content = "complete";
+        }
+    });
+}
+
+pub fn mark_failure(code: i32, reason: &str) {
+    OPERATION.with(|state| {
+        if let Some(op) = state.borrow_mut().as_mut() {
+            if code >= 2 {
+                op.examination = "not-applicable";
+                op.matching = "not-applicable";
+                op.expansion = "not-applicable";
+                op.content = "not-applicable";
+                if reason != "baseline-conflict" && op.consistency == "guarded-baseline" {
+                    op.consistency = "working-tree";
+                }
+            }
+            if !op.reasons.iter().any(|existing| existing == reason) {
+                op.reasons.push(reason.into());
+            }
+        }
+    });
+}
+
+/// Emit the last record. A payload error still gets a trailer if normal handling can run.
+pub fn complete(exit_code: i32) -> Result<()> {
+    let Some(mut op) = OPERATION.with(|state| state.borrow_mut().take()) else {
+        return Ok(());
+    };
+    if op.track_publication {
+        use okf_core::mutate::transaction::{publication_evidence, PublicationEvidence};
+        match publication_evidence() {
+            PublicationEvidence::Committed => op.publication = "committed",
+            PublicationEvidence::RecoveryRequired { commit_reached } => {
+                op.publication = "recovery-required";
+                op.commit_reached = Some(Some(commit_reached));
+            }
+            PublicationEvidence::None | PublicationEvidence::NotPublished => {}
+        }
+    }
+    let partial = [
+        op.examination,
+        op.matching,
+        op.delivery,
+        op.expansion,
+        op.content,
+    ]
+    .contains(&"partial");
+    let outcome = if exit_code != 0 {
+        "failed"
+    } else if partial {
+        "partial"
+    } else {
+        "ok"
+    };
+    let mut record = serde_json::json!({
+        "kind":"operation-complete","schema_version":1,"outcome":outcome,"exit_code":exit_code,
+        "publication":op.publication,
+        "completeness":{"examination":op.examination,"matching":op.matching,"delivery":op.delivery,"expansion":op.expansion,"content":op.content,"consistency":op.consistency},
+        "reasons":op.reasons,
+    });
+    if let Some(commit) = op.commit_reached {
+        record["commit_reached"] = serde_json::json!(commit);
+    }
+    raw_line(&record)
+}
+
+fn raw_line(value: &Json) -> Result<()> {
+    STDOUT.with(|output| {
+        let mut output = output.borrow_mut();
+        serde_json::to_writer(&mut *output, value)
+            .map_err(|error| okf_core::error::OkfError::Internal(error.to_string()))?;
+        output.write_all(b"\n").map_err(Into::into)
+    })
 }
 
 #[derive(Debug)]
@@ -26,12 +215,25 @@ struct Heading<'a> {
 
 /// Print one NDJSON record (object per line).
 pub fn print_line(value: &Json) -> Result<()> {
-    STDOUT.with(|output| {
-        let mut output = output.borrow_mut();
-        serde_json::to_writer(&mut *output, value)
-            .map_err(|error| okf_core::error::OkfError::Internal(error.to_string()))?;
-        output.write_all(b"\n").map_err(Into::into)
-    })
+    if value.get("kind").and_then(Json::as_str) == Some("query-summary")
+        && value.get("scan_complete").and_then(Json::as_bool) == Some(false)
+    {
+        mark_partial("examination", "scan-limit");
+    }
+    if value.get("kind").and_then(Json::as_str) == Some("expansion-summary")
+        && value.get("truncated").and_then(Json::as_bool) == Some(true)
+    {
+        mark_partial("expansion", "expansion-limit");
+    }
+    if value.get("kind").and_then(Json::as_str) == Some("scope")
+        && value
+            .get("unavailable")
+            .and_then(Json::as_array)
+            .is_some_and(|a| !a.is_empty())
+    {
+        mark_partial("examination", "scope-unavailable");
+    }
+    raw_line(value)
 }
 
 pub fn flush() -> Result<()> {
@@ -166,7 +368,7 @@ pub fn print_search_hits(hits: &[SearchHit<'_>], json: bool) -> Result<()> {
     print_concepts(&concepts, false)
 }
 
-/// Print a single concept's full content as an NDJSON record or human text.
+/// Print a concept metadata record in JSON mode, or its full document in human mode.
 pub fn print_concept(concept: &Concept, json: bool) -> Result<()> {
     if json {
         return print_line(&concept_record(concept));
@@ -184,6 +386,7 @@ pub fn print_concept_outline(concept: &Concept, json: bool) -> Result<()> {
     let source = writer::write_concept(concept)?;
     let headings = headings(&source);
     if json {
+        mark_partial("content", "outline-only");
         let outline: Vec<Json> = headings
             .iter()
             .map(|h| serde_json::json!({"line": h.line, "level": h.level, "text": h.text}))
@@ -224,6 +427,11 @@ pub fn print_concept_lines(concept: &Concept, start: usize, end: usize, json: bo
         })
         .collect();
     if json {
+        if start > 1 || actual_end < total {
+            mark_partial("content", "line-range");
+        } else {
+            mark_content_complete();
+        }
         let lines: Vec<Json> = selected
             .iter()
             .map(|(line, text)| serde_json::json!({"line": line, "text": text}))

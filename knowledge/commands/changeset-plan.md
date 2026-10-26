@@ -1,7 +1,7 @@
 ---
 type: Command
 title: okf changeset plan
-description: Validate and preview coordinated single-bundle changes without publishing files.
+description: Validate and preview coordinated single-bundle changes without publishing authored files.
 group: query
 mutates: false
 implemented_by:
@@ -14,7 +14,8 @@ sources:
 ---
 # okf changeset plan
 
-Validate and preview coordinated single-bundle changes without publishing files.
+Validate and preview coordinated single-bundle changes without publishing authored
+files. Baseline coordination may create a lock file.
 
 See the [complete CLI reference](../../docs/okf-cli-reference.md) for operation schemas and guarantees.
 
@@ -25,7 +26,8 @@ See the [complete CLI reference](../../docs/okf-cli-reference.md) for operation 
 | `<bundle>` | positional | no | Bundle directory |
 | `--from <value>` | string | yes | Version 1 change document: inline YAML/JSON, @file, or stdin (-) |
 | `--expect <value>` | string | no | Require this base digest from a previous plan before applying |
-| `--dry-run` | bool | no | Validate and preview without writing (also the behavior of changeset plan) (default: `false`) |
+| `--dry-run` | bool | no | Validate and preview without publishing authored files (also the behavior of changeset plan) (default: `false`) |
+| `--require-ontology-gate` | bool | no | Require the ontology write gate even when bundle policy leaves it disabled (default: `false`) |
 
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 

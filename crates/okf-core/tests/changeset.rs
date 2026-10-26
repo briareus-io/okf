@@ -14,6 +14,120 @@ fn set(operations: Vec<Operation>) -> ChangeSet {
 }
 
 #[test]
+fn digest_matches_plan_and_rejects_pending_journal() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("old.md"), note("old\n")).unwrap();
+    let digest = changeset::digest_read_only(root.path()).unwrap();
+    let plan = changeset::prepare(
+        root.path(),
+        &set(vec![Operation::Create {
+            path: "new".into(),
+            content: note("new\n"),
+        }]),
+    )
+    .unwrap();
+    assert_eq!(digest, plan.base_digest);
+    fs::create_dir(root.path().join(transaction::JOURNAL)).unwrap();
+    assert!(changeset::digest_read_only(root.path()).is_err());
+}
+
+#[test]
+fn structured_create_preserves_unknown_values_and_rejects_verified() {
+    let root = tempfile::tempdir().unwrap();
+    let input = "version: 1\noperations:\n- op: create\n  path: new\n  frontmatter:\n    type: Note\n    custom: {count: 7, active: true}\n  body: '# New'\n";
+    let set: ChangeSet = serde_yaml::from_str(input).unwrap();
+    let plan = changeset::prepare(root.path(), &set).unwrap();
+    changeset::apply(root.path(), plan, None).unwrap();
+    let created = fs::read_to_string(root.path().join("new.md")).unwrap();
+    assert!(created.contains("count: 7"), "{created}");
+    assert!(created.contains("active: true"), "{created}");
+    let invalid: ChangeSet = serde_yaml::from_str("version: 1\noperations:\n- op: create\n  path: other\n  frontmatter: {type: Note, verified: []}\n").unwrap();
+    assert!(changeset::prepare(root.path(), &invalid).is_err());
+}
+
+#[test]
+fn allow_dangling_only_waives_removed_target_references() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("old.md"), note("old\n")).unwrap();
+    fs::write(root.path().join("ref.md"), note("[old](old.md)\n")).unwrap();
+    let set: ChangeSet = serde_yaml::from_str(
+        "version: 1\noperations:\n- op: remove\n  path: old\n  allow_dangling: true\n",
+    )
+    .unwrap();
+    let plan = changeset::prepare(root.path(), &set).unwrap();
+    assert_eq!(plan.allowed_dangling, vec!["/ref: old.md"]);
+    changeset::apply(root.path(), plan, None).unwrap();
+    assert!(!root.path().join("old.md").exists());
+    assert!(root.path().join("ref.md").exists());
+}
+
+#[test]
+fn staging_commit_evidence_never_escapes_preview_or_failed_preparation() {
+    let root = tempfile::tempdir().unwrap();
+    transaction::reset_publication_evidence();
+    let preview = changeset::prepare(
+        root.path(),
+        &set(vec![Operation::Create {
+            path: "new".into(),
+            content: note("new\n"),
+        }]),
+    )
+    .unwrap();
+    assert!(!preview.changes.is_empty());
+    assert_eq!(
+        transaction::publication_evidence(),
+        transaction::PublicationEvidence::None
+    );
+    let failed = changeset::prepare(
+        root.path(),
+        &set(vec![
+            Operation::Create {
+                path: "new".into(),
+                content: note("new\n"),
+            },
+            Operation::Remove {
+                path: "absent.md".into(),
+            },
+        ]),
+    );
+    assert!(failed.is_err());
+    assert_eq!(
+        transaction::publication_evidence(),
+        transaction::PublicationEvidence::None
+    );
+}
+
+#[test]
+fn enabled_gate_checks_final_changeset_state_after_intermediate_invalid_creation() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(
+        root.path().join("ontology.yaml"),
+        "okf_ontology: '0.1'\nconcepts:\n  Note: {}\n",
+    )
+    .unwrap();
+    let _gate = transaction::strengthen_ontology_gate();
+    let plan = changeset::prepare(
+        root.path(),
+        &set(vec![
+            Operation::Create {
+                path: "new".into(),
+                content: "---\ntype: Unknown\n---\n".into(),
+            },
+            Operation::Replace {
+                path: "new".into(),
+                content: note("valid\n"),
+            },
+        ]),
+    )
+    .unwrap();
+    assert!(!root.path().join("new.md").exists());
+    changeset::apply(root.path(), plan, None).unwrap();
+    assert!(fs::read_to_string(root.path().join("new.md"))
+        .unwrap()
+        .contains("type: Note"));
+}
+
+#[test]
 fn split_retargets_selected_records_and_commits_only_after_preview() {
     let root = tempfile::tempdir().unwrap();
     fs::write(root.path().join("old.md"), note("old\n")).unwrap();
@@ -361,7 +475,7 @@ fn preview_rejects_unsupported_file_to_directory_transition_without_writes() {
         "existing artifact"
     );
     assert!(!root.path().join(transaction::JOURNAL).exists());
-    assert!(!root.path().join(transaction::LOCK).exists());
+    assert!(root.path().join(transaction::LOCK).exists());
 }
 
 #[test]

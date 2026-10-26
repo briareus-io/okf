@@ -8,6 +8,11 @@ expansion bounds, plus migration identity collisions, lossless structured conver
 from a failed second-bundle write. Structured authoring scenarios also exercise dependent ontology
 apply, dry-run nonpersistence, object-map creation, guarded list patches, and failure atomicity. They do not measure whether an agent chooses the right workflow.
 
+For 0.5.0, use the existing `incomplete-inventory` agent case to assess how
+the agent handles the operation trailer and actual exit as well as query
+summary evidence. Keep agent trials separate from deterministic CLI tests;
+an unrun trial has no pass result.
+
 For agent evaluation, use each case in `skill-behaviors.json` as follows:
 
 1. Prepare the stated setup in an isolated temporary workspace. For file examples, materialize the

@@ -86,9 +86,10 @@ fn list_excludes_concepts_but_retains_artifacts_and_reserved_files() {
                 .lines()
                 .map(|line| serde_json::from_str(line).unwrap())
                 .collect();
-            assert_eq!(records.len(), 3);
+            assert_eq!(records.len(), 5);
             assert!(records
                 .iter()
+                .filter(|record| record["kind"] == "artifact")
                 .all(|record| record["artifact_kind"] != "concept"));
         }
     }
@@ -118,7 +119,7 @@ fn list_excludes_concepts_but_retains_artifacts_and_reserved_files() {
         ])
         .assert()
         .success()
-        .stdout("");
+        .stdout(contains("operation-complete"));
 }
 
 #[test]
@@ -294,14 +295,19 @@ fn put_rejects_concepts_control_paths_and_escape() {
     }
     assert!(!project.path().join("outside.json").exists());
     assert!(!project.path().join("b/concept.md").exists());
-    // Reserved Markdown remains supported.
+    // Reserved Markdown remains supported when it meets its conformance rules.
+    std::fs::write(
+        project.path().join("input"),
+        "# Log\n\n## 2026-10-26\n- entry\n",
+    )
+    .unwrap();
     okf(project.path())
         .args(["artifact", "put", "log.md", "@input", "b"])
         .assert()
         .success();
     assert_eq!(
         std::fs::read(project.path().join("b/log.md")).unwrap(),
-        b"replacement"
+        b"# Log\n\n## 2026-10-26\n- entry\n"
     );
 }
 
@@ -334,7 +340,7 @@ fn put_rejects_symlink_files_and_parents_including_dangling_links() {
             .args(["artifact", "put", path, "@input", "b", "--replace"])
             .assert()
             .code(2)
-            .stderr(contains("without symlinks"));
+            .stderr(contains("regular files and real directories"));
     }
     assert_eq!(
         std::fs::read(project.path().join("outside.json")).unwrap(),

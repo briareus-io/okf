@@ -69,7 +69,7 @@ pub enum Command {
     /// Advisory checks (broken links, missing fields, orphans, ontology violations).
     Lint(LintArgs),
     /// Drift detection: recorded vs. recomputed source fingerprints (+ `stale_after`).
-    Stale(FailOnArgs),
+    Stale(StaleArgs),
     /// Impact query: concepts needing review given a set of changed links.
     Affected(AffectedArgs),
     /// Concept-level diff of the working tree vs a git ref.
@@ -445,17 +445,60 @@ pub struct FailOnArgs {
 }
 
 #[derive(Debug, Args)]
+pub struct StaleArgs {
+    /// Bundle directory.
+    pub bundle: Option<String>,
+    /// Existing discovery failure threshold; state policy is separate.
+    #[arg(long = "fail-on", value_parser = ["never", "info", "warn", "error", "any"], default_value = "never", conflicts_with = "fail_on_state")]
+    pub fail_on: Option<String>,
+    /// Display only these source-health states (comma-separated or repeatable).
+    #[arg(long, value_enum, value_delimiter = ',')]
+    pub only: Vec<SourceState>,
+    /// Emit a count of examined, displayed, and omitted findings.
+    #[arg(long)]
+    pub summary: bool,
+    /// Fail when any examined source has one of these states.
+    #[arg(long = "fail-on-state", value_enum, value_delimiter = ',')]
+    pub fail_on_state: Vec<SourceState>,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, ValueEnum)]
+pub enum SourceState {
+    Drifted,
+    Unrecorded,
+    Missing,
+    Unavailable,
+    Unsupported,
+    Expired,
+}
+impl SourceState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Drifted => "drifted",
+            Self::Unrecorded => "unrecorded",
+            Self::Missing => "missing",
+            Self::Unavailable => "unavailable",
+            Self::Unsupported => "unsupported",
+            Self::Expired => "expired",
+        }
+    }
+}
+
+#[derive(Debug, Args)]
 pub struct AffectedArgs {
     /// Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory).
     pub bundle: Option<String>,
-    /// A changed link/concept-id/resource (repeatable; also read from stdin lines).
-    #[arg(long = "changed")]
+    /// A changed link/concept-id/resource (repeatable; use - to read stdin).
+    #[arg(long = "changed", allow_hyphen_values = true)]
     pub changed: Vec<String>,
+    /// Interpret changed paths relative to the bundle, repository, or invocation directory.
+    #[arg(long = "changed-base", value_enum, default_value_t = ChangedBase::Bundle)]
+    pub changed_base: ChangedBase,
     /// Follow the cascade past direct dependents.
     #[arg(long)]
     pub transitive: bool,
-    /// Cap hops with --transitive; otherwise ignored with a diagnostic.
-    #[arg(long)]
+    /// Cap hops with --transitive.
+    #[arg(long, requires = "transitive")]
     pub depth: Option<usize>,
     /// Fail (exit 1) on any affected concept: never (default) | info | warn | error | any.
     #[arg(
@@ -464,6 +507,13 @@ pub struct AffectedArgs {
         default_value = "never"
     )]
     pub fail_on: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, ValueEnum)]
+pub enum ChangedBase {
+    Bundle,
+    Repo,
+    Filesystem,
 }
 
 #[derive(Debug, Args)]
@@ -504,7 +554,7 @@ pub struct InitArgs {
     /// Bundle directory to create (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory).
     pub bundle: Option<String>,
     /// Title for the scaffolded root `index.md`.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "no_index")]
     pub title: Option<String>,
     /// Do not scaffold a root `index.md`.
     #[arg(long = "no-index")]
@@ -580,6 +630,9 @@ pub struct AddArgs {
     /// Actor that generated this content.
     #[arg(long = "generated-by")]
     pub generated_by: Option<String>,
+    /// Require the ontology write gate even when bundle policy leaves it disabled.
+    #[arg(long)]
+    pub require_ontology_gate: bool,
 }
 
 #[derive(Debug, Args)]
@@ -652,6 +705,9 @@ pub struct EditArgs {
     /// Rename a section heading, `<old> <new>` (repeatable).
     #[arg(long = "rename-section", num_args = 2, value_names = ["OLD", "NEW"])]
     pub rename_section: Vec<String>,
+    /// Require the ontology write gate even when bundle policy leaves it disabled.
+    #[arg(long)]
+    pub require_ontology_gate: bool,
 }
 
 #[derive(Debug, Args)]
@@ -667,6 +723,9 @@ pub struct RefreshArgs {
         default_value = "never"
     )]
     pub fail_on: Option<String>,
+    /// Require the ontology write gate even when bundle policy leaves it disabled.
+    #[arg(long)]
+    pub require_ontology_gate: bool,
 }
 
 #[derive(Debug, Args)]
@@ -677,6 +736,9 @@ pub struct MvArgs {
     pub new: String,
     /// Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory).
     pub bundle: Option<String>,
+    /// Require the ontology write gate even when bundle policy leaves it disabled.
+    #[arg(long)]
+    pub require_ontology_gate: bool,
 }
 
 #[derive(Debug, Args)]
@@ -688,6 +750,9 @@ pub struct RmArgs {
     /// Remove even if backlinks would dangle.
     #[arg(long)]
     pub force: bool,
+    /// Require the ontology write gate even when bundle policy leaves it disabled.
+    #[arg(long)]
+    pub require_ontology_gate: bool,
 }
 
 #[derive(Debug, Args)]
@@ -699,6 +764,9 @@ pub struct VerifyArgs {
     /// The reviewing actor (e.g. `human:andrey` or `process:ci`).
     #[arg(long = "by")]
     pub by: String,
+    /// Require the ontology write gate even when bundle policy leaves it disabled.
+    #[arg(long)]
+    pub require_ontology_gate: bool,
 }
 
 #[derive(Debug, Args)]
@@ -731,6 +799,12 @@ pub struct OntRemoveArgs {
     /// Validate and preview the change without writing.
     #[arg(long)]
     pub dry_run: bool,
+    /// Examine every registered consumer of a shared ontology sidecar.
+    #[arg(long)]
+    pub check_dependent_bundles: bool,
+    /// Require the ontology write gate even when bundle policy leaves it disabled.
+    #[arg(long)]
+    pub require_ontology_gate: bool,
 }
 
 #[derive(Debug, Args)]
@@ -775,6 +849,12 @@ pub struct OntEditArgs {
     /// Mark the exact `Attested Computation` type as standard attested.
     #[arg(long)]
     pub attested: bool,
+    /// Examine every registered consumer of a shared ontology sidecar.
+    #[arg(long)]
+    pub check_dependent_bundles: bool,
+    /// Require the ontology write gate even when bundle policy leaves it disabled.
+    #[arg(long)]
+    pub require_ontology_gate: bool,
 }
 
 #[derive(Debug, Args)]
@@ -789,6 +869,12 @@ pub struct OntFieldTypeEditArgs {
     /// Validate and preview the change without writing.
     #[arg(long)]
     pub dry_run: bool,
+    /// Examine every registered consumer of a shared ontology sidecar.
+    #[arg(long)]
+    pub check_dependent_bundles: bool,
+    /// Require the ontology write gate even when bundle policy leaves it disabled.
+    #[arg(long)]
+    pub require_ontology_gate: bool,
 }
 
 #[derive(Debug, Args)]
@@ -801,16 +887,30 @@ pub struct OntApplyArgs {
     /// Validate and preview the change without writing.
     #[arg(long)]
     pub dry_run: bool,
+    /// Examine every registered consumer of a shared ontology sidecar.
+    #[arg(long)]
+    pub check_dependent_bundles: bool,
+    /// Require the ontology write gate even when bundle policy leaves it disabled.
+    #[arg(long)]
+    pub require_ontology_gate: bool,
 }
 
 #[derive(Debug, Subcommand)]
 pub enum ChangeSetCmd {
+    /// Acquire the guarded bundle baseline token without staging changes.
+    Digest(DigestArgs),
     /// Validate and preview a coordinated change document without writing bundle files.
     Plan(ChangeSetArgs),
     /// Validate then publish coordinated changes with a recoverable rollback journal.
     Apply(ChangeSetArgs),
     /// Recover an interrupted publication without overwriting intervening edits.
     Recover(BundleArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct DigestArgs {
+    /// Bundle directory.
+    pub bundle: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -823,9 +923,12 @@ pub struct ChangeSetArgs {
     /// Require this base digest from a previous plan before applying.
     #[arg(long)]
     pub expect: Option<String>,
-    /// Validate and preview without writing (also the behavior of changeset plan).
+    /// Validate and preview without publishing authored files (also the behavior of changeset plan).
     #[arg(long)]
     pub dry_run: bool,
+    /// Require the ontology write gate even when bundle policy leaves it disabled.
+    #[arg(long)]
+    pub require_ontology_gate: bool,
 }
 
 /// The same capability table drives runtime admission, help and machine discovery.

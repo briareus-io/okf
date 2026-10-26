@@ -1,19 +1,31 @@
 ---
 type: Component
-title: okf-cli crate
-description: The thin binary named okf.
 layer: cli
 depends_on:
 - /components/okf-core
+title: okf-cli crate
+description: The thin binary named okf.
 sources:
 - resource: crates/okf-cli/src/main.rs
   kind: git-path
   fingerprint:
-    blob_sha: ae038ad94dc71ee34b878611777789cd891edbcc
+    blob_sha: 559500646e10e19a02b1dc938c844cf89c6c8207
 - resource: crates/okf-cli/src/structured.rs
   kind: git-path
   fingerprint:
     blob_sha: 889819283f7bd1c986e0ce78deb39f77fd481633
+- resource: crates/okf-cli/src/cli.rs
+  kind: git-path
+  fingerprint:
+    blob_sha: fad8084ae5833fd506b4e8818e62e0a2d387c2d6
+- resource: crates/okf-cli/src/output.rs
+  kind: git-path
+  fingerprint:
+    blob_sha: cc6ec085ad61e9863503f8984647a7c5521125b2
+- resource: crates/okf-cli/src/exit.rs
+  kind: git-path
+  fingerprint:
+    blob_sha: 39c005d7c60c95b9d62c3525a54f672e49a81f00
 last_modified: 2026-10-05T10:18:41Z
 ---
 # okf-cli crate
@@ -28,6 +40,7 @@ The thin binary named okf. Responsible only for clap argument parsing, rendering
 - Mutate: [artifact put](../commands/artifact-put.md), [init](../commands/init.md), [add](../commands/add.md), [edit](../commands/edit.md), [mv](../commands/mv.md), [rm](../commands/rm.md), [verify](../commands/verify.md), [refresh](../commands/refresh.md), [ontology add](../commands/ontology-add.md), [ontology update](../commands/ontology-update.md), [ontology remove](../commands/ontology-remove.md), [ontology apply](../commands/ontology-apply.md), [field-type add](../commands/ontology-field-type-add.md), [field-type update](../commands/ontology-field-type-update.md), [field-type remove](../commands/ontology-field-type-remove.md)
 - Ontology queries: [ontology list](../commands/ontology-list.md), [ontology show](../commands/ontology-show.md)
 - Render: [docs](../commands/docs.md)
+- Guarded baseline: [changeset digest](../commands/changeset-digest.md)
 
 Location: `crates/okf-cli`.
 
@@ -39,3 +52,11 @@ Structured input loading accepts one YAML/JSON document, inline, from a file or 
 It rejects ambiguous keys, unsupported YAML constructs and multiple stdin consumers before
 calling core mutation logic. This is input interpretation; object-path and patch semantics remain
 in the core mutation module.
+
+CLI 0.5 JSON operations declare a stream version and frame payload records
+with one start record and, when normal completion is possible, one terminal
+record. The terminal record carries outcome, publication and applicable
+completeness dimensions; the process exit remains authoritative. Argument
+parsing may fail before a stream begins. The CLI also resolves explicit
+changed-resource input before deciding whether stdin is requested, and gives
+filesystem, bundle and repository path namespaces explicit context.

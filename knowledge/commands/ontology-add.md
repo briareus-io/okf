@@ -1,24 +1,24 @@
 ---
 type: Command
-title: okf ontology add
-description: Defines a new concept type with its typed fields and reference rules, written to ontology.yaml through the lossless ontology editor.
 group: mutate
 mutates: true
 implemented_by:
 - /components/ontology
+title: okf ontology add
+description: Defines a new concept type with its typed fields and reference rules, written to ontology.yaml through the lossless ontology editor.
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
   fingerprint:
-    blob_sha: bab34f363d28125adac33f33fefc2c9e04329d73
+    blob_sha: a99f651a30e3a6ad2859066a5b8f287e73391371
 - resource: crates/okf-cli/src/cli.rs
   kind: git-path
   fingerprint:
-    blob_sha: 6938cba0788280234436282cdce1e4a880b25d22
+    blob_sha: fad8084ae5833fd506b4e8818e62e0a2d387c2d6
 - resource: crates/okf-core/src/ontology/edit.rs
   kind: git-path
   fingerprint:
-    blob_sha: 885cd3dedad75883309028b70b863cc31931c19b
+    blob_sha: 1c12da9fbbce7e4d18ce699db19fe9c4dd646416
 - resource: crates/okf-cli/src/structured.rs
   kind: git-path
   fingerprint:
@@ -33,7 +33,8 @@ Structured declaration flags `--field-yaml`, `--ref-yaml`, and `--relationship-y
 `name=value` with inline YAML/JSON, `@file`, or stdin `-`. Each supplied declaration replaces its
 whole named entry. `--from` accepts one concept-type definition; omitted named entries remain
 on update. Overlapping file/flag operations fail. `--remove-relationship` is available on update.
-The combined prospective ontology validates before writing; `--dry-run` previews without writes.
+The combined prospective ontology validates before publication; `--dry-run`
+previews without publishing the sidecar, though coordination state may be created.
 
 ## Arguments
 
@@ -53,6 +54,8 @@ The combined prospective ontology validates before writing; `--dry-run` previews
 | `--from <value>` | string | no | Merge a concept-type definition from inline YAML, @file, a file path, or stdin (-) |
 | `--dry-run` | bool | no | Validate and preview the change without writing (default: `false`) |
 | `--attested` | bool | no | Mark the exact `Attested Computation` type as standard attested (default: `false`) |
+| `--check-dependent-bundles` | bool | no | Examine every registered consumer of a shared ontology sidecar (default: `false`) |
+| `--require-ontology-gate` | bool | no | Require the ontology write gate even when bundle policy leaves it disabled (default: `false`) |
 
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 

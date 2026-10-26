@@ -1,24 +1,24 @@
 ---
 type: Command
-title: okf ontology field-type update
-description: Replaces an existing reusable structured field type definition.
 group: mutate
 mutates: true
 implemented_by:
 - /components/ontology
+title: okf ontology field-type update
+description: Replaces an existing reusable structured field type definition.
 sources:
 - resource: crates/okf-core/src/ontology/edit.rs
   kind: git-path
   fingerprint:
-    blob_sha: 885cd3dedad75883309028b70b863cc31931c19b
+    blob_sha: 1c12da9fbbce7e4d18ce699db19fe9c4dd646416
 - resource: crates/okf-cli/src/cli.rs
   kind: git-path
   fingerprint:
-    blob_sha: 6938cba0788280234436282cdce1e4a880b25d22
+    blob_sha: fad8084ae5833fd506b4e8818e62e0a2d387c2d6
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
   fingerprint:
-    blob_sha: bab34f363d28125adac33f33fefc2c9e04329d73
+    blob_sha: a99f651a30e3a6ad2859066a5b8f287e73391371
 last_modified: 2026-10-05T10:16:06Z
 ---
 # okf ontology field-type update
@@ -27,7 +27,8 @@ Replaces an existing reusable structured field type definition.
 
 Requires a full definition via `--from`. The definition replaces the entire named entry, so
 retain inherited/extension declarations the replacement must keep. Validate affected consumers
-with advisory lint. `--dry-run` previews without writing.
+with advisory lint. `--dry-run` previews without publishing the sidecar,
+though coordination state may be created.
 
 ## Arguments
 
@@ -37,6 +38,8 @@ with advisory lint. `--dry-run` previews without writing.
 | `<bundle>` | positional | no | Bundle directory |
 | `--from <value>` | string | yes | Complete field-type definition: inline YAML, @file, a file path, or stdin (-) |
 | `--dry-run` | bool | no | Validate and preview the change without writing (default: `false`) |
+| `--check-dependent-bundles` | bool | no | Examine every registered consumer of a shared ontology sidecar (default: `false`) |
+| `--require-ontology-gate` | bool | no | Require the ontology write gate even when bundle policy leaves it disabled (default: `false`) |
 
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 

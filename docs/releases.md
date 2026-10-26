@@ -8,6 +8,11 @@ Only dispatch on `main` can publish. The initial version is 0.3.2.
 
 ## Prepare locally
 
+For an incompatible minor release, put a **BREAKING CHANGE** notice in the README,
+release notes, migration guide, and both installer paths before any installation
+step. Describe old and new invocations and machine records. Keep the previous
+minor release available for callers that need time to migrate.
+
 1. Update `[workspace.package].version` in `Cargo.toml` and both plugin manifests.
 2. Update `plugins/okf/cli-compatibility.txt` if the skills require newer CLI behavior.
    Update the compatibility range shown in README.md too.

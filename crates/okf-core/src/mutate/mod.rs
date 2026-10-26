@@ -3,6 +3,7 @@ pub mod add;
 pub mod body;
 pub mod changeset;
 pub mod edit;
+pub mod gate;
 pub mod init;
 pub mod mv;
 pub mod refresh;

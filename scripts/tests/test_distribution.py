@@ -28,7 +28,8 @@ class DistributionTests(unittest.TestCase):
         (plugin / 'scripts').mkdir(parents=True)
         self.checker = plugin / 'scripts/check-cli.sh'
         shutil.copyfile(ROOT / 'plugins/okf/scripts/check-cli.sh', self.checker)
-        (plugin / 'cli-compatibility.txt').write_text('0.3.2 0.4.0\n')
+        shutil.copyfile(ROOT / 'plugins/okf/cli-compatibility.txt',
+                        plugin / 'cli-compatibility.txt')
 
     def executable(self, name, text):
         path = self.bin / name
@@ -42,9 +43,9 @@ class DistributionTests(unittest.TestCase):
                               env=self.env, capture_output=True, text=True)
 
     def test_compatibility_boundaries(self):
-        for version, accepted in [('0.3.1', False), ('0.2.9', False), ('0.3.2', True),
-                                  ('0.3.10', True), ('0.4.0', False), ('1.0.0', False),
-                                  ('0.3.3-beta.1', False), ('garbage', False)]:
+        for version, accepted in [('0.4.4', False), ('0.5.0', True), ('0.5.10', True),
+                                  ('0.6.0', False), ('1.0.0', False),
+                                  ('0.5.1-beta.1', False), ('garbage', False)]:
             with self.subTest(version=version):
                 self.assertEqual(self.check(version).returncode == 0, accepted)
 
@@ -54,8 +55,9 @@ class DistributionTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('Installation:', result.stderr)
 
-    def installer(self, corrupt=False, binary_version='0.3.2', symlink=False):
-        asset = 'okf-0.3.2-x86_64-unknown-linux-musl.tar.gz'
+    def installer(self, corrupt=False, binary_version=None, symlink=False, version='0.3.2'):
+        binary_version = binary_version or version
+        asset = f'okf-{version}-x86_64-unknown-linux-musl.tar.gz'
         payload = self.root / 'okf'
         payload.write_text(f'#!/bin/sh\necho "okf {binary_version} (OKF spec 0.2)"\n')
         payload.chmod(0o755)
@@ -81,7 +83,7 @@ cp "$FIXTURES/${url##*/}" "$output"
             (destination / 'okf').symlink_to(previous)
         else:
             (destination / 'okf').write_text('old binary')
-        result = subprocess.run(['sh', str(ROOT / 'scripts/install.sh'), '0.3.2', str(destination)],
+        result = subprocess.run(['sh', str(ROOT / 'scripts/install.sh'), version, str(destination)],
                                 env=self.env, capture_output=True, text=True)
         return result, destination / 'okf'
 
@@ -90,6 +92,12 @@ cp "$FIXTURES/${url##*/}" "$output"
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('0.3.2', binary.read_text())
         self.assertTrue(os.access(binary, os.X_OK))
+
+    def test_breaking_change_notice_precedes_install(self):
+        result, binary = self.installer(version='0.5.0')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('BREAKING CHANGE', result.stderr)
+        self.assertIn('0.5.0', binary.read_text())
 
     def test_checksum_failure_preserves_existing(self):
         result, binary = self.installer(corrupt=True)

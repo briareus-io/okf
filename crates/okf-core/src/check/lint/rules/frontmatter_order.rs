@@ -23,15 +23,25 @@ pub fn fix(
     root: &std::path::Path,
     ontology: Option<&crate::ontology::schema::Ontology>,
 ) -> crate::error::Result<usize> {
-    let mut concepts = Vec::new();
+    let guard = crate::mutate::transaction::writer_lock(root)?;
+    // Never normalize a stale caller-provided inventory over newer authored content.
+    let _ = bundle;
+    let bundle = crate::bundle::loader::load_bundle(root)?;
+    let mut changes = Vec::new();
     for concept in &bundle.concepts {
         if needs_order_normalization(concept, ontology)? {
-            crate::mutate::edit::render_validated(root, concept)?;
-            concepts.push(concept);
+            let rendered = crate::mutate::edit::render_validated(root, concept)?;
+            let relative =
+                std::path::PathBuf::from(format!("{}.md", concept.id.0.trim_start_matches('/')));
+            let before = crate::mutate::transaction::read_optional(&root.join(&relative))?;
+            changes.push(crate::mutate::transaction::FileChange {
+                path: relative,
+                before,
+                after: Some(rendered.into_bytes()),
+            });
         }
     }
-    for concept in &concepts {
-        crate::mutate::edit::save_concept(root, concept)?;
-    }
-    Ok(concepts.len())
+    let count = changes.len();
+    crate::mutate::transaction::commit_locked(root, &guard, changes)?;
+    Ok(count)
 }

@@ -204,7 +204,8 @@
       "source or artifact citations",
       "trust and lifecycle caveats",
       "selected bundle identity and examined scope",
-      "incomplete or unenforced checks when present"
+      "incomplete or unenforced checks when present",
+      "operation completion and actual exit when consuming JSON"
     ]
   },
   {
@@ -292,6 +293,7 @@
       "trigger category",
       "fingerprint-only refreshes",
       "verification consequences",
+      "blocked required refresh sources and publication outcome",
       "selected bundle identity and examined scope"
     ]
   },
@@ -402,7 +404,8 @@
       "okf mv",
       "okf backlinks",
       "okf diff",
-      "okf catalog"
+      "okf catalog",
+      "okf changeset digest <bundle>"
     ],
     "reference_commands": [
       "artifact list",
@@ -421,6 +424,7 @@
       "edit",
       "catalog",
       "changeset plan",
+      "changeset digest",
       "changeset apply",
       "changeset recover"
     ],
