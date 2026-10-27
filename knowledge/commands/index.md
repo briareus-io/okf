@@ -1,51 +1,66 @@
-# Command
+# CLI commands
 
-* [okf add](add.md) - Adds a new concept document, scaffolded from the ontology so required fields and reference keys start present.
-* [okf affected](affected.md) - Impact query: given a set of changed links, computes the blast radius of concepts that may need review via a reverse walk, direct by default or --transitive.
-* [okf artifact list](artifact-list.md) - Inventories concepts, reserved files, and opaque artifacts under a bundle directory such as references/.
-* [okf artifact put](artifact-put.md) - Creates or deliberately replaces an opaque local artifact without refreshing citing concepts.
-* [okf artifact resolve](artifact-resolve.md) - Resolves an OKF path-valued resource with declaring-concept context and containment checks.
-* [okf artifact show](artifact-show.md) - Retrieves a bounded local or explicitly authorized remote artifact without executing it.
-* [okf backlinks](backlinks.md) - Lists the concepts that link to a given concept, using the reverse adjacency from the graph.
-* [okf browse](browse.md) - Reads a directory's index.md for progressive disclosure, synthesizing it when absent.
-* [okf catalog](catalog.md) - Inspects configured and effective catalog locations, availability and bundle settings.
-* [okf computation check](computation-check.md) - Inspects an Attested Computation contract and its artifacts without executing the computation.
-* [okf diff](diff.md) - Concept-level diff of the working tree against a git ref: which concepts were added, removed, or changed.
-* [okf docs](docs.md) - Generates documentation from a bundle: progressive-disclosure index.md files, or html, md, pdf, graphml, or obsidian output via --format.
-* [okf doctor](doctor.md) - Diagnoses conformance and compatibility changes before upgrading an existing bundle, with conservative safe repairs.
-* [okf edit](edit.md) - Losslessly edits a concept's frontmatter or body and invalidates its prior verification.
-* [okf graph](graph.md) - Renders the entire link graph or a direction- and depth-bounded neighborhood as mermaid, dot, or graphml.
-* [okf init](init.md) - Creates a new empty OKF bundle: base structure plus a starter ontology.yaml.
-* [okf links](links.md) - Lists the normalized direct concept links defined by one concept and reports whether each target exists.
-* [okf lint](lint.md) - Advisory checks where the opinions live: broken links, missing descriptions, orphans, and ontology violations, at error/warn/info severities with a --fail-on threshold.
-* [okf list](list.md) - Lists all concepts (search with no filter).
-* [okf mv](mv.md) - Moves or renames a concept and rewrites every inbound link.
-* [okf ontology add](ontology-add.md) - Defines a new concept type with its typed fields and reference rules, written to ontology.yaml through the lossless ontology editor.
-* [okf ontology list](ontology-list.md) - Lists the concept types defined in the tool-local ontology.yaml with their descriptions.
-* [okf ontology remove](ontology-remove.md) - Removes a concept type from the ontology.
-* [okf ontology show](ontology-show.md) - Shows one concept type's fields and typed reference rules with cardinality.
-* [okf ontology update](ontology-update.md) - Modifies the fields or references of an existing concept type.
-* [okf refresh](refresh.md) - Re-records source fingerprints after a change has been acknowledged, clearing the drift that stale would report.
-* [okf resolve](resolve.md) - Resolves a link or concept id to a concrete bundle-relative file path.
-* [okf rm](rm.md) - Removes a concept, refusing if backlinks would dangle unless --force is given.
-* [okf scan](scan.md) - Walks the physical bundle tree and reports every Markdown file without parsing concepts.
-* [okf schema](schema.md) - Prints machine-readable CLI metadata as NDJSON: commands, mutation conditions, typed arguments, resolution, and output shapes.
-* [okf search](search.md) - Searches concepts by type, tag, free text, and/or frontmatter field, returning matching concept records.
-* [okf show](show.md) - Shows a concept in full, as a heading outline with line numbers, or as a selected line range.
-* [okf source-scan](source-scan.md) - Inventories every regular file in a source directory without parsing it as an OKF bundle.
-* [okf stale](stale.md) - Detects extension fingerprint drift and lifecycle expiry using offset-aware, inclusive stale_after comparison.
-* [okf stats](stats.md) - Bundle summary: counts by type, trust-tier distribution, corrected stale count, and orphan count.
-* [okf validate](validate.md) - Conformance validation: the spec's three hard rules only (parseable frontmatter, non-empty type, reserved-filename structure).
-* [okf verify](verify.md) - Appends a verified entry, the write side of trust, raising a concept's derived tier (unverified to machine-confirmed to human-reviewed).
-* [okf version](version.md) - Prints the CLI version and the OKF spec version(s) it supports.
+Start with a task below. Each page owns its exact arguments and supported global options. See [shared contracts](../reference/command-contracts.md), [generated globals and records](../reference/cli-contracts.md), and [configuration](../reference/configuration.md).
 
-* [okf ontology apply](ontology-apply.md) - Applies dependent ontology declarations and explicit removals in one validated write.
-* [okf ontology field-type add](ontology-field-type-add.md) - Adds a reusable structured field type to the ontology.
-* [okf ontology field-type update](ontology-field-type-update.md) - Replaces an existing reusable structured field type definition.
-* [okf ontology field-type remove](ontology-field-type-remove.md) - Removes a reusable structured field type from the ontology.
-* [okf changeset plan](changeset-plan.md) - Validate and preview coordinated single-bundle changes without publishing authored files.
-* [okf changeset digest](changeset-digest.md) - Read a guarded baseline token without an operation document.
-* [okf changeset apply](changeset-apply.md) - Publish validated coordinated record changes with guarded inputs and recoverable per-file writes.
-* [okf changeset recover](changeset-recover.md) - Recover interrupted publication without overwriting intervening edits.
-* [okf ontology field-type list](ontology-field-type-list.md) - List authored reusable field types and their effective definitions.
-* [okf ontology field-type show](ontology-field-type-show.md) - Inspect one authored reusable field type and its effective definition.
+## Find, inspect and preview
+
+- [okf artifact list](artifact-list.md) — Inventories concepts, reserved files, and opaque artifacts under a bundle directory such as references/.
+- [okf artifact resolve](artifact-resolve.md) — Resolves an OKF path-valued resource with declaring-concept context and containment checks.
+- [okf artifact show](artifact-show.md) — Retrieves a bounded local or explicitly authorized remote artifact without executing it.
+- [okf backlinks](backlinks.md) — Lists the concepts that link to a given concept, using the reverse adjacency from the graph.
+- [okf browse](browse.md) — Reads a directory's index.md for progressive disclosure, synthesizing it when absent.
+- [okf changeset digest](changeset-digest.md) — Reads a guarded baseline token for a selected bundle without an operation document.
+- [okf changeset plan](changeset-plan.md) — Validate and preview coordinated single-bundle changes without publishing authored files.
+- [okf graph](graph.md) — Renders the entire link graph or a direction- and depth-bounded neighborhood as mermaid, dot, or graphml.
+- [okf links](links.md) — Lists the normalized direct concept links defined by one concept and reports whether each target exists.
+- [okf list](list.md) — Lists all concepts (search with no filter).
+- [okf ontology field-type list](ontology-field-type-list.md) — List authored reusable field types and their effective definitions.
+- [okf ontology field-type show](ontology-field-type-show.md) — Inspect one authored reusable field type and its effective definition.
+- [okf ontology list](ontology-list.md) — Lists the concept types defined in the tool-local ontology.yaml with their descriptions.
+- [okf ontology show](ontology-show.md) — Shows one concept type's fields and typed reference rules with cardinality.
+- [okf resolve](resolve.md) — Resolves a link or concept id to a concrete bundle-relative file path.
+- [okf search](search.md) — Searches concepts by type, tag, free text, and/or frontmatter field, returning matching concept records.
+- [okf show](show.md) — Shows a concept in full, as a heading outline with line numbers, or as a selected line range.
+
+## Check quality, freshness and impact
+
+- [okf affected](affected.md) — Impact query: given a set of changed links, computes the blast radius of concepts that may need review via a reverse walk, direct by default or --transitive.
+- [okf computation check](computation-check.md) — Inspects an Attested Computation contract and its artifacts without executing the computation.
+- [okf diff](diff.md) — Concept-level diff of the working tree against a git ref: which concepts were added, removed, or changed.
+- [okf doctor](doctor.md) — Diagnoses conformance and compatibility changes before upgrading an existing bundle, with conservative safe repairs.
+- [okf lint](lint.md) — Advisory checks where the opinions live: broken links, missing descriptions, orphans, and ontology violations, at error/warn/info severities with a --fail-on threshold.
+- [okf scan](scan.md) — Walks the physical bundle tree and reports every Markdown file without parsing concepts.
+- [okf source-scan](source-scan.md) — Inventories every regular file in a source directory without parsing it as an OKF bundle.
+- [okf stale](stale.md) — Detects extension fingerprint drift and lifecycle expiry using offset-aware, inclusive stale_after comparison.
+- [okf stats](stats.md) — Bundle summary: counts by type, trust-tier distribution, corrected stale count, and orphan count.
+- [okf validate](validate.md) — Conformance validation: the spec's three hard rules only (parseable frontmatter, non-empty type, reserved-filename structure).
+
+## Create, edit and maintain
+
+- [okf add](add.md) — Adds a new concept document, scaffolded from the ontology so required fields and reference keys start present.
+- [okf artifact put](artifact-put.md) — Creates or deliberately replaces an opaque local artifact without refreshing citing concepts.
+- [okf changeset apply](changeset-apply.md) — Publish validated coordinated record changes with guarded inputs and recoverable per-file writes.
+- [okf changeset recover](changeset-recover.md) — Recover interrupted publication without overwriting intervening edits.
+- [okf edit](edit.md) — Losslessly edits a concept's frontmatter or body and invalidates its prior verification.
+- [okf init](init.md) — Creates a new empty OKF bundle: base structure plus a starter ontology.yaml.
+- [okf mv](mv.md) — Moves or renames a concept and rewrites every inbound link.
+- [okf ontology add](ontology-add.md) — Defines a new concept type with its typed fields and reference rules, written to ontology.yaml through the lossless ontology editor.
+- [okf ontology apply](ontology-apply.md) — Applies dependent ontology declarations and explicit removals in one validated write.
+- [okf ontology field-type add](ontology-field-type-add.md) — Adds a reusable structured field type to the ontology.
+- [okf ontology field-type remove](ontology-field-type-remove.md) — Removes a reusable structured field type from the ontology.
+- [okf ontology field-type update](ontology-field-type-update.md) — Replaces an existing reusable structured field type definition.
+- [okf ontology remove](ontology-remove.md) — Removes a concept type from the ontology.
+- [okf ontology update](ontology-update.md) — Modifies the fields or references of an existing concept type.
+- [okf refresh](refresh.md) — Re-records source fingerprints after a change has been acknowledged, clearing the drift that stale would report.
+- [okf rm](rm.md) — Removes a concept, refusing if backlinks would dangle unless --force is given.
+- [okf verify](verify.md) — Appends a verified entry, the write side of trust, raising a concept's derived tier (unverified to machine-confirmed to human-reviewed).
+
+## Render documentation
+
+- [okf docs](docs.md) — Generates documentation from a bundle: progressive-disclosure index.md files, or html, md, pdf, graphml, or obsidian output via --format.
+
+## Inspect the tool and catalog
+
+- [okf catalog](catalog.md) — Inspects configured and effective catalog locations, availability and bundle settings.
+- [okf schema](schema.md) — Prints machine-readable CLI metadata as NDJSON: commands, mutation conditions, typed arguments, resolution, and output shapes.
+- [okf version](version.md) — Prints the CLI version and the OKF spec version(s) it supports.

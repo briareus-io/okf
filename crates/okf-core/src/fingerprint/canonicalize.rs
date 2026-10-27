@@ -1,8 +1,7 @@
 //! Text normalization (LF, trailing-ws, blank-line rules) and hashing.
 //!
 //! This is the cross-platform-stability guarantee: the same logical region must hash
-//! identically on macOS, Linux and CI regardless of checkout EOL settings. Per
-//! ARCHITECTURE.md "Fingerprint canonicalization", the steps are:
+//! identically on macOS, Linux and CI regardless of checkout EOL settings. The steps are:
 //!   1. decode UTF-8 (caller's responsibility);
 //!   2. normalize `CRLF`/`CR` → `LF`;
 //!   3. strip trailing whitespace per line;

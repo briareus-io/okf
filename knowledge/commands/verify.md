@@ -2,19 +2,13 @@
 type: Command
 group: mutate
 mutates: true
-implemented_by:
-- /components/mutate
 title: okf verify
 description: Appends a verified entry, the write side of trust, raising a concept's derived tier (unverified to machine-confirmed to human-reviewed).
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
-  fingerprint:
-    blob_sha: a99f651a30e3a6ad2859066a5b8f287e73391371
 - resource: crates/okf-cli/src/cli.rs
   kind: git-path
-  fingerprint:
-    blob_sha: fad8084ae5833fd506b4e8818e62e0a2d387c2d6
 last_modified: 2026-10-04T20:39:29Z
 ---
 # okf verify
@@ -33,3 +27,5 @@ Appends a valid document-level `{by, at}` verification event after content has b
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 
 Output stream: `change`.
+
+Supported global options: `--bundle-id`, `--json`.

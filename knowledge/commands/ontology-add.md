@@ -2,27 +2,17 @@
 type: Command
 group: mutate
 mutates: true
-implemented_by:
-- /components/ontology
 title: okf ontology add
 description: Defines a new concept type with its typed fields and reference rules, written to ontology.yaml through the lossless ontology editor.
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
-  fingerprint:
-    blob_sha: a99f651a30e3a6ad2859066a5b8f287e73391371
 - resource: crates/okf-cli/src/cli.rs
   kind: git-path
-  fingerprint:
-    blob_sha: fad8084ae5833fd506b4e8818e62e0a2d387c2d6
 - resource: crates/okf-core/src/ontology/edit.rs
   kind: git-path
-  fingerprint:
-    blob_sha: 1c12da9fbbce7e4d18ce699db19fe9c4dd646416
 - resource: crates/okf-cli/src/structured.rs
   kind: git-path
-  fingerprint:
-    blob_sha: 889819283f7bd1c986e0ce78deb39f77fd481633
 last_modified: 2026-10-05T10:16:06Z
 ---
 # okf ontology add
@@ -60,3 +50,7 @@ previews without publishing the sidecar, though coordination state may be create
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 
 Output stream: `change`.
+
+Supported global options: `--bundle-id`, `--json`.
+
+Built-in field types: `string`, `text`, `int`, `bool`, `date`, `datetime`, `uri`, `enum`, `list`, `object`; custom type names must resolve in the existing sidecar's `field_types`. Reference cardinalities are `0..1` (optional one), `1..1` (exactly one), `0..n` (optional many), and `1..n` (at least one). For example, `--field "stage:enum:draft|active"` declares choices and `--ref "depends_on:Service:0..n"` permits zero or more Service links. Observed presence alone does not justify a required rule. Structured `--field-yaml`, `--ref-yaml`, and `--relationship-yaml` inputs replace complete named declarations. `--from` merges supplied declarations, retaining omitted ones; overlaps with flags fail. `--remove-relationship` deletes a named rule. YAML inputs accept inline values, `@file`, or `-`; JSON syntax works. Preview with `--dry-run`. These are advisory local rules, not conformance requirements.

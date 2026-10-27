@@ -1,1 +1,11 @@
 default_bundle = { path = "knowledge" }
+
+[bundle_settings.default.lint]
+source_unrecorded = "off"
+
+[bundle_settings.default.views.commands]
+columns = ["$id", "title", "group", "mutates", "description"]
+
+[bundle_settings.default.views.guides]
+columns = ["$id", "title", "audience", "description"]
+expand = ["uses"]

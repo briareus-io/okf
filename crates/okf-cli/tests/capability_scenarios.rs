@@ -1,4 +1,4 @@
-//! Black-box scenarios derived from docs/{multi-bundle,structured-metadata}-capability.md.
+//! Black-box scenarios derived from knowledge/contributing/design capability documents.
 //! These supplement the core contract and earlier CLI integration tests.
 use serde_json::{json, Value};
 use std::{
@@ -96,7 +96,8 @@ fn commit(root: &Path) -> String {
 }
 fn structured() -> tempfile::TempDir {
     let d = tempfile::tempdir().unwrap();
-    let doc = include_str!("../../../docs/structured-metadata-capability.md");
+    let doc =
+        include_str!("../../../knowledge/contributing/design/structured-metadata-capability.md");
     let ontology = doc
         .split("```yaml\n# tooling/product-ontology.yaml\n")
         .nth(1)

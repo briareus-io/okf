@@ -9,28 +9,30 @@ concepts:
       mutates:
         type: bool
         required: true
-    references:
-      implemented_by:
-        target: Component
-        cardinality: 0..n
-  DomainType:
-    description: A core in-memory data-model type in okf-core.
-    fields:
-      module:
-        type: string
-    references:
-      defined_in:
-        target: Component
-        cardinality: 1..1
   DesignDecision:
-    description: A design principle or cross-cutting architecture decision.
+    description: A consequential choice with alternatives and reconsideration criteria.
     fields:
       decision_status:
-        type: string
+        type: enum
+        values:
+        - accepted
+        - superseded
+      audience:
+        type: enum
+        values:
+        - user
+        - contributor
     references:
-      affects:
-        target: Component
+      explains:
+        target: Topic
         cardinality: 0..n
+    relationships:
+      explains:
+        reference: explains
+        kind: constrains
+        inverse: constrained-by
+        kinds: {}
+        attributes: {}
   Skill:
     description: An agent skill that drives the okf CLI to do judgment work.
     fields:
@@ -40,13 +42,54 @@ concepts:
       uses:
         target: Command
         cardinality: 0..n
-  Component:
-    description: A crate or module/subsystem of the okf codebase.
+    relationships:
+      uses:
+        reference: uses
+        kind: uses
+        inverse: used-by
+        kinds: {}
+        attributes: {}
+  Guide:
+    description: A task guide with commands and underlying explanations.
     fields:
-      layer:
-        type: string
-        required: true
+      audience:
+        type: enum
+        values:
+        - user
+        - contributor
     references:
-      depends_on:
-        target: Component
+      uses:
+        target: Command
         cardinality: 0..n
+      explains:
+        target: Topic
+        cardinality: 0..n
+    relationships:
+      uses:
+        reference: uses
+        kind: uses
+        inverse: used-by
+        kinds: {}
+        attributes: {}
+      explains:
+        reference: explains
+        kind: explains
+        inverse: explained-by
+        kinds: {}
+        attributes: {}
+  Topic:
+    description: A user-facing explanation of the knowledge model.
+    fields:
+      audience:
+        type: enum
+        values:
+        - user
+        - contributor
+  Reference:
+    description: Exact shared behavior or contributor reference material.
+    fields:
+      audience:
+        type: enum
+        values:
+        - user
+        - contributor

@@ -2,23 +2,15 @@
 type: Command
 group: mutate
 mutates: true
-implemented_by:
-- /components/ontology
 title: okf ontology apply
 description: Applies dependent ontology declarations and explicit removals in one validated write.
 sources:
 - resource: crates/okf-core/src/ontology/edit.rs
   kind: git-path
-  fingerprint:
-    blob_sha: 1c12da9fbbce7e4d18ce699db19fe9c4dd646416
 - resource: crates/okf-cli/src/cli.rs
   kind: git-path
-  fingerprint:
-    blob_sha: fad8084ae5833fd506b4e8818e62e0a2d387c2d6
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
-  fingerprint:
-    blob_sha: a99f651a30e3a6ad2859066a5b8f287e73391371
 last_modified: 2026-10-05T10:16:06Z
 ---
 # okf ontology apply
@@ -45,3 +37,7 @@ previews without publishing the sidecar; coordination state may be created.
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 
 Output stream: `change`.
+
+Supported global options: `--bundle-id`, `--json`.
+
+`--from` accepts `field_types` and `concepts` maps, merging named declarations and preserving omitted ones. Top-level `remove` has `field_types` and `concepts` lists; per-concept `remove` has `fields`, `references`, and `relationships` lists. Conflicting operations fail. The complete result validates before a single write. Use `--dry-run` for a preview; null and omission do not request deletion.

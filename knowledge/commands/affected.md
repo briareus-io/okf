@@ -2,23 +2,15 @@
 type: Command
 group: check
 mutates: false
-implemented_by:
-- /components/graph
 title: okf affected
 description: 'Impact query: given a set of changed links, computes the blast radius of concepts that may need review via a reverse walk, direct by default or --transitive.'
 sources:
 - resource: crates/okf-cli/src/commands/check.rs
   kind: git-path
-  fingerprint:
-    blob_sha: 3a0c6b86996b70113dba53ddf52c81b7aac433cf
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
-  fingerprint:
-    blob_sha: a99f651a30e3a6ad2859066a5b8f287e73391371
 - resource: crates/okf-cli/src/cli.rs
   kind: git-path
-  fingerprint:
-    blob_sha: fad8084ae5833fd506b4e8818e62e0a2d387c2d6
 last_modified: 2026-10-04T20:39:29Z
 ---
 # okf affected
@@ -49,3 +41,5 @@ namespace for every changed input. `--depth` requires `--transitive`.
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 
 Output stream: `affected,scope,bundle-affected`.
+
+Supported global options: `--bundle-id`, `--catalog-scope`, `--json`, `--revision`, `--scope-bundle`.

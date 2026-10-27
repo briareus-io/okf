@@ -12,13 +12,11 @@
 //! deadlock re-entering cargo. So the regenerate step is bolted onto the build/install commands
 //! here instead: use `cargo xtask install` (not bare `cargo install`) to keep references current.
 //!
-//! "Schema-derived docs" = one complete developer CLI reference
-//! (`docs/okf-cli-reference.md`), focused per-skill references
+//! "Schema-derived docs" = shared globals/record contracts in the knowledge bundle,
+//! focused per-skill references
 //! (`plugins/okf/skills/*/references/cli.md`), and the `## Arguments` section of every command
 //! concept (`knowledge/commands/*.md`). All three surfaces are generated from
 //! `okf schema --json`, so this is the single command that keeps them in lockstep with the CLI.
-//! Type `## Schema` sections are curated (they mix real Rust items with serialized-shape docs)
-//! and are not regenerated here.
 mod local_signing;
 
 use serde_json::Value;
@@ -62,7 +60,7 @@ fn main() {
         }
         Some("install") => {
             eprintln!(
-                "BREAKING CHANGE: OKF CLI 0.5 changes command input, NDJSON completion, diagnostics, and write behavior. Review releases/0.5.0.md and docs/0.5.0-migration.md before installing."
+                "BREAKING CHANGE: OKF CLI 0.5 changes command input, NDJSON completion, diagnostics, and write behavior. Review releases/0.5.0.md and knowledge/reference/migrations/0.5.0.md before installing."
             );
             if local_signing::enabled() {
                 let install_root = local_signing::install_root(&root);
@@ -119,11 +117,17 @@ fn run_docs(check: bool) {
     // Collect (path, desired-content) for every generated artifact.
     let mut artifacts: Vec<(PathBuf, String)> = Vec::new();
 
-    // 1. One complete developer reference and one focused reference per skill. Keeping each
-    // skill's subset local makes the plugin portable without loading unrelated command docs.
+    // Shared records live once in the bundle; individual command pages own argument tables.
+    // Keep each skill's subset local so the plugin remains portable.
+    let contracts = cli_reference(header, &[], None)
+        .replace("# okf CLI — complete argument reference", "# CLI globals and record contracts")
+        .replace(
+            "This complete reference is for developers and general CLI lookup. Skills carry smaller generated subsets so they do not load unrelated commands.",
+            "See the [command index](../commands/index.md) for individual arguments and [command contracts](command-contracts.md) for shared behavior. Skills carry focused generated references with their workflows.",
+        );
     artifacts.push((
-        root.join("docs/okf-cli-reference.md"),
-        cli_reference(header, &commands, None),
+        root.join("knowledge/reference/cli-contracts.md"),
+        format!("---\ntype: Reference\naudience: user\ntitle: CLI globals and record contracts\ndescription: Generated global arguments and extension record shapes.\nsources:\n- resource: xtask/src/main.rs\n  kind: git-path\n- resource: crates/okf-cli/src/commands/schema.rs\n  kind: git-path\n---\n{contracts}"),
     ));
     for skill in skill_dirs(&root) {
         let name = skill
@@ -142,11 +146,35 @@ fn run_docs(check: bool) {
     for cmd in &commands {
         let stem = cmd["name"].as_str().unwrap().replace(' ', "-");
         let path = root.join("knowledge/commands").join(format!("{stem}.md"));
-        if !path.exists() {
-            eprintln!("warning: no command concept for {stem}");
-            continue;
-        }
+        assert!(path.exists(), "missing command concept for {stem}");
         let body = std::fs::read_to_string(&path).unwrap();
+        let (frontmatter, prose) = body
+            .strip_prefix("---\n")
+            .and_then(|body| body.split_once("\n---\n"))
+            .expect("command concept frontmatter");
+        // These fields drive the manual's structured command queries, so they
+        // must track the same schema as the visible argument reference.
+        assert!(frontmatter.lines().any(|line| line.starts_with("group: ")));
+        assert!(frontmatter
+            .lines()
+            .any(|line| line.starts_with("mutates: ")));
+        let frontmatter = frontmatter
+            .lines()
+            .map(|line| {
+                if line.starts_with("group: ") {
+                    format!("group: {}", cmd["group"].as_str().expect("command group"))
+                } else if line.starts_with("mutates: ") {
+                    format!(
+                        "mutates: {}",
+                        cmd["mutates"].as_bool().expect("write capability")
+                    )
+                } else {
+                    line.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let body = format!("---\n{frontmatter}\n---\n{prose}");
         let has_bundle = cmd["args"]
             .as_array()
             .is_some_and(|args| args.iter().any(|arg| arg["name"] == "bundle"));
@@ -159,11 +187,21 @@ fn run_docs(check: bool) {
         } else {
             "Global `--json` requests NDJSON."
         };
+        let globals = cmd["supported_globals"]
+            .as_object()
+            .expect("command globals")
+            .iter()
+            .filter(|(_, enabled)| enabled.as_bool() == Some(true))
+            .map(|(name, _)| format!("`--{name}`"))
+            .collect::<Vec<_>>()
+            .join(", ");
         let block = format!(
-            "{}\n\n{}\n\nOutput stream: `{}`.",
+            "{}\n\n{}\n\nOutput stream: `{}`.\n\nSupported global options: {}.\n\n{}",
             args_table(cmd),
             invocation_note,
-            cmd["output"]["stream"].as_str().unwrap_or("")
+            cmd["output"]["stream"].as_str().unwrap_or(""),
+            globals,
+            command_guidance(cmd["name"].as_str().unwrap_or("")),
         );
         artifacts.push((path, replace_section(&body, "Arguments", &block)));
     }

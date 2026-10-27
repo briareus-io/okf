@@ -1,22 +1,6 @@
 ---
 type: Skill
-title: okf:migrate skill
-description: Faithfully migrates authored or legacy documents into OKF v0.2 with standard sources, claim footnotes, and preserved extensions.
 trigger: convert existing docs into concepts
-sources:
-- resource: plugins/okf/skills/migrate/references/cli.md
-  kind: git-path
-  fingerprint:
-    blob_sha: a303c062775c0eac252311e06eb34f49d39d2d6f
-- resource: plugins/okf/skills/migrate/SKILL.md
-  kind: git-path
-  fingerprint:
-    blob_sha: 4f2b4c04bbea831707c86c75fc0b0eda951ff7f4
-- resource: https://github.com/abatyuk/okf/blob/main/plugins/okf/skills/migrate/SKILL.md
-- resource: plugins/okf/skills/ontology/references/structured-authoring.md
-  kind: git-path
-  fingerprint:
-    blob_sha: a05ec02fcc363f85ee522cef43b0662a0d05b256
 uses:
 - /commands/catalog
 - /commands/source-scan
@@ -29,6 +13,15 @@ uses:
 - /commands/docs
 - /commands/artifact-resolve
 - /commands/artifact-show
+title: okf:migrate skill
+description: Faithfully migrates authored or legacy documents into OKF v0.2 with standard sources, claim footnotes, and preserved extensions.
+sources:
+- resource: plugins/okf/skills/migrate/references/cli.md
+  kind: git-path
+- resource: plugins/okf/skills/migrate/SKILL.md
+  kind: git-path
+- resource: plugins/okf/skills/ontology/references/structured-authoring.md
+  kind: git-path
 last_modified: 2026-10-05T10:16:06Z
 ---
 # okf:migrate skill

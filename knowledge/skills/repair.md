@@ -1,22 +1,6 @@
 ---
 type: Skill
-title: okf:repair skill
-description: Uses okf doctor to diagnose and safely repair an existing bundle for v0.2 while preserving legal extensions and stopping for semantic choices.
 trigger: repair, upgrade, or doctor an existing bundle
-sources:
-- resource: plugins/okf/skills/repair/references/cli.md
-  kind: git-path
-  fingerprint:
-    blob_sha: 94828fb076d1c8fb4fe6c54b4c98c4baa51e7561
-- resource: plugins/okf/skills/repair/SKILL.md
-  kind: git-path
-  fingerprint:
-    blob_sha: 1a02ac8b641226442633bf1911f7d9158009db49
-- resource: https://github.com/abatyuk/okf/blob/main/plugins/okf/skills/repair/SKILL.md
-- resource: plugins/okf/skills/ontology/references/structured-authoring.md
-  kind: git-path
-  fingerprint:
-    blob_sha: a05ec02fcc363f85ee522cef43b0662a0d05b256
 uses:
 - /commands/catalog
 - /commands/doctor
@@ -27,6 +11,15 @@ uses:
 - /commands/backlinks
 - /commands/graph
 - /commands/docs
+title: okf:repair skill
+description: Uses okf doctor to diagnose and safely repair an existing bundle for v0.2 while preserving legal extensions and stopping for semantic choices.
+sources:
+- resource: plugins/okf/skills/repair/references/cli.md
+  kind: git-path
+- resource: plugins/okf/skills/repair/SKILL.md
+  kind: git-path
+- resource: plugins/okf/skills/ontology/references/structured-authoring.md
+  kind: git-path
 last_modified: 2026-10-05T10:16:06Z
 ---
 # okf:repair skill

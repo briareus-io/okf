@@ -1,0 +1,6 @@
+description: A task guide for a named audience.
+fields:
+  audience:
+    type: enum
+    values: [user, contributor]
+    required: true

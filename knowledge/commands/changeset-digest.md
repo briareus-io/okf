@@ -2,8 +2,6 @@
 type: Command
 group: query
 mutates: false
-implemented_by:
-- /components/mutate
 title: okf changeset digest
 description: Reads a guarded baseline token for a selected bundle without an operation document.
 sources:
@@ -32,3 +30,5 @@ for arbitrary follow-up reads.
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 
 Output stream: `baseline`.
+
+Supported global options: `--bundle-id`, `--json`.

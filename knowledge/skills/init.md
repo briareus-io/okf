@@ -1,22 +1,6 @@
 ---
 type: Skill
-title: okf:init skill
-description: Creates a valid OKF v0.2 bundle and scaffolds portable concepts or exact Attested Computations, with ontology treated as an optional tool sidecar.
 trigger: start a new bundle from scratch
-sources:
-- resource: plugins/okf/skills/init/references/cli.md
-  kind: git-path
-  fingerprint:
-    blob_sha: d8cf239c25f5fe66ce36b69b127d7fa7e26258cd
-- resource: plugins/okf/skills/init/SKILL.md
-  kind: git-path
-  fingerprint:
-    blob_sha: 4e6c2f350720756d90ba1d53378a9b4e406a09b3
-- resource: https://github.com/abatyuk/okf/blob/5cf5e6773e137d30f61d21e6a680aec0f8478448/plugins/okf/skills/init/SKILL.md
-- resource: plugins/okf/skills/ontology/references/structured-authoring.md
-  kind: git-path
-  fingerprint:
-    blob_sha: a05ec02fcc363f85ee522cef43b0662a0d05b256
 uses:
 - /commands/ontology-apply
 - /commands/ontology-field-type-add
@@ -38,6 +22,15 @@ uses:
 - /commands/artifact-list
 - /commands/artifact-resolve
 - /commands/artifact-show
+title: okf:init skill
+description: Creates a valid OKF v0.2 bundle and scaffolds portable concepts or exact Attested Computations, with ontology treated as an optional tool sidecar.
+sources:
+- resource: plugins/okf/skills/init/references/cli.md
+  kind: git-path
+- resource: plugins/okf/skills/init/SKILL.md
+  kind: git-path
+- resource: plugins/okf/skills/ontology/references/structured-authoring.md
+  kind: git-path
 last_modified: 2026-10-05T10:16:06Z
 ---
 # okf:init skill

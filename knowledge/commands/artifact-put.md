@@ -1,28 +1,18 @@
 ---
 type: Command
-title: okf artifact put
-description: Creates or deliberately replaces an opaque local artifact without refreshing citing concepts.
 group: mutate
 mutates: true
-implemented_by:
-- /components/query
+title: okf artifact put
+description: Creates or deliberately replaces an opaque local artifact without refreshing citing concepts.
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
-  fingerprint:
-    blob_sha: bab34f363d28125adac33f33fefc2c9e04329d73
 - resource: crates/okf-cli/src/cli.rs
   kind: git-path
-  fingerprint:
-    blob_sha: 6938cba0788280234436282cdce1e4a880b25d22
 - resource: crates/okf-cli/src/commands/artifact.rs
   kind: git-path
-  fingerprint:
-    blob_sha: b5ff836ed28b11cfb04ee5482717df25183540eb
 - resource: crates/okf-core/src/query/artifact.rs
   kind: git-path
-  fingerprint:
-    blob_sha: 0304a2952a9f06310f0f444125ddcc6754106167
 last_modified: 2026-10-04T20:39:29Z
 ---
 # okf artifact put
@@ -47,3 +37,7 @@ reconcile meaning, then deliberately refresh reviewed source baselines through t
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 
 Output stream: `artifact-write`.
+
+Supported global options: `--bundle-id`, `--json`.
+
+Write bytes from `@file` to a bundle-relative opaque or reserved artifact. The default (and `--create-only`) refuses an existing destination; `--replace` permits replacement. Parent directories are created as needed. Concept and configuration files are protected, and paths must remain inside the bundle. Recorded source fingerprints are preserved so `stale` detects changes; review citing concepts before `refresh`.

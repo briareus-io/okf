@@ -1,0 +1,20 @@
+[
+  {
+    "op": "test",
+    "path": "/audience",
+    "value": "user"
+  },
+  {
+    "op": "replace",
+    "path": "/audience",
+    "value": "contributor"
+  },
+  {
+    "op": "add",
+    "path": "/tags",
+    "value": [
+      "worked-example",
+      "authoring"
+    ]
+  }
+]

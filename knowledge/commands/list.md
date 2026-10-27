@@ -1,24 +1,16 @@
 ---
 type: Command
-title: okf list
-description: Lists all concepts (search with no filter).
 group: query
 mutates: false
-implemented_by:
-- /components/query
+title: okf list
+description: Lists all concepts (search with no filter).
 sources:
 - resource: crates/okf-cli/src/commands/query.rs
   kind: git-path
-  fingerprint:
-    blob_sha: c9b643257e90f1e3e225cb4613be98f08f6abd02
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
-  fingerprint:
-    blob_sha: 126dddfab3fb8caa78cfd61396db89dbcc324a33
 - resource: crates/okf-cli/src/cli.rs
   kind: git-path
-  fingerprint:
-    blob_sha: 28db6285f18a0400ab4b08c79c46322e58c2d833
 last_modified: 2026-10-04T20:39:29Z
 ---
 # okf list
@@ -61,3 +53,7 @@ authored metadata. Unrequested catalog bundles remain outside examination scope.
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 
 Output stream: `concept,concept-identity,scope,projection,query-summary,facet,facet-excluded,relationship,related-concept,expansion-summary,warning`.
+
+Supported global options: `--bundle-id`, `--catalog-scope`, `--json`, `--revision`, `--scope-bundle`.
+
+JSON records contain frontmatter and computed lifecycle/trust metadata, not bodies. Aggregate field occurrence counts only after checking scan completeness and output warnings. The default scan budget is 1,000 eligible documents across scope; --limit bounds output, not scan work. For exhaustive inventory use a sufficient --scan-limit or deliberate --full-scan, and aggregate metadata locally rather than loading all records into context. Each offset invocation rescans; an incomplete scan has no authoritative continuation.

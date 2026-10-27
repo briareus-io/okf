@@ -1,24 +1,16 @@
 ---
 type: Command
-title: okf backlinks
-description: Lists the concepts that link to a given concept, using the reverse adjacency from the graph.
 group: query
 mutates: false
-implemented_by:
-- /components/graph
+title: okf backlinks
+description: Lists the concepts that link to a given concept, using the reverse adjacency from the graph.
 sources:
 - resource: crates/okf-cli/src/commands/query.rs
   kind: git-path
-  fingerprint:
-    blob_sha: c9b643257e90f1e3e225cb4613be98f08f6abd02
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
-  fingerprint:
-    blob_sha: 126dddfab3fb8caa78cfd61396db89dbcc324a33
 - resource: crates/okf-cli/src/cli.rs
   kind: git-path
-  fingerprint:
-    blob_sha: 28db6285f18a0400ab4b08c79c46322e58c2d833
 last_modified: 2026-10-04T20:39:29Z
 ---
 # okf backlinks
@@ -42,3 +34,5 @@ consumers remain unknown.
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 
 Output stream: `concept,relationship,scope,bundle-backlink,bundle-edge`.
+
+Supported global options: `--bundle-id`, `--catalog-scope`, `--json`, `--revision`, `--scope-bundle`.

@@ -1,18 +1,6 @@
 ---
 type: Skill
-title: okf:reorganize skill
-description: Moves concepts while rebasing body links and standard source resources, preserving opaque artifacts and validating regenerated indexes.
 trigger: restructure the bundle layout
-sources:
-- resource: plugins/okf/skills/reorganize/references/cli.md
-  kind: git-path
-  fingerprint:
-    blob_sha: 3900fe3f2a6a507bbfc2a97b4088202b26b3bbe2
-- resource: plugins/okf/skills/reorganize/SKILL.md
-  kind: git-path
-  fingerprint:
-    blob_sha: 0a76e60c0c512d83818a2bf0b9f510123f607146
-- resource: https://github.com/abatyuk/okf/blob/main/plugins/okf/skills/reorganize/SKILL.md
 uses:
 - /commands/catalog
 - /commands/list
@@ -26,6 +14,13 @@ uses:
 - /commands/artifact-resolve
 - /commands/docs
 - /commands/diff
+title: okf:reorganize skill
+description: Moves concepts while rebasing body links and standard source resources, preserving opaque artifacts and validating regenerated indexes.
+sources:
+- resource: plugins/okf/skills/reorganize/references/cli.md
+  kind: git-path
+- resource: plugins/okf/skills/reorganize/SKILL.md
+  kind: git-path
 last_modified: 2026-10-04T20:39:29Z
 ---
 # okf:reorganize skill

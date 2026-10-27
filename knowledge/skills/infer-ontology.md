@@ -1,22 +1,6 @@
 ---
 type: Skill
-title: okf:infer-ontology skill
-description: Infers advisory custom fields and references from support counts while excluding standard OKF families and preserving exact unknown types.
 trigger: reverse-engineer an ontology from a bundle
-sources:
-- resource: plugins/okf/skills/infer-ontology/references/cli.md
-  kind: git-path
-  fingerprint:
-    blob_sha: 5be6f0a9c9e41eb88385c23a1e50a95a6ada48d8
-- resource: plugins/okf/skills/infer-ontology/SKILL.md
-  kind: git-path
-  fingerprint:
-    blob_sha: bb7b23e668ec65768b1b882d44a1f8cca2761610
-- resource: https://github.com/abatyuk/okf/blob/main/plugins/okf/skills/infer-ontology/SKILL.md
-- resource: plugins/okf/skills/ontology/references/structured-authoring.md
-  kind: git-path
-  fingerprint:
-    blob_sha: a05ec02fcc363f85ee522cef43b0662a0d05b256
 uses:
 - /commands/ontology-apply
 - /commands/ontology-field-type-add
@@ -35,6 +19,15 @@ uses:
 - /commands/validate
 - /commands/lint
 - /commands/artifact-resolve
+title: okf:infer-ontology skill
+description: Infers advisory custom fields and references from support counts while excluding standard OKF families and preserving exact unknown types.
+sources:
+- resource: plugins/okf/skills/infer-ontology/references/cli.md
+  kind: git-path
+- resource: plugins/okf/skills/infer-ontology/SKILL.md
+  kind: git-path
+- resource: plugins/okf/skills/ontology/references/structured-authoring.md
+  kind: git-path
 last_modified: 2026-10-05T10:16:06Z
 ---
 # okf:infer-ontology skill

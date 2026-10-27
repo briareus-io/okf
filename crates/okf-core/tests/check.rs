@@ -23,6 +23,53 @@ fn count(findings: &[Finding], rule: &str) -> usize {
 }
 
 #[test]
+fn lint_accepts_real_navigation_and_artifacts_but_retains_missing_targets() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::create_dir(root.path().join("guides")).unwrap();
+    std::fs::create_dir(root.path().join("references")).unwrap();
+    std::fs::write(root.path().join("index.md"), "# Start\n").unwrap();
+    std::fs::write(root.path().join("references/plan.yaml"), "version: 1\n").unwrap();
+    std::fs::write(
+        root.path().join("ontology.yaml"),
+        "okf_ontology: '0.1'\nconcepts: {}\n",
+    )
+    .unwrap();
+    std::fs::write(root.path().join("guides/task.md"),
+        "---\ntype: Guide\ntitle: Task\ndescription: Test\n---\n[Home](../index.md)\n[Plan](/references/plan.yaml)\n[Ontology](../ontology.yaml)\n[Missing](../references/missing.json)\n[Missing index](../absent/index.md)\n[Missing concept](../absent.md)\n").unwrap();
+    let bundle = load_bundle(root.path()).unwrap();
+    let findings = lint_bundle(&bundle, None, &LintConfig::default());
+    let broken: Vec<_> = findings
+        .iter()
+        .filter(|f| f.rule == "broken-link")
+        .collect();
+    assert_eq!(broken.len(), 3, "{findings:?}");
+    assert!(broken
+        .iter()
+        .all(|f| f.message.contains("missing.json") || f.message.contains("/absent")));
+}
+
+#[cfg(unix)]
+#[test]
+fn lint_does_not_accept_an_artifact_symlink_outside_the_bundle() {
+    let root = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    std::fs::write(outside.path().join("secret.yaml"), "secret: value\n").unwrap();
+    std::os::unix::fs::symlink(
+        outside.path().join("secret.yaml"),
+        root.path().join("escape.yaml"),
+    )
+    .unwrap();
+    std::fs::write(
+        root.path().join("note.md"),
+        "---\ntype: Note\n---\n[Blocked](escape.yaml)\n",
+    )
+    .unwrap();
+    let bundle = load_bundle(root.path()).unwrap();
+    let findings = lint_bundle(&bundle, None, &LintConfig::default());
+    assert_eq!(count(&findings, "broken-link"), 1, "{findings:?}");
+}
+
+#[test]
 fn git_markdown_artifact_provenance_does_not_invent_document_relative_concept_edges() {
     let root = tempfile::tempdir().unwrap();
     std::fs::create_dir(root.path().join("docs")).unwrap();

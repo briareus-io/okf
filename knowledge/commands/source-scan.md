@@ -1,16 +1,12 @@
 ---
 type: Command
-title: okf source-scan
-description: Inventories every regular file in a source directory without parsing it as an OKF bundle.
 group: check
 mutates: false
-implemented_by:
-- /components/check
+title: okf source-scan
+description: Inventories every regular file in a source directory without parsing it as an OKF bundle.
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
-  fingerprint:
-    blob_sha: bab34f363d28125adac33f33fefc2c9e04329d73
 last_modified: 2026-10-04T20:39:29Z
 ---
 # okf source-scan
@@ -26,3 +22,5 @@ Maps a repository or directory for ingest workflows. Unlike [okf scan](scan.md),
 Global `--json` requests NDJSON.
 
 Output stream: `source-file`.
+
+Supported global options: `--json`.

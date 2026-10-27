@@ -1,7 +1,7 @@
 //! okf-core: deterministic OKF harness logic (the "hands").
 //!
 //! Pure library — no argv, no stdout, no `process::exit`. All effects go through
-//! [`ports`]. See ARCHITECTURE.md for the module map and rationale.
+//! [`ports`]. See knowledge/contributing/architecture/overview.md for the module map and rationale.
 #![allow(dead_code, unused)]
 
 pub mod bundle;

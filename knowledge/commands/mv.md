@@ -2,23 +2,15 @@
 type: Command
 group: mutate
 mutates: true
-implemented_by:
-- /components/mutate
 title: okf mv
 description: Moves or renames a concept and rewrites every inbound link.
 sources:
 - resource: crates/okf-cli/src/commands/mutate.rs
   kind: git-path
-  fingerprint:
-    blob_sha: 73e747e096148161676c75253cff3556a2deaff7
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
-  fingerprint:
-    blob_sha: a99f651a30e3a6ad2859066a5b8f287e73391371
 - resource: crates/okf-cli/src/cli.rs
   kind: git-path
-  fingerprint:
-    blob_sha: fad8084ae5833fd506b4e8818e62e0a2d387c2d6
 last_modified: 2026-10-04T20:39:29Z
 ---
 # okf mv
@@ -42,3 +34,7 @@ single-bundle move cannot establish that every external consumer was repaired.
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 
 Output stream: `change`.
+
+Supported global options: `--bundle-id`, `--json`.
+
+Moves rewrite inline/reference-style Markdown, self-links, declared simple/nested references, and curated index/log links within the selected bundle. File/text fingerprint sources retain bundle-root semantics; Git sources retain worktree-root semantics. Destinations must be absent. The complete write set is prevalidated and journaled for rollback. Use changeset plan/apply for coordinated moves, replacement, splits, or cleanup. Cross-bundle referrers are not rewritten.

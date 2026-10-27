@@ -1,6 +1,6 @@
 //! okf-cli: the `okf` binary. Arg parsing, output rendering, exit-code mapping.
 //!
-//! Thin layer over okf-core (the deterministic "hands"). See ARCHITECTURE.md.
+//! Thin layer over okf-core (the deterministic "hands"). See knowledge/contributing/architecture/overview.md.
 #![allow(dead_code, unused)]
 
 mod cli;

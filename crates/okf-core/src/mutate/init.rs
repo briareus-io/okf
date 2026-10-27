@@ -5,7 +5,7 @@
 //!
 //! - a root `index.md` (progressive-disclosure entry point; the spec treats `index.md` as a
 //!   reserved, non-concept file), and
-//! - an empty tool-local `ontology.yaml` (sidecar, spec-external — see INTENT.md) carrying only
+//! - an empty tool-local `ontology.yaml` (sidecar, spec-external — see knowledge/concepts/ontology-and-relationships.md) carrying only
 //!   the schema-version key so `okf ontology add` has a valid file to grow.
 //!
 //! Both are opt-in and neither is required for a conformant bundle. `init` never overwrites an

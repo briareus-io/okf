@@ -54,7 +54,7 @@ impl OkfError {
         })
     }
 
-    /// Exit class per ARCHITECTURE.md / INTENT.md.
+    /// Exit class documented in knowledge/reference/troubleshooting.md.
     pub fn exit_code(&self) -> i32 {
         match self {
             OkfError::Policy(_) => 1,

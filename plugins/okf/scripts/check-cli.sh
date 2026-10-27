@@ -5,7 +5,7 @@ plugin_root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 read -r minimum maximum < "$plugin_root/cli-compatibility.txt"
 help_install() {
   echo "Required CLI: >=$minimum, <$maximum (stable releases)." >&2
-  echo 'Installation: https://github.com/abatyuk/okf#install-a-release-no-rust-required' >&2
+  echo 'Installation: https://github.com/abatyuk/okf#install' >&2
   echo 'Download a matching GitHub release or manually run the optional standalone installer. Skills must not invoke it.' >&2
 }
 resolved=$(command -v okf || true)

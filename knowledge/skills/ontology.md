@@ -20,17 +20,10 @@ description: Manages an optional advisory ontology while keeping portable OKF fi
 sources:
 - resource: plugins/okf/skills/ontology/references/cli.md
   kind: git-path
-  fingerprint:
-    blob_sha: 5cbd028c4e97cee99a4ac6adb0137927786d4d83
 - resource: plugins/okf/skills/ontology/SKILL.md
   kind: git-path
-  fingerprint:
-    blob_sha: 3cfc90142c8eb631bff7bdb13303eab9cb6b2110
-- resource: https://github.com/abatyuk/okf/blob/5cf5e6773e137d30f61d21e6a680aec0f8478448/plugins/okf/skills/ontology/SKILL.md
 - resource: plugins/okf/skills/ontology/references/structured-authoring.md
   kind: git-path
-  fingerprint:
-    blob_sha: ca5061b432fd75493a90a7ec7be73c96d74f1cdc
 last_modified: 2026-10-19T03:58:59Z
 ---
 # okf:ontology skill

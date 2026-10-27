@@ -2,23 +2,15 @@
 type: Command
 group: mutate
 mutates: true
-implemented_by:
-- /components/ontology
 title: okf ontology field-type add
 description: Adds a reusable structured field type to the ontology.
 sources:
 - resource: crates/okf-core/src/ontology/edit.rs
   kind: git-path
-  fingerprint:
-    blob_sha: 1c12da9fbbce7e4d18ce699db19fe9c4dd646416
 - resource: crates/okf-cli/src/cli.rs
   kind: git-path
-  fingerprint:
-    blob_sha: fad8084ae5833fd506b4e8818e62e0a2d387c2d6
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
-  fingerprint:
-    blob_sha: a99f651a30e3a6ad2859066a5b8f287e73391371
 last_modified: 2026-10-05T10:16:06Z
 ---
 # okf ontology field-type add
@@ -43,3 +35,7 @@ sidecar, though coordination state may be created.
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 
 Output stream: `change`.
+
+Supported global options: `--bundle-id`, `--json`.
+
+Reusable field types are ontology-wide definitions. Add/update `--from` accepts a whole definition; update replaces it completely. Inspect consumers before removal or tightening. `--dry-run` validates the proposed ontology without publishing the sidecar; coordination state may be created.

@@ -2,27 +2,17 @@
 type: Command
 group: check
 mutates: false
-implemented_by:
-- /components/check
 title: okf stale
 description: Detects extension fingerprint drift and lifecycle expiry using offset-aware, inclusive stale_after comparison.
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
-  fingerprint:
-    blob_sha: a99f651a30e3a6ad2859066a5b8f287e73391371
 - resource: crates/okf-cli/src/cli.rs
   kind: git-path
-  fingerprint:
-    blob_sha: fad8084ae5833fd506b4e8818e62e0a2d387c2d6
 - resource: crates/okf-cli/src/commands/check.rs
   kind: git-path
-  fingerprint:
-    blob_sha: 3a0c6b86996b70113dba53ddf52c81b7aac433cf
 - resource: crates/okf-core/src/check/stale.rs
   kind: git-path
-  fingerprint:
-    blob_sha: b8f20b40cee8ce839c7acd73c40e32b698844a41
 last_modified: 2026-10-04T20:39:29Z
 ---
 # okf stale
@@ -49,3 +39,7 @@ do not change OKF document conformance.
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 
 Output stream: `drift`.
+
+Supported global options: `--bundle-id`, `--json`.
+
+Sources with fingerprint kinds but no recorded fingerprint are reported as `unrecorded`; unreadable sources are reported even without a baseline. Standard sources without a fingerprint kind are provenance only. Use `--fail-on any` for a failing exit status when findings exist. `validate` checks conformance, not source health.

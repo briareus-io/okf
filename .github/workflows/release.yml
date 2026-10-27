@@ -28,6 +28,7 @@ jobs:
       - run: cargo test --workspace --locked
       - run: cargo test --workspace --locked --features okf-cli/url-sources
       - run: cargo xtask skills
+      - run: python3 scripts/check-docs.py
       - name: Plan release
         id: release
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'

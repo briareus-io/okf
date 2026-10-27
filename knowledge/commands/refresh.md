@@ -2,27 +2,17 @@
 type: Command
 group: mutate
 mutates: true
-implemented_by:
-- /components/mutate
 title: okf refresh
 description: Re-records source fingerprints after a change has been acknowledged, clearing the drift that stale would report.
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
-  fingerprint:
-    blob_sha: a99f651a30e3a6ad2859066a5b8f287e73391371
 - resource: crates/okf-cli/src/cli.rs
   kind: git-path
-  fingerprint:
-    blob_sha: fad8084ae5833fd506b4e8818e62e0a2d387c2d6
 - resource: crates/okf-cli/src/commands/mutate.rs
   kind: git-path
-  fingerprint:
-    blob_sha: 73e747e096148161676c75253cff3556a2deaff7
 - resource: crates/okf-core/src/mutate/refresh.rs
   kind: git-path
-  fingerprint:
-    blob_sha: 7046e2f8c2e77da8fdd832eb1ee5b1eb4c3098df
 last_modified: 2026-10-04T20:39:29Z
 ---
 # okf refresh
@@ -47,3 +37,7 @@ refresh remains separate from document verification.
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 
 Output stream: `change`.
+
+Supported global options: `--bundle-id`, `--json`.
+
+Refresh updates supported source fingerprints across the concept, not content or standard source modification dates. Review those sources against the final content first, whether or not the content needed rewriting. JSON reports `updated`/`unchanged` counts and `skipped` entries with reasons. Missing, unavailable, unsupported, or malformed required sources block the entire refresh before publication. `--fail-on skipped` rejects provenance-only skips before publication as well. Report unresolved sources instead of treating refresh as proof of complete synchronization.

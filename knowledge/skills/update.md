@@ -21,17 +21,10 @@ description: Separately triages lifecycle expiry, standard source evidence, fing
 sources:
 - resource: plugins/okf/skills/update/references/cli.md
   kind: git-path
-  fingerprint:
-    blob_sha: 36a13edd125265863bb477e613aedd75713f04af
 - resource: plugins/okf/skills/update/SKILL.md
   kind: git-path
-  fingerprint:
-    blob_sha: 8cc677b94e18947e30c18d2621a87b9594471f99
-- resource: https://github.com/abatyuk/okf/blob/main/plugins/okf/skills/update/SKILL.md
 - resource: plugins/okf/skills/ontology/references/structured-authoring.md
   kind: git-path
-  fingerprint:
-    blob_sha: ca5061b432fd75493a90a7ec7be73c96d74f1cdc
 last_modified: 2026-10-19T03:58:59Z
 ---
 # okf:update skill

@@ -1,24 +1,16 @@
 ---
 type: Command
-title: okf search
-description: Searches concepts by type, tag, free text, and/or frontmatter field, returning matching concept records.
 group: query
 mutates: false
-implemented_by:
-- /components/query
+title: okf search
+description: Searches concepts by type, tag, free text, and/or frontmatter field, returning matching concept records.
 sources:
 - resource: crates/okf-cli/src/commands/query.rs
   kind: git-path
-  fingerprint:
-    blob_sha: c9b643257e90f1e3e225cb4613be98f08f6abd02
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
-  fingerprint:
-    blob_sha: 126dddfab3fb8caa78cfd61396db89dbcc324a33
 - resource: crates/okf-cli/src/cli.rs
   kind: git-path
-  fingerprint:
-    blob_sha: 28db6285f18a0400ab4b08c79c46322e58c2d833
 last_modified: 2026-10-04T20:39:29Z
 ---
 # okf search
@@ -91,3 +83,7 @@ qualified target identities. Explicit scope bounds available targets and result 
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 
 Output stream: `concept,concept-identity,scope,projection,query-summary,facet,facet-excluded,relationship,related-concept,expansion-summary,warning`.
+
+Supported global options: `--bundle-id`, `--catalog-scope`, `--json`, `--revision`, `--scope-bundle`.
+
+The positional argument is the bundle, never query text. Text requires `--text`; structured filters work without it. No filters means inventory. Text-search JSON adds `search.score` and bounded `search.matches` to metadata records, not full bodies. Structured-only search has no text-match evidence. `--in title,description` narrows the default fields; adding `frontmatter` broadens them. Empty results exit successfully and establish only that this query found no matches. Check query-summary and warning records: incomplete scans cannot establish absence, exact totals, or globally ordered pages. --limit does not reduce scan work; offset requests rescan without shared query caches. Separate nested filters may match different list records; inspect concrete occurrences before attributing their combined conditions to one relationship. Expansion completeness and facet truncation are independent of primary scan completeness.

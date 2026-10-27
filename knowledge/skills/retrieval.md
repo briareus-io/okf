@@ -19,13 +19,8 @@ description: Answers from a bundle through progressive disclosure, source lineag
 sources:
 - resource: plugins/okf/skills/retrieval/references/cli.md
   kind: git-path
-  fingerprint:
-    blob_sha: 0bd279d6153f35dcb9e5d9233944cf90aec35df4
 - resource: plugins/okf/skills/retrieval/SKILL.md
   kind: git-path
-  fingerprint:
-    blob_sha: 351c649a32f4ab94dfaca81463c0e4da05f13886
-- resource: https://github.com/abatyuk/okf/blob/main/plugins/okf/skills/retrieval/SKILL.md
 last_modified: 2026-10-19T03:58:59Z
 ---
 # okf:retrieval skill

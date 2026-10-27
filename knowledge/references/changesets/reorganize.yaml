@@ -1,0 +1,10 @@
+version: 1
+operations:
+  - op: move
+    from: plans/current
+    to: plans/revised
+  - op: retarget
+    from: plans/obsolete
+    to: plans/revised
+  - op: remove
+    path: plans/obsolete.md

@@ -1,7 +1,7 @@
 //! Ontology model types: [`Ontology`], [`ConceptType`], [`Field`], [`FieldTypeDef`],
 //! [`FieldType`], [`ReferenceRule`], [`Cardinality`].
 //!
-//! These mirror the `ontology.yaml` shape drafted in INTENT.md. All types are serde
+//! These model the optional local `ontology.yaml` sidecar. All types are serde
 //! (de)serializable and preserve unknown keys via a flattened `extra` map. The ontology writer
 //! restores comments after serialization.
 use std::fmt;

@@ -1,7 +1,7 @@
 //! Source fingerprinting, dispatched on `SourceKind`.
 //!
 //! [`Engine`] wires the effect ports (fs / git / net) and a base directory, and computes the
-//! *current* fingerprint for a source per ARCHITECTURE.md's canonicalization rules. Compare
+//! *current* fingerprint for a source using the rules in [`canonicalize`]. Compare
 //! it against a source's recorded [`Fingerprint`] to detect drift (the `stale` wave).
 pub mod canonicalize;
 pub mod git;
