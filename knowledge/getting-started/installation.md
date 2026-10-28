@@ -9,7 +9,7 @@ description: Install a release, verify its checksum, and check CLI/plugin compat
 **BREAKING CHANGE in CLI 0.5.0:** command input, machine output, diagnostics, and
 write behavior change. Read the [0.5.0 migration guide](../reference/migrations/0.5.0.md)
 and [release notes](https://github.com/abatyuk/okf/releases/tag/v0.5.0) before updating a 0.4.x installation or
-automation. The OKF document specification remains v0.2. Install the 0.5.1
+automation. The OKF document specification remains v0.2. Install the 0.5.2
 plugin and CLI together; the plugin accepts stable CLI versions `>=0.5.0, <0.6.0`.
 
 Download the archive for your platform from [GitHub Releases](https://github.com/abatyuk/okf/releases):
@@ -28,13 +28,13 @@ okf version
 ```
 
 Alternatively, download the standalone installer from a **published release**, inspect it,
-then run it with an explicit version. This example installs or updates to 0.5.1:
+then run it with an explicit version. This example installs or updates to 0.5.2:
 
 ```sh
 curl --fail --location --proto '=https' --proto-redir '=https' \
-  https://github.com/abatyuk/okf/releases/download/v0.5.1/install.sh -o install.sh
+  https://github.com/abatyuk/okf/releases/download/v0.5.2/install.sh -o install.sh
 # Review install.sh before running it.
-sh install.sh 0.5.1
+sh install.sh 0.5.2
 ```
 
 The optional installer detects your platform, verifies the archive checksum, checks that the

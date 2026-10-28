@@ -12,6 +12,8 @@ sources:
 A standard source entry needs `resource`. Optional IDs connect claim footnotes to specific
 sources. Attribution records where information came from; it does not prove that the claim
 is correct or that the source is still available.
+For claim attribution, define the Markdown footnote and use its label as `sources[].id`.
+The check ignores footnote-like text in code and references without a definition.
 
 The CLI adds optional `kind` and `fingerprint` extensions for change detection. Repository
 `git-path` and `git-commit` resources resolve from the Git worktree root. `file`, `line-range`,

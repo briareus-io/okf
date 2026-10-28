@@ -2,6 +2,7 @@
 
 use std::collections::HashSet;
 
+use pulldown_cmark::{Event, Options, Parser, Tag};
 use regex::Regex;
 use serde_yaml::Value;
 
@@ -15,7 +16,6 @@ pub fn run(ctx: &RuleContext) -> Vec<Finding> {
         return Vec::new();
     };
     let mut out = Vec::new();
-    let footnote = Regex::new(r"\[\^([^\]]+)\]").unwrap();
     for concept in &ctx.bundle.concepts {
         let fm = &concept.frontmatter;
         let mut add = |message: String| {
@@ -130,9 +130,8 @@ pub fn run(ctx: &RuleContext) -> Vec<Finding> {
         } else if any_usage_count {
             add("usage_count should be framed by a shared or per-source usage_window".to_string());
         }
-        for capture in footnote.captures_iter(&concept.body) {
-            let id = capture.get(1).unwrap().as_str();
-            if !source_ids.contains(id) {
+        for id in defined_footnote_references(&concept.body) {
+            if !source_ids.contains(&id) {
                 add(format!("footnote [^{id}] has no matching sources[].id"));
             }
         }
@@ -144,6 +143,30 @@ pub fn run(ctx: &RuleContext) -> Vec<Finding> {
         }
     }
     out
+}
+
+/// Only defined Markdown footnotes can attribute a claim. Parser events exclude code spans
+/// and blocks; collecting labels first also avoids reporting the same missing source twice.
+fn defined_footnote_references(body: &str) -> Vec<String> {
+    let parser = Parser::new_ext(body, Options::ENABLE_FOOTNOTES);
+    let mut definitions = HashSet::new();
+    let mut references = Vec::new();
+    let mut seen = HashSet::new();
+    for event in parser {
+        match event {
+            Event::Start(Tag::FootnoteDefinition(label)) => {
+                definitions.insert(label.to_string());
+            }
+            Event::FootnoteReference(label) if seen.insert(label.to_string()) => {
+                references.push(label.to_string());
+            }
+            _ => {}
+        }
+    }
+    references
+        .into_iter()
+        .filter(|label| definitions.contains(label))
+        .collect()
 }
 
 /// Shared structural checks for an exact Attested Computation contract.
@@ -282,4 +305,24 @@ pub(crate) fn computation_fences(body: &str) -> (usize, bool) {
         }
     }
     (count, has_content)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::defined_footnote_references;
+
+    #[test]
+    fn only_defined_markdown_references_are_source_attributions() {
+        let body = "plain [^x] and /job/[^/]+/batch\n\n\
+                    inline `from (x)+src/[^']*`\n\n\
+                    ```\ngrep \"[^s]\"\n```\n\n\
+                    claim[^proof] and another[^proof]\n\n\
+                    [^proof]: Evidence.\n";
+        assert_eq!(defined_footnote_references(body), vec!["proof"]);
+    }
+
+    #[test]
+    fn definition_without_reference_is_not_an_attribution() {
+        assert!(defined_footnote_references("[^unused]: Evidence.\n").is_empty());
+    }
 }

@@ -70,6 +70,35 @@ fn section_5_optional_family_errors_are_lint_only() {
 }
 
 #[test]
+fn defined_footnotes_join_sources_once_and_code_does_not() {
+    let root = bundle(&[
+        (
+            "code.md",
+            b"---\ntype: Note\n---\n# Code\n\n`[^inline]`\n\n```\n[^fenced]\n```\n\n/job/[^/]+/batch\n",
+        ),
+        (
+            "sourced.md",
+            b"---\ntype: Note\nsources:\n  - id: proof\n    resource: https://example.invalid/proof\n---\n# Sourced\n\nClaim[^proof].\n\n[^proof]: Evidence.\n",
+        ),
+        (
+            "unsourced.md",
+            b"---\ntype: Note\n---\n# Unsourced\n\nClaim[^missing] and again[^missing].\n\n[^missing]: Evidence.\n",
+        ),
+    ]);
+    let loaded = load_bundle(root.path()).unwrap();
+    let footnote_findings: Vec<_> = lint_bundle(&loaded, None, &LintConfig::default())
+        .into_iter()
+        .filter(|finding| finding.message.starts_with("footnote "))
+        .collect();
+    assert_eq!(footnote_findings.len(), 1);
+    assert_eq!(footnote_findings[0].concept.as_deref(), Some("/unsourced"));
+    assert_eq!(
+        footnote_findings[0].message,
+        "footnote [^missing] has no matching sources[].id"
+    );
+}
+
+#[test]
 fn section_5_bare_verified_mapping_is_normalized() {
     let root = bundle(&[(
         "a.md",

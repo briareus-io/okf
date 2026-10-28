@@ -2,14 +2,14 @@
 # Standalone installer: no Rust, Python, GitHub CLI, or existing okf required.
 set -eu
 fail() { echo "okf installer: $*" >&2; exit 1; }
-usage() { echo 'Usage: sh install.sh VERSION [INSTALL_DIRECTORY]'; echo 'Example: sh install.sh 0.5.1 "$HOME/.local/bin"'; }
+usage() { echo 'Usage: sh install.sh VERSION [INSTALL_DIRECTORY]'; echo 'Example: sh install.sh 0.5.2 "$HOME/.local/bin"'; }
 [ "${1:-}" != '--help' ] || { usage; exit 0; }
 [ "$#" -ge 1 ] && [ "$#" -le 2 ] || { usage >&2; exit 2; }
 version=${1#v}
-printf '%s\n' "$version" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' || fail 'Use a stable version such as 0.5.1.'
+printf '%s\n' "$version" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' || fail 'Use a stable version such as 0.5.2.'
 case "$version" in
   0.5.*)
-    echo 'BREAKING CHANGE: OKF CLI 0.5 changes command input, NDJSON completion, diagnostics, and write behavior. Review https://github.com/abatyuk/okf/blob/v0.5.0/docs/0.5.0-migration.md before installing.' >&2
+    echo 'BREAKING CHANGE: OKF CLI 0.5 changes command input, NDJSON completion, diagnostics, and write behavior. Review https://github.com/abatyuk/okf/blob/v0.5.2/knowledge/reference/migrations/0.5.0.md before installing.' >&2
     ;;
 esac
 destination=${2:-"$HOME/.local/bin"}

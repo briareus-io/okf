@@ -13,15 +13,15 @@ to query its real relationships, inspect artifacts, and trace source impact.
 
 **Breaking change in CLI 0.5.0:** read the [migration guide](knowledge/reference/migrations/0.5.0.md)
 before updating a 0.4.x installation or automation. Install CLI and plugin together;
-the 0.5.1 plugin supports stable CLI versions `>=0.5.0, <0.6.0`. The document format remains OKF v0.2.
+the 0.5.2 plugin supports stable CLI versions `>=0.5.0, <0.6.0`. The document format remains OKF v0.2.
 
 Download the installer from the published release, inspect it, then run it:
 
 ```sh
 curl --fail --location --proto '=https' --proto-redir '=https' \
-  https://github.com/abatyuk/okf/releases/download/v0.5.1/install.sh -o install.sh
+  https://github.com/abatyuk/okf/releases/download/v0.5.2/install.sh -o install.sh
 # Review install.sh before running it.
-sh install.sh 0.5.1
+sh install.sh 0.5.2
 export PATH="$HOME/.local/bin:$PATH"
 okf version
 ```
