@@ -8,11 +8,11 @@ description: Install a release, verify its checksum, and check CLI/plugin compat
 
 **BREAKING CHANGE in CLI 0.5.0:** command input, machine output, diagnostics, and
 write behavior change. Read the [0.5.0 migration guide](../reference/migrations/0.5.0.md)
-and [release notes](https://github.com/abatyuk/okf/releases/tag/v0.5.0) before updating a 0.4.x installation or
+and [release notes](https://github.com/briareus-io/okf/releases/tag/v0.5.0) before updating a 0.4.x installation or
 automation. The OKF document specification remains v0.2. Install the 0.5.2
 plugin and CLI together; the plugin accepts stable CLI versions `>=0.5.0, <0.6.0`.
 
-Download the archive for your platform from [GitHub Releases](https://github.com/abatyuk/okf/releases):
+Download the archive for your platform from [GitHub Releases](https://github.com/briareus-io/okf/releases):
 macOS Apple Silicon (`aarch64-apple-darwin`), macOS Intel (`x86_64-apple-darwin`),
 Linux ARM64 (`aarch64-unknown-linux-musl`), or Linux Intel/AMD (`x86_64-unknown-linux-musl`).
 Download `SHA256SUMS` from the same release and compare the archive's SHA-256 using
@@ -32,7 +32,7 @@ then run it with an explicit version. This example installs or updates to 0.5.2:
 
 ```sh
 curl --fail --location --proto '=https' --proto-redir '=https' \
-  https://github.com/abatyuk/okf/releases/download/v0.5.2/install.sh -o install.sh
+  https://github.com/briareus-io/okf/releases/download/v0.5.2/install.sh -o install.sh
 # Review install.sh before running it.
 sh install.sh 0.5.2
 ```

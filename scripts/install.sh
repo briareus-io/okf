@@ -9,7 +9,7 @@ version=${1#v}
 printf '%s\n' "$version" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' || fail 'Use a stable version such as 0.5.2.'
 case "$version" in
   0.5.*)
-    echo 'BREAKING CHANGE: OKF CLI 0.5 changes command input, NDJSON completion, diagnostics, and write behavior. Review https://github.com/abatyuk/okf/blob/v0.5.2/knowledge/reference/migrations/0.5.0.md before installing.' >&2
+    echo 'BREAKING CHANGE: OKF CLI 0.5 changes command input, NDJSON completion, diagnostics, and write behavior. Review https://github.com/briareus-io/okf/blob/v0.5.2/knowledge/reference/migrations/0.5.0.md before installing.' >&2
     ;;
 esac
 destination=${2:-"$HOME/.local/bin"}
@@ -32,7 +32,7 @@ trap 'rm -rf "$work"; if [ -n "$staged" ]; then rm -f "$staged"; fi' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 asset="okf-$version-$target.tar.gz"
-base="https://github.com/abatyuk/okf/releases/download/v$version"
+base="https://github.com/briareus-io/okf/releases/download/v$version"
 for name in "$asset" SHA256SUMS; do
   curl --fail --location --silent --show-error --proto '=https' --proto-redir '=https' \
     "$base/$name" -o "$work/$name"

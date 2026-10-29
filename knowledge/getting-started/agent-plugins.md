@@ -19,7 +19,7 @@ lives in `plugins/okf/.claude-plugin/plugin.json`. Claude auto-discovers the pac
 Install:
 
 ```text
-/plugin marketplace add abatyuk/okf   # this repo on GitHub, or a full git URL / local path
+/plugin marketplace add briareus-io/okf   # this repo on GitHub, or a full git URL / local path
 /plugin install okf
 ```
 
@@ -32,7 +32,7 @@ Claude Code.
 Install this repository as a marketplace, then install the plugin:
 
 ```sh
-codex plugin marketplace add abatyuk/okf   # or a full Git URL / local path
+codex plugin marketplace add briareus-io/okf   # or a full Git URL / local path
 codex plugin add okf@okf-marketplace
 ```
 

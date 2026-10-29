@@ -19,7 +19,7 @@ Download the installer from the published release, inspect it, then run it:
 
 ```sh
 curl --fail --location --proto '=https' --proto-redir '=https' \
-  https://github.com/abatyuk/okf/releases/download/v0.5.2/install.sh -o install.sh
+  https://github.com/briareus-io/okf/releases/download/v0.5.2/install.sh -o install.sh
 # Review install.sh before running it.
 sh install.sh 0.5.2
 export PATH="$HOME/.local/bin:$PATH"
