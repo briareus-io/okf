@@ -10,6 +10,11 @@ Status: implemented local capability. The design below records the capability co
 its deliberate limits; the implemented CLI interface is recorded at the end. Configuration
 and output are discoverable through `okf schema` and the generated CLI reference.
 
+This document defines the local catalog foundation. [Bundle manifests](bundle-manifest.md) define
+portable settings and current catalog discovery; [remote bundles](remote-bundles.md) extend it with
+Git acquisition, accepted locks, managed snapshots, and logical authored references. The legacy
+TOML examples below remain compatibility examples, not the preferred configuration for new bundles.
+
 ## Motivation
 
 Knowledge often spans several domains with different owners and update cycles. A product
@@ -33,7 +38,8 @@ for resolving and inspecting them.
 The CLI will work with several independent OKF bundles through one local catalog. Bundles
 may be sibling directories in the same repository, directories in separate existing
 checkouts, or directories outside Git. Users or other tools make those files available;
-the CLI does not acquire them from remote locations.
+directory registration itself does not acquire remote content. Git acquisition is a separate
+explicit catalog lifecycle operation defined by the remote extension.
 
 The capability adds:
 
@@ -132,25 +138,28 @@ bundles:
 
 The catalog path is resolved relative to its configuration file. Bundle paths are relative
 to the catalog file, not the command's working directory. The catalog may live outside Git.
-Initial location support is local directories, including existing checkouts; it does not
-introduce a remote Git or web acquisition schema.
+The version-1 catalog foundation supports local directories, including existing checkouts.
+Version-2 Git locations and acquisition are defined by the remote dependency design; web/archive
+acquisition remains outside these capabilities.
 
-The default selector is explicitly typed: `default_bundle = { id = "acme.product" }`
+In legacy TOML configuration, the default selector is explicitly typed: `default_bundle = { id = "acme.product" }`
 selects a catalog ID, while `default_bundle = { path = "knowledge" }` selects a directory.
 Exactly one of `id` and `path` is permitted. Default paths resolve relative to `okf.toml`.
 The current `bundle` setting becomes a deprecated path-only compatibility alias;
 `bundle = "knowledge"` retains that meaning even when a catalog is added. If both settings
 are present, accept only equivalent path selectors and otherwise report a configuration
 error. Equal strings in an ID selector and a path selector do not establish equivalence.
-New configurations and documentation use the typed `default_bundle`; exact syntax is
-provisional, but selectors must not infer identity from directory spelling.
+New configuration uses the catalog's `default_bundle` ID and bundle manifests as specified in the
+manifest design. Neither representation infers identity from directory spelling.
 
 Machine-local overrides can map a stable ID to a different local checkout, with explicit
 precedence and effective-location reporting. They cannot silently replace a requested
-snapshot. The override storage format is an implementation detail still to be specified.
+snapshot. Override files use `bundles: {<registered-id>: <local-path>}`, with paths relative to the
+override file and effective locations reported by catalog inspection.
 
-No `okf-bundle.yaml`, workspace lockfile, or remote-cache/TTL configuration is introduced.
-`ontology.yaml` remains optional and is not used as a bundle marker.
+Local catalog registration does not require a manifest, lockfile, or managed cache. Optional
+manifests and dependency locks are defined by their companion designs; they do not make directory
+registrations remote dependencies. `ontology.yaml` remains optional and is not a bundle marker.
 
 ### Bundle selection and discovery
 
@@ -316,21 +325,23 @@ version. Ordinary working-tree reads do not promise an atomic snapshot across fi
 
 ### Deferred functionality
 
-- Remote Git clone/fetch/pull, remote branch checks, and automatic checkout updates.
 - Web-bundle acquisition, HTTP archives, publication manifests, and new web authentication.
-- Tool-managed remote caches, TTL settings, and force-refresh controls. Visibly labeled
-  cached fallback is a future fetching policy, not an initial cache subsystem.
+- Automatic branch-following reads, TTL refresh, and implicit acceptance of cached alternatives.
+  Explicit Git acquisition, immutable caches, reviewed lock updates, and cache recovery belong to
+  the [remote dependency extension](remote-bundles.md).
 - Catalog imports, implicit catalog merging, and a bundle identity sidecar.
-- Cross-bundle computation resources, executors, attesters, and general artifact resolution.
+- Cross-bundle computation execution, executors, and attesters. Scoped logical artifact reads are
+  supported by the remote/reference extension; reading an artifact does not execute it.
 - Automatic cross-bundle rename/update orchestration. Skills may coordinate multiple CLI
   calls and review a combined repository diff.
 - Self-contained export, dependency mirroring, and managed catalog/publication adapters.
 
 ### Deliberate limits
 
-- No nested bundle roots, alias layer, central ID authority, or workspace lockfiles.
-- No guarantee that local content is the latest remote content. Default reads use what is
-  available locally; users or other tools maintain checkouts.
+- No nested bundle roots, alias layer, or central ID authority. Dependency lockfiles are defined
+  by the remote extension; they do not make mutable directory registrations immutable.
+- No guarantee that local content is the latest remote content. Directory reads use available
+  local content; managed Git reads use accepted locked revisions until explicitly updated.
 - No guarantee that all requested snapshots are available or provable. Digests are optional,
   and a labeled candidate is not evidence that the requested snapshot was retrieved.
 - No guarantee of standalone distribution after separating bundles that use relative links.

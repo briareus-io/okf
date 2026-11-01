@@ -28,4 +28,4 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `change`.
 
-Supported global options: `--bundle-id`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--guidance`, `--json`.

@@ -60,7 +60,7 @@ fn main() {
         }
         Some("install") => {
             eprintln!(
-                "BREAKING CHANGE: OKF CLI 0.5 changes command input, NDJSON completion, diagnostics, and write behavior. Review releases/0.5.0.md and knowledge/reference/migrations/0.5.0.md before installing."
+                "OKF CLI/plugin 0.6 adds manifest context and managed dependencies. Review releases/0.6.0.md and knowledge/reference/migrations/0.6.0.md before installing."
             );
             if local_signing::enabled() {
                 let install_root = local_signing::install_root(&root);
@@ -442,7 +442,7 @@ fn cli_reference(header: &Value, commands: &[&Value], skill: Option<&str>) -> St
          Exit codes: 0 means success under the selected failure threshold, not necessarily no \
          findings; 1 means findings or an unsuccessful resolution; 2 means usage errors; \
          3 means environment/I/O/YAML errors; 4 means an internal error. Inspect findings even with \
-         `--fail-on never`. NDJSON is one record per line, not a JSON array. In CLI 0.5, \
+         `--fail-on never`. NDJSON is one record per line, not a JSON array. In CLI 0.6, \
          JSON operations begin with `operation-start` and normally end with `operation-complete`; \
          require the terminal record and check the actual exit before accepting a complete result. \
          A successful bounded read may still report partial examination or matching. Preview and \
@@ -453,10 +453,10 @@ fn cli_reference(header: &Value, commands: &[&Value], skill: Option<&str>) -> St
     out.push_str(&args_table(
         &serde_json::json!({"args": header["global_args"]}),
     ));
-    out.push_str("\n\nScope defaults to the selected bundle. Use scope options only for graph, links, backlinks, \
-        resolve, affected, lint, search, and list; other commands reject additional scope. \
-        `--revision` supports graph, links, backlinks, resolve, affected, search, and list. Scope and \
-        effective settings are interpretation context, not authored concept metadata.\n\n");
+    out.push_str("\n\nScope defaults to the selected bundle. Each command advertises its supported scope, snapshot, \
+        catalog, and guidance options below; unsupported options are errors. Catalog registration does \
+        not authorize traversal. Explicit historical inspection never acquires objects or accepts a new lock. \
+        Scope and effective settings are interpretation context, not authored concept metadata.\n\n");
     if let Some(contracts) = header["output_records"].as_object() {
         let streams: std::collections::BTreeSet<&str> = commands
             .iter()
@@ -546,6 +546,19 @@ fn cli_reference(header: &Value, commands: &[&Value], skill: Option<&str>) -> St
 /// observable behavior that cannot be inferred from the argument table.
 fn command_guidance(name: &str) -> &'static str {
     match name {
+        "bundle context" => "Load global task context before source access, then full applicable command guidance before acting. \
+            Context includes effective settings and origins, instruction content/completeness, and an effective digest including loaded instruction files. \
+            --all and historical context are inspection, not workflow activation. Missing required instructions block dependent agent work. \
+            Incidental guidance output does not replace pre-action loading.",
+        "bundle validate" => "Validate the optional manifest's structure and supported schema without treating prose instructions as executable checks. \
+            Manifest validation is distinct from core concept conformance and bundle-profile knowledge validation.",
+        "bundle resource list" | "bundle resource show" => "Support files are excluded from ordinary knowledge discovery. \
+            Explicit inspection is bounded, preserves containment, and never executes scripts or treats support Markdown as concepts.",
+        "catalog sync" => "Materialize exact accepted revisions only; a missing lock does not authorize resolving a moving branch. \
+            --check is offline and cannot prove upstream reachability. Sync does not refresh fingerprints or execute upstream procedures.",
+        "catalog update" => "Planning obtains and reports an exact candidate without accepting it. Apply rechecks plan inputs and accepts that reviewed commit \
+            without re-resolving the upstream ref. Dependency update scope and consumer impact scope are distinct. \
+            Incomplete-impact acceptance never overrides compatibility, integrity, or stale-input failures.",
         "changeset plan" | "changeset apply" => "Supply a version 1 YAML/JSON document with an ordered `operations` list. \
             Supported operations: `create`/`replace` with `path` and complete Markdown `content`; \
             `edit` with `concept`, optional frontmatter RFC 6902 `patch` and optional `body`; \
@@ -614,8 +627,8 @@ fn command_guidance(name: &str) -> &'static str {
         "lint" => "For sources with a fingerprint kind, `source-unrecorded` warns when no baseline exists. \
             `source-missing` errors when file, line-range, or markdown-heading sources cannot be \
             fingerprinted, even without a baseline. Lint does not fetch URLs or inspect Git sources. \
-            Configure `source_unrecorded = \"off\"` (or `info`, `warn`, `error`; default `warn`) in \
-            `[bundle_settings.default.lint]` in `okf.toml`, or `[bundle_settings.\"<id>\".lint]` for a named bundle. \
+            Configure `source_unrecorded: off` (or `info`, `warn`, `error`; default `warn`) under \
+            `settings.lint` in `okf-bundle.yaml`. Legacy TOML bundle settings remain compatibility input. \
             Disabling this rule leaves `source-missing` and `stale` checks active. \
             All lint settings accept `off`, `info`, `warn`, or `error`. Defaults: `broken_link` \
             and `source_missing` are `error`; `missing_title`, `spec_v02` (finding rule `okf-v02`), \
@@ -628,7 +641,7 @@ fn command_guidance(name: &str) -> &'static str {
         "artifact resolve" => "**Path namespaces:** a leading `/` means bundle-root-relative, not an \
             operating-system absolute path. Other local paths resolve against the declaring concept's \
             directory when `--from` is supplied, otherwise the bundle root. Keep `--from` on the \
-            subsequent read too. JSON uses `artifact_kind` (concept, artifact, reserved, external, \
+            subsequent read too. JSON uses `artifact_kind` (concept, artifact, reserved, support, external, \
             scope, missing, or blocked), `path`, `exists`, `size`, and `message`. Missing/blocked \
             resolution exits 1. A scope descriptor is provenance, not a missing file.\n\n\
             **Repository sources:** with repo `/work/app`, bundle `/work/app/knowledge`, and declaring \
@@ -647,7 +660,7 @@ fn command_guidance(name: &str) -> &'static str {
             output alone does not expose this flag. Use bounded line windows and a sufficient byte \
             budget for the needed range; do not infer absence from a truncated result. Use `show` \
             for concepts and this command for opaque or reserved files.\n\n\
-            Local artifact reads remain inside the canonical bundle after symlinks. For a URL, \
+            Local artifact reads remain inside the resolved target bundle and requested examination scope. For an HTTP(S) URL, \
             `--fetch` requires a network-enabled build and authorization covering that source. \
             A user request to inspect a named source can supply that authorization; no separate \
             OKF policy file is specified by this command. If unavailable, use an authorized external \
@@ -803,6 +816,11 @@ fn run_skill_checks() {
                 "{rel_path}: must state how the optional references/ convention is handled"
             ));
         }
+        if !body.contains("../../references/bundle-context.md") {
+            errors.push(format!(
+                "{rel_path}: must load the shared bundle context protocol"
+            ));
+        }
         if !body.contains("`references/cli.md`") {
             errors.push(format!(
                 "{rel_path}: must route exact CLI lookup to `references/cli.md`"
@@ -812,6 +830,25 @@ fn run_skill_checks() {
             errors.push(format!(
                 "{rel_path}: legacy full-copy okf-cli-reference.md must be removed"
             ));
+        }
+    }
+
+    if !root
+        .join("plugins/okf/references/bundle-context.md")
+        .is_file()
+    {
+        errors.push("missing shared bundle context protocol".into());
+    }
+
+    // Shared operational instructions are maintained once, but their examples must
+    // remain checked against the same runtime schema as skill entrypoints.
+    let shared = root.join("plugins/okf/references/bundle-context.md");
+    if let Ok(body) = std::fs::read_to_string(&shared) {
+        for snippet in inline_code(&body).into_iter().filter(|code| {
+            let mut words = code.split_whitespace();
+            words.next() == Some("okf") && words.next().is_some()
+        }) {
+            validate_command(&snippet, &commands, &rel(&root, &shared), &mut errors);
         }
     }
 
@@ -848,6 +885,47 @@ fn run_skill_checks() {
     }
 }
 
+/// Check teaching across explicitly linked authored resources rather than requiring
+/// the same operational prose to be copied into every skill entrypoint.
+fn linked_skill_material(path: &Path, plugin: &Path) -> String {
+    fn read(
+        path: &Path,
+        plugin: &Path,
+        seen: &mut std::collections::BTreeSet<PathBuf>,
+        out: &mut String,
+    ) {
+        let Ok(path) = path.canonicalize() else {
+            return;
+        };
+        if !path.starts_with(plugin)
+            || path.file_name().is_some_and(|n| n == "cli.md")
+            || !seen.insert(path.clone())
+        {
+            return;
+        }
+        let Ok(body) = std::fs::read_to_string(&path) else {
+            return;
+        };
+        out.push_str(&body);
+        out.push('\n');
+        for suffix in body.split("](").skip(1) {
+            let Some((target, _)) = suffix.split_once(')') else {
+                continue;
+            };
+            let target = target.split('#').next().unwrap_or("");
+            if target.ends_with(".md") && !target.contains("://") {
+                read(&path.parent().unwrap().join(target), plugin, seen, out);
+            }
+        }
+    }
+    let plugin = plugin
+        .canonicalize()
+        .unwrap_or_else(|_| plugin.to_path_buf());
+    let mut out = String::new();
+    read(path, &plugin, &mut Default::default(), &mut out);
+    out
+}
+
 fn validate_scenario_checklists(
     root: &Path,
     dirs: &[PathBuf],
@@ -879,7 +957,8 @@ fn validate_scenario_checklists(
         if expected.is_empty() {
             errors.push(format!("{name}: scenario has no expected commands"));
         }
-        let normalized_body = body.split_whitespace().collect::<Vec<_>>().join(" ");
+        let material = linked_skill_material(&path, &root.join("plugins/okf"));
+        let normalized_body = material.split_whitespace().collect::<Vec<_>>().join(" ");
         for command in expected.iter().filter_map(Value::as_str) {
             if !normalized_body.contains(command) {
                 errors.push(format!(
@@ -1145,6 +1224,45 @@ fn placeholder_name(token: &str) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scenario_material_follows_authored_links_without_using_unrelated_or_generated_manuals() {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root =
+            std::env::temp_dir().join(format!("okf-skill-material-{}-{nonce}", std::process::id()));
+        std::fs::create_dir_all(root.join("skills/demo/references")).unwrap();
+        std::fs::create_dir_all(root.join("references")).unwrap();
+        let skill = root.join("skills/demo/SKILL.md");
+        std::fs::write(
+            &skill,
+            "Read [shared](../../references/shared.md) and [CLI](references/cli.md).\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("references/shared.md"),
+            "Shared task instructions. [cycle](../skills/demo/SKILL.md)\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("skills/demo/references/cli.md"),
+            "Generated catalogue cannot teach task choice.\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("references/unlinked.md"),
+            "Unlinked instructions are not loaded.\n",
+        )
+        .unwrap();
+        let material = linked_skill_material(&skill, &root);
+        assert!(material.contains("Shared task instructions"));
+        assert!(!material.contains("Generated catalogue cannot"));
+        assert!(!material.contains("Unlinked instructions"));
+        assert_eq!(material.matches("Shared task instructions").count(), 1);
+        std::fs::remove_dir_all(root).unwrap();
+    }
     use serde_json::json;
 
     fn command(name: &str, group: &str) -> Value {

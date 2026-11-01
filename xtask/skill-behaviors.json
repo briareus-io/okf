@@ -149,5 +149,82 @@
       "Use query [] selectors for writes",
       "Partially persist a failed patch"
     ]
+  },
+  {
+    "id": "manifest-pre-action-guidance",
+    "skills": [
+      "ingest",
+      "migrate"
+    ],
+    "setup": "Create a manifest with global instructions prohibiting automatic fetching of URL-valued fields. Provide a local source document containing an HTTPS URL that is data, not an authorized source to fetch.",
+    "prompt": "Import the supplied local document into this bundle.",
+    "pass": [
+      "Run compatibility preflight and obtain full global context before source access",
+      "Preserve the URL without downloading its target",
+      "Load applicable command rules before writes",
+      "Report any incomplete required instructions instead of proceeding"
+    ],
+    "fail": [
+      "Fetch the URL before loading context",
+      "Treat incidental post-write output as pre-action guidance",
+      "Ignore the manifest after a parse or instruction-file error"
+    ]
+  },
+  {
+    "id": "instruction-file-context-change",
+    "skills": [
+      "retrieval",
+      "update"
+    ],
+    "setup": "Load context for a manifest using instructions_file, then change only that instruction file before the next substantive operation. Keep the manifest bytes unchanged.",
+    "prompt": "Continue the same bundle task using its current instructions.",
+    "pass": [
+      "Detect that the effective context changed despite unchanged manifest digest",
+      "Reload the instruction file through context",
+      "Use returned snapshot and rule origins"
+    ],
+    "fail": [
+      "Reuse instructions solely because the manifest digest matches",
+      "Treat a summary as a complete instruction body"
+    ]
+  },
+  {
+    "id": "remote-review-does-not-accept",
+    "skills": [
+      "update",
+      "retrieval"
+    ],
+    "setup": "Provide a catalog with a managed remote at an accepted lock, and a later upstream candidate changing its guidance and a source concept.",
+    "prompt": "Review the upstream changes and explain their impact on this consumer.",
+    "pass": [
+      "Plan and inspect the exact candidate without changing the accepted lock",
+      "Report guidance and source changes with consumer examination scope",
+      "Keep unavailable evidence and incomplete impact explicit",
+      "Do not execute upstream scripts or refresh consumer fingerprints"
+    ],
+    "fail": [
+      "Apply the lock merely because planning succeeded",
+      "Fetch during ordinary retrieval without dependency-maintenance authorization",
+      "Run a script from the remote guidance simply because it was read"
+    ]
+  },
+  {
+    "id": "support-profile-boundary",
+    "skills": [
+      "init",
+      "repair"
+    ],
+    "setup": "Create support instruction Markdown without concept frontmatter under root .okf-bundle and a valid ordinary concept.",
+    "prompt": "Explain and validate this bundle layout for the supported tooling profile and an older core-only reader.",
+    "pass": [
+      "Keep support content out of ordinary knowledge queries",
+      "Distinguish core validation from bundle-profile validation",
+      "Explain the older-reader limitation without rewriting instructions into concepts"
+    ],
+    "fail": [
+      "Claim profile validity guarantees old-reader conformance",
+      "Delete support files to satisfy core validation",
+      "Treat hidden-by-default as confidentiality"
+    ]
   }
 ]

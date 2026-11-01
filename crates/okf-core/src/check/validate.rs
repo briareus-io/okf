@@ -21,7 +21,7 @@ use std::path::Path;
 use pulldown_cmark::{Event, Parser, Tag};
 use serde_yaml::Value;
 
-use crate::bundle::walk::walk_markdown;
+use crate::bundle::walk::walk_files;
 use crate::error::{OkfError, Result};
 use crate::model::standard::parse_timestamp;
 use crate::parse::markdown::split_frontmatter;
@@ -261,7 +261,21 @@ fn valid_log_body(body: &str) -> std::result::Result<(), String> {
 /// Validate every `*.md` under a bundle root (reserved files included, per rule 3), collecting
 /// all nonconformant files. Unlike the bundle loader, a single unparseable file does not abort
 /// the walk — every offender is reported. Errors only on an unusable root or an I/O failure.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ValidationProfile {
+    #[default]
+    Core,
+    Bundle,
+}
+
 pub fn validate_bundle(root: &Path) -> Result<ValidateReport> {
+    validate_bundle_profile(root, ValidationProfile::Core)
+}
+
+/// The core profile preserves the physical Markdown boundary. The explicit bundle
+/// tooling profile excludes only the root support namespace, not arbitrary dotfiles.
+pub fn validate_bundle_profile(root: &Path, profile: ValidationProfile) -> Result<ValidateReport> {
     if !root.is_dir() {
         return Err(OkfError::Environment(format!(
             "bundle path is not a directory: {}",
@@ -270,7 +284,15 @@ pub fn validate_bundle(root: &Path) -> Result<ValidateReport> {
     }
 
     let mut violations = Vec::new();
-    for rel_path in walk_markdown(root)? {
+    let paths = if profile == ValidationProfile::Bundle {
+        crate::bundle::walk::walk_markdown(root)?
+    } else {
+        walk_files(root)?
+    };
+    for rel_path in paths
+        .into_iter()
+        .filter(|path| path.extension().and_then(|s| s.to_str()) == Some("md"))
+    {
         let path = root.join(&rel_path);
         let rel = rel_path.to_string_lossy().to_string();
         let bytes =
@@ -298,6 +320,40 @@ pub fn validate_bundle(root: &Path) -> Result<ValidateReport> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn profile_boundary_is_explicit_and_root_scoped() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join(".okf-bundle/references")).unwrap();
+        std::fs::write(
+            root.path().join(".okf-bundle/references/instructions.md"),
+            "Instructions",
+        )
+        .unwrap();
+        std::fs::write(root.path().join("concept.md"), "---\ntype: Note\n---\n").unwrap();
+        assert!(validate_bundle(root.path())
+            .unwrap()
+            .violations
+            .iter()
+            .all(|v| v.file == ".okf-bundle/references/instructions.md"));
+        assert!(
+            validate_bundle_profile(root.path(), ValidationProfile::Bundle)
+                .unwrap()
+                .is_conformant()
+        );
+        std::fs::create_dir_all(root.path().join("ordinary/.okf-bundle")).unwrap();
+        std::fs::write(
+            root.path().join("ordinary/.okf-bundle/note.md"),
+            "No metadata",
+        )
+        .unwrap();
+        let report = validate_bundle_profile(root.path(), ValidationProfile::Bundle).unwrap();
+        assert!(!report.violations.is_empty());
+        assert!(report
+            .violations
+            .iter()
+            .all(|v| v.file == "ordinary/.okf-bundle/note.md"));
+    }
 
     #[test]
     fn conformant_concept_has_no_violations() {

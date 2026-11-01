@@ -5,26 +5,18 @@ description: Plan and move OKF concepts while rebasing portable body links and s
 
 # Reorganize an OKF bundle
 
+## Shared operating protocol
+
+Read and follow the [shared OKF protocol](../../references/bundle-context.md) before CLI-dependent
+work. It defines compatibility checks, bundle context, scope, output evidence, validation profiles,
+and authoring conventions. Use `references/cli.md` for exact command syntax as needed.
+
 A concept id is its bundle-relative Markdown path. Use `okf mv`; it rewrites inbound body links and
 internal standard source resources. Link rebasing legitimately edits referring documents, so a
 concept diff may show add/remove or modified referrers rather than a pure native rename.
 
 Prefer `OKF_BUNDLE`. Correct explicit forms include `okf mv <old-id> <new-id> <bundle>`, `okf
-backlinks <concept-id> <bundle>`, and `okf links <concept-id> <bundle> --json`. Before using an
-unfamiliar command or flag, read its entry in `references/cli.md`. If the installed version differs
-or rejects documented syntax, use that command's `--help` output as the runtime authority.
-
-
-## CLI compatibility preflight
-
-Before CLI-dependent work, run `sh <this-skill-directory>/../../scripts/check-cli.sh`,
-resolving the path from this installed SKILL.md, not the working directory. This read-only
-check uses the plugin's `cli-compatibility.txt` range and reports the executable on PATH.
-If missing, incompatible, or unable to run, stop CLI-dependent work and show its installation
-instructions. Never invoke the installer, download a CLI, or update it from this skill.
-An explicit user request to install should be handled separately from this workflow.
-Only after this check passes may command help resolve syntax differences; help cannot waive
-compatibility. Recheck if the executable or PATH changes during the task.
+backlinks <concept-id> <bundle>`, and `okf links <concept-id> <bundle> --json`.
 
 ## Workflow
 
@@ -40,7 +32,9 @@ compatibility. Recheck if the executable or PATH changes during the task.
    it can create coordination state and must not be described as a pure filesystem read.
 2. Design and review an explicit old-id → new-id mapping. Include inbound bare relative, `./`/`../`,
    absolute bundle links, standard internal source resources, and other known path-valued fields.
-   External URLs and scope descriptors must remain unchanged.
+   Unrelated external HTTPS URLs and scope descriptors remain unchanged. Same-bundle `okf://`
+   references participate in the reviewed move mapping; snapshot-constrained provenance requires
+   explicit reconciliation rather than automatic retargeting.
 3. Preflight every destination for collisions and ensure each source exists. Order dependent moves
    so destinations are free. For swaps/cycles, use an unused temporary concept ID inside the bundle
    via `okf mv`, then complete the planned mapping. Record completed moves after each successful
@@ -49,9 +43,7 @@ compatibility. Recheck if the executable or PATH changes during the task.
 4. Treat `references/` as an optional convention: its Markdown files are concepts, while SQL,
    Python, schemas, instructions, and binaries are opaque artifacts. Do not pass opaque files to
    `okf mv`. If an artifact must move, separately review and update declaring paths/provenance.
-5. Check the installed change-set planning command's help before relying on coordinated changes.
-   If unavailable, report that transactional changes require an updated CLI; do not describe separate
-   edits as atomic. For coordinated changes, preview an explicit version 1 change document with
+5. For coordinated changes, preview an explicit version 1 change document with
    `okf changeset plan <bundle> --from @plan.yaml --json`, review every file diff, then apply the
    same document with `okf changeset apply <bundle> --from @plan.yaml --expect <base-digest>`.
    Use create, edit, move, retarget, remove, and put-artifact operations as needed; splits require
@@ -62,7 +54,7 @@ compatibility. Recheck if the executable or PATH changes during the task.
    path-only rebasing should not be described as a content rewrite or runtime execution.
 6. After each batch, compare direct outbound links and backlinks. Use `okf graph <bundle> --root
    <concept-id> --direction both --depth <N> --format mermaid` only when a wider neighborhood is
-   useful. Run `okf validate <bundle>` and advisory `okf lint <bundle> --fail-on never` against the
+   useful. Run `okf validate <bundle> --profile bundle` and advisory `okf lint <bundle> --fail-on never` against the
    baseline. Resolve artifact paths with `okf artifact resolve <resource> <bundle> --from
    <concept-id>` and distinguish missing, blocked, and scope results. Apply reviewed declaring-field
    corrections with `okf edit <concept-id> <bundle> --set "resource=<new-path>"`; consult the edit
@@ -83,22 +75,6 @@ Artifact inventory defaults to `references/`. Use `okf artifact list <bundle> --
 <directory>` for another bundle-relative directory. The positional argument selects the bundle, not
 that directory.
 
-## Bundle identity and examination scope
-
-Keep bundle paths and catalog IDs distinct. `OKF_BUNDLE` always selects a path; use the
-`--bundle-id <id>` for a registered identity. When a catalog is configured, use `okf catalog` to inspect effective local
-registrations, overrides, availability, and per-bundle settings. Catalog paths are relative to
-`okf.toml`, locations are relative to the catalog, and machine-local overrides change effective
-locations rather than accepting different snapshots. Inspect effective settings before relying on
-a per-bundle ontology or view. Equal or nested registered roots are configuration errors.
-
-Registration alone does not authorize catalog-wide traversal. Start with the selected bundle;
-request additional bundles explicitly with repeatable `--scope-bundle <id>` or deliberate
-`--catalog-scope` when the task requires them. Report requested and examined
-scope and unavailable members. Out-of-scope references remain unknown. Ordinary relative paths
-retain their meaning across registered boundaries; distributing one bundle alone can break them.
-Never infer another bundle from a matching filename or title.
-
 ## Structured and cross-bundle references
 
 Declared nested references are rewritten within the selected bundle. Automatic cross-bundle move orchestration remains unsupported.
@@ -106,17 +82,3 @@ Inspect relationship occurrence paths and all requested-scope backlinks before m
 would leave another bundle's ordinary path stale, repair the
 reviewed references explicitly and inspect the combined diff. Do not imply that a single-bundle
 move repaired unexamined consumers. Index-coverage lint is read-only; preserve curated index prose.
-
-## Frontmatter order
-
-When authoring concept frontmatter, put `type` first. For the matching ontology concept type,
-follow `fields` declaration order recursively, including nested objects and objects in lists;
-reusable field types use their resolved field order. Put reference-only keys next in reference
-declaration order. Put undeclared/custom fields last at each level, preserving their relative
-order. Without a matching ontology type, keep the other fields in their authored order.
-This is an authoring convention, not an additional OKF conformance requirement.
-CLI writes normalize this order. `okf lint <bundle>` reports `frontmatter-order` at warning by
-default; `okf lint <bundle> --fix` normalizes the bundle and reports remaining findings. The
-bundle lint setting `frontmatter_order` accepts `info`, `warn`, `error`, or `off`; an off rule
-is not fixed. Normalization preserves values, list order, body text, and verification metadata;
-YAML comments and scalar presentation may normalize.

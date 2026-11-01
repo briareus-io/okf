@@ -78,6 +78,7 @@ pub fn mv_with_ontology(
     }
 
     let bundle = load_bundle(root)?;
+    let logical_bundle = logical_bundle_id(root)?;
 
     // 1. Rewrite inbound links in each referrer, staging changed concepts.
     let mut staged: Vec<Concept> = Vec::new();
@@ -101,6 +102,13 @@ pub fn mv_with_ontology(
             (rebuilt != raw).then_some(rebuilt)
         });
         changed |= rewrite_sources(&mut concept, &old, &new);
+        changed |= rewrite_logical_references(
+            &mut concept,
+            ontology,
+            logical_bundle.as_deref(),
+            &old,
+            &new,
+        )?;
         if changed {
             rewritten.push(concept.id.clone());
             staged.push(concept);
@@ -131,6 +139,7 @@ pub fn mv_with_ontology(
         });
     }
     rewrite_sources(&mut moved, &old, &new);
+    rewrite_logical_references(&mut moved, ontology, logical_bundle.as_deref(), &old, &new)?;
     moved.id = new.clone();
 
     // Render the complete proposed state before publishing any file.
@@ -150,8 +159,10 @@ pub fn mv_with_ontology(
     }
     for (id, path, before) in structural_documents(root)? {
         let (after, changed) = rewrite_in_body(&before, &|raw| {
-            (classify(raw) != LinkKind::External && resolve_link(&id, raw) == old)
-                .then(|| rewrite_link_string(&id, raw, &new))
+            logical_rewrite(raw, logical_bundle.as_deref(), &old, &new).or_else(|| {
+                (classify(raw) != LinkKind::External && resolve_link(&id, raw) == old)
+                    .then(|| rewrite_link_string(&id, raw, &new))
+            })
         });
         if changed {
             rewritten.push(id);
@@ -239,7 +250,12 @@ where
             let Some(map) = source.as_mapping_mut() else {
                 continue;
             };
-            if !map.contains_key(Value::String("kind".into())) {
+            if !map.contains_key(Value::String("kind".into()))
+                || map
+                    .get(Value::String("kind".into()))
+                    .and_then(Value::as_str)
+                    == Some("bundle-resource")
+            {
                 if let Some(resource) = map.get_mut(Value::String("resource".into())) {
                     changed |= rewrite_in_value(resource, rewrite);
                 }
@@ -475,12 +491,15 @@ pub(crate) fn structural_documents(root: &Path) -> Result<Vec<(ConceptId, PathBu
 }
 
 pub(crate) fn structural_referrers(root: &Path, target: &ConceptId) -> Result<Vec<ConceptId>> {
+    let logical_bundle = logical_bundle_id(root)?;
     Ok(structural_documents(root)?
         .into_iter()
         .filter_map(|(id, _, body)| {
             let (_, changed) = rewrite_in_body(&body, &|raw| {
-                (classify(raw) != LinkKind::External && resolve_link(&id, raw) == *target)
-                    .then(|| raw.to_string())
+                logical_rewrite(raw, logical_bundle.as_deref(), target, target).or_else(|| {
+                    (classify(raw) != LinkKind::External && resolve_link(&id, raw) == *target)
+                        .then(|| raw.to_string())
+                })
             });
             changed.then_some(id)
         })
@@ -553,6 +572,7 @@ pub fn retarget(
     let old = ConceptId::parse(old)?;
     let new = ConceptId::parse(new)?;
     let bundle = load_bundle(root)?;
+    let logical_bundle = logical_bundle_id(root)?;
     let mut changes = Vec::new();
     let mut rewritten = Vec::new();
     for mut concept in bundle.concepts {
@@ -563,7 +583,14 @@ pub fn retarget(
         let changed = apply_rewrite(&mut concept, ontology, &|raw| {
             (classify(raw) != LinkKind::External && resolve_link(&from, raw) == old)
                 .then(|| rewrite_link_string(&from, raw, &new))
-        }) | rewrite_sources(&mut concept, &old, &new);
+        }) | rewrite_sources(&mut concept, &old, &new)
+            | rewrite_logical_references(
+                &mut concept,
+                ontology,
+                logical_bundle.as_deref(),
+                &old,
+                &new,
+            )?;
         if changed {
             let path = id_to_path(root, &concept.id)?;
             changes.push(FileChange {
@@ -593,6 +620,132 @@ pub fn retarget(
     }
     commit_locked(root, &guard, changes)?;
     Ok(rewritten)
+}
+
+pub(crate) fn logical_bundle_id(root: &Path) -> Result<Option<String>> {
+    let context = crate::bundle::context::current_context(Some(&root.to_string_lossy()), None)?;
+    if context.primary.id.is_some() {
+        return Ok(context.primary.id);
+    }
+    Ok(
+        crate::bundle::context::resolve_context(Some(&root.to_string_lossy()), None, None, root)?
+            .primary
+            .id,
+    )
+}
+
+fn logical_rewrite(
+    raw: &str,
+    bundle: Option<&str>,
+    old: &ConceptId,
+    new: &ConceptId,
+) -> Option<String> {
+    let reference = crate::model::link::LogicalReference::parse(raw)
+        .ok()
+        .flatten()?;
+    if Some(reference.bundle.as_str()) != bundle
+        || ConceptId::from_relative(
+            reference
+                .path
+                .strip_suffix(".md")
+                .unwrap_or(&reference.path),
+        ) != *old
+    {
+        return None;
+    }
+    let suffix = if reference.path.ends_with(".md") {
+        ".md"
+    } else {
+        ""
+    };
+    let fragment = reference
+        .fragment
+        .map(|f| format!("#{f}"))
+        .unwrap_or_default();
+    Some(format!(
+        "okf://{}/{}{}{}",
+        reference.bundle,
+        new.0.trim_start_matches('/'),
+        suffix,
+        fragment
+    ))
+}
+
+fn rewrite_logical_references(
+    concept: &mut Concept,
+    ontology: Option<&Ontology>,
+    bundle: Option<&str>,
+    old: &ConceptId,
+    new: &ConceptId,
+) -> Result<bool> {
+    if let Some(Value::Sequence(sources)) = concept.frontmatter.get("sources") {
+        for source in sources {
+            if let Some(raw) = source.get("resource").and_then(Value::as_str) {
+                if logical_rewrite(raw, bundle, old, new).is_some()
+                    && source
+                        .get("bundle_ref")
+                        .and_then(|v| v.get("snapshot"))
+                        .is_some()
+                {
+                    return Err(OkfError::Usage("cannot automatically rewrite a snapshot-constrained logical source; reconcile its provenance explicitly".into()));
+                }
+            }
+        }
+    }
+    let changed = apply_rewrite(concept, ontology, &|raw| {
+        logical_rewrite(raw, bundle, old, new)
+    });
+    if let Some(Value::Sequence(sources)) = concept.frontmatter.map.get_mut("sources") {
+        for source in sources {
+            let is_rewritten_logical = source
+                .get("resource")
+                .and_then(Value::as_str)
+                .and_then(|raw| {
+                    crate::model::link::LogicalReference::parse(raw)
+                        .ok()
+                        .flatten()
+                })
+                .is_some_and(|r| {
+                    Some(r.bundle.as_str()) == bundle
+                        && ConceptId::from_relative(r.path.strip_suffix(".md").unwrap_or(&r.path))
+                            == *new
+                });
+            if !is_rewritten_logical {
+                continue;
+            }
+            if let Some(declared) = source.get_mut("bundle_ref").and_then(Value::as_mapping_mut) {
+                if declared
+                    .get(Value::String("id".into()))
+                    .and_then(Value::as_str)
+                    == bundle
+                    && declared
+                        .get(Value::String("path".into()))
+                        .and_then(Value::as_str)
+                        .is_some_and(|path| {
+                            ConceptId::from_relative(path.strip_suffix(".md").unwrap_or(path))
+                                == *old
+                        })
+                {
+                    declared.insert(
+                        Value::String("path".into()),
+                        Value::String(format!("{}.md", new.0.trim_start_matches('/'))),
+                    );
+                }
+            }
+        }
+    }
+    Ok(changed)
+}
+
+pub(crate) fn logical_references_target(
+    concept: &Concept,
+    ontology: Option<&Ontology>,
+    bundle: Option<&str>,
+    target: &ConceptId,
+) -> bool {
+    crate::model::link::raw_links(concept, ontology)
+        .iter()
+        .any(|raw| logical_rewrite(raw, bundle, target, target).is_some())
 }
 
 /// Referrers from the same occurrence rules used by rewriting, including bare fields.

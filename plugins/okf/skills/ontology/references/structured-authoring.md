@@ -90,7 +90,7 @@ need not survive insertion. Use `--dry-run` to review changes, then inspect the 
 presentation can normalize, so do not claim exact formatting preservation. Meaningful concept
 edits apply the existing verification invalidation and generation timestamp behavior.
 
-After writes inspect effective definitions with `ontology show`, run `validate` and advisory
+After writes inspect effective definitions with `ontology show`, run bundle-profile validation and advisory
 `lint`, and inspect semantic edges and inverse backlinks. Successful checks establish neither
 policy compliance nor target consent. Preserve unrelated extensions and provenance; malformed
 existing YAML still needs a narrow source repair before the mutation command can load it.
@@ -189,7 +189,7 @@ Security owns the security access review.
 
 ```sh
 okf ontology show Procedure knowledge/product --json
-okf validate knowledge/product --json
+okf validate knowledge/product --profile bundle --json
 okf lint knowledge/product --fail-on never --json
 okf search knowledge/product --type Procedure --project norms --expand obligations --target-field title --full-scan --json
 okf links procedures/onboarding knowledge/product --details --json

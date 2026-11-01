@@ -20,7 +20,7 @@ fn git_root_discovery_is_cached_per_bundle_including_failures() {
     std::fs::write(root.join("knowledge/target.md"), "---\ntype: Note\n---\n").unwrap();
     for bundle in ["knowledge", "planning"] {
         for index in 0..4 {
-            std::fs::write(root.join(format!("{bundle}/n{index}.md")), "---\ntype: Note\nsources:\n- {resource: src/main.rs, kind: git-path}\n- {resource: knowledge/target.md, kind: git-path}\n- {resource: src/other.rs, kind: git-commit}\n---\n").unwrap();
+            std::fs::write(root.join(format!("{bundle}/n{index}.md")), "---\ntype: Note\nsources:\n- {resource: src/main.rs, kind: git-path}\n- {resource: knowledge/target.md, kind: git-path, bundle_ref: {id: test.notes, path: target.md}}\n- {resource: src/other.rs, kind: git-commit}\n---\n").unwrap();
         }
     }
     let shim = root.join("tools/git");

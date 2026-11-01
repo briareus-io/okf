@@ -6,11 +6,14 @@ description: Install a release, verify its checksum, and check CLI/plugin compat
 ---
 # Install OKF
 
-**BREAKING CHANGE in CLI 0.5.0:** command input, machine output, diagnostics, and
-write behavior change. Read the [0.5.0 migration guide](../reference/migrations/0.5.0.md)
-and [release notes](https://github.com/briareus-io/okf/releases/tag/v0.5.0) before updating a 0.4.x installation or
-automation. The OKF document specification remains v0.2. Install the 0.5.2
-plugin and CLI together; the plugin accepts stable CLI versions `>=0.5.0, <0.6.0`.
+The 0.6 plugin requires stable CLI versions `>=0.6.0, <0.7.0`. Read the
+[0.6 migration guide](../reference/migrations/0.6.0.md) before updating configuration or automation.
+The core OKF document specification remains v0.2; the bundle tooling profile adds support-directory
+handling. Install matching CLI/plugin versions. If the version in this checkout is not published
+yet, build it from source using the instructions below rather than installing an incompatible release.
+
+For upgrades from 0.4.x, the [0.5 migration guide](../reference/migrations/0.5.0.md) also records
+changes to input, output, diagnostics, and write behavior.
 
 Download the archive for your platform from [GitHub Releases](https://github.com/briareus-io/okf/releases):
 macOS Apple Silicon (`aarch64-apple-darwin`), macOS Intel (`x86_64-apple-darwin`),
@@ -28,13 +31,13 @@ okf version
 ```
 
 Alternatively, download the standalone installer from a **published release**, inspect it,
-then run it with an explicit version. This example installs or updates to 0.5.2:
+then run it with an explicit version. Use the release version you selected; this example targets 0.6.0 once it is published:
 
 ```sh
 curl --fail --location --proto '=https' --proto-redir '=https' \
-  https://github.com/briareus-io/okf/releases/download/v0.5.2/install.sh -o install.sh
+  https://github.com/briareus-io/okf/releases/download/v0.6.0/install.sh -o install.sh
 # Review install.sh before running it.
-sh install.sh 0.5.2
+sh install.sh 0.6.0
 ```
 
 The optional installer detects your platform, verifies the archive checksum, checks that the
@@ -47,7 +50,7 @@ on PATH can take precedence; check `command -v okf` and `okf version`.
 
 Skills **only check compatibility** and show these instructions when necessary. They never
 run the installer or update the CLI. The current plugin supports stable CLI versions
-`>=0.5.0, <0.6.0`; the OKF document specification remains v0.2.
+`>=0.6.0, <0.7.0`; the OKF document specification remains v0.2.
 
 Starting with 0.4.1, macOS release binaries are Developer ID signed and notarized by Apple.
 The standalone executable has no stapled ticket, so Gatekeeper may need internet access

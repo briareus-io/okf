@@ -28,10 +28,26 @@ does not widen examination scope. Edges preserve original references, unresolved
 optional provenance snapshot evidence; current candidates are separate from matched requests.
 Working-tree versions remain mutable rather than being labeled immutable commits.
 
+## Filtered traversal
+
+Relationship predicates and explicit manifest presets filter traversed edges before depth expansion.
+They change reachability, not merely the drawing. The requested root remains visible even when no
+edge matches. Report the effective predicate and partial examination rather than describing a
+filtered graph as the complete relationship graph. Safety and mutation dependency checks do not
+inherit these exploratory filters.
+
 ## Arguments
 
 | Argument | Type | Required | Description |
 |----------|------|----------|-------------|
+| `--kind <value>` | list<string> | no | — |
+| `--inverse-kind <value>` | list<string> | no | — |
+| `--related-type <value>` | list<string> | no | — |
+| `--rule <value>` | list<string> | no | — |
+| `--edge-filter <value>` | list<string> | no | — |
+| `--related-filter <value>` | list<string> | no | — |
+| `--preset <value>` | string | no | — |
+| `--clear-filter <value>` | list<string> | no | — |
 | `<bundle>` | positional | no | Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory) |
 | `--root <value>` | string | no | Optional concept at the neighborhood root; without one, render the entire graph |
 | `--format <value>` | string | no | Output format: mermaid (default), dot, or graphml (default: `mermaid`) |
@@ -42,4 +58,4 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `graph,scope,bundle-node,bundle-edge`.
 
-Supported global options: `--bundle-id`, `--catalog-scope`, `--json`, `--revision`, `--scope-bundle`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.

@@ -140,6 +140,7 @@ pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
 }
 
 fn atomic_write_mode(path: &Path, bytes: &[u8], create_only: bool) -> Result<()> {
+    crate::bundle::remote::ensure_writable(path)?;
     use std::io::Write;
     use std::sync::atomic::{AtomicU64, Ordering};
     static NEXT: AtomicU64 = AtomicU64::new(0);

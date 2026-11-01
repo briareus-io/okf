@@ -5,21 +5,15 @@ description: Research a repository or directory and author grounded OKF v0.2 con
 
 # Research and ingest a repository
 
+## Shared operating protocol
+
+Read and follow the [shared OKF protocol](../../references/bundle-context.md) before CLI-dependent
+work. It defines compatibility checks, bundle context, scope, output evidence, validation profiles,
+and authoring conventions. Use `references/cli.md` for exact command syntax as needed.
+
 Use `okf source-scan <directory>` when an inventory is needed, scoped to the relevant source
 directory. Use normal code-search tools on that external source, but query existing bundle content
 through the CLI and retrieve only targeted slices.
-
-
-## CLI compatibility preflight
-
-Before CLI-dependent work, run `sh <this-skill-directory>/../../scripts/check-cli.sh`,
-resolving the path from this installed SKILL.md, not the working directory. This read-only
-check uses the plugin's `cli-compatibility.txt` range and reports the executable on PATH.
-If missing, incompatible, or unable to run, stop CLI-dependent work and show its installation
-instructions. Never invoke the installer, download a CLI, or update it from this skill.
-An explicit user request to install should be handled separately from this workflow.
-Only after this check passes may command help resolve syntax differences; help cannot waive
-compatibility. Recheck if the executable or PATH changes during the task.
 
 ## CLI and output rules
 
@@ -43,8 +37,8 @@ Producer rubric:
    inventories paths and sizes, not content or secret classifications. Filter its results before
    reading/storing material; exclude secrets and irrelevant generated output.
 2. Research meaningful concepts rather than producing one concept per file. Ground every claim in
-   inspected evidence. Use an ontology only as advisory classification; unknown types remain valid
-   OKF.
+   inspected evidence. Use the ontology for local classification and honor configured write gates. Unknown types
+   can remain core-conformant; local policy may still constrain the requested write.
 3. Search the target for existing concepts using `okf search <bundle> --text "topic" --limit 10` and
    inspect plausible matches. Resolve bundle identity/scope before searching; consult each selected
    bundle's effective ontology when authoring structured fields. Check scan warnings before deciding
@@ -67,8 +61,9 @@ Producer rubric:
    [structured authoring example](../ontology/references/structured-authoring.md) and preserve
    current provenance with `--set-yaml`, object `--set-path`, or concrete `--patch` operations. Cross-bundle
    source mappings follow the init skill's [catalog example](../init/references/multi-bundle.md),
-   including separate-repository layouts. Qualified catalog IDs are CLI targets; author body and
-   custom metadata concept links as ordinary paths that match the checkout layout.
+   including separate-repository layouts. Qualified catalog IDs are CLI targets. Author body and
+   declared metadata references as ordinary paths or explicit `okf://<bundle-id>/<path>` references.
+   Logical references follow the selected catalog/lock and do not independently pin evidence.
    Use direct Markdown links for portable relationships. Ontology reference fields may add a local
    typed view but must not replace standard links or source lineage. Spot-check authored edges with
    `okf links <concept-id> <bundle> --json` so normalized targets and missing concepts are visible
@@ -77,18 +72,14 @@ Producer rubric:
    --attested --runtime <runtime>`. Read the add/computation sections of `references/cli.md` for
    parameters, inline/file forms, and contract resources. Inspect with `okf computation check
    <concept-id> <bundle>`; this does not execute or attest a run.
-7. Run `okf validate <bundle>`, advisory `okf lint <bundle> --fail-on never`, and use `okf docs
+7. Run `okf validate <bundle> --profile bundle`, advisory `okf lint <bundle> --fail-on never`, and use `okf docs
    <bundle> --format index` only when index bodies are generated or replacement is already
    authorized. It overwrites index prose throughout the bundle; preserve curated indexes otherwise.
    Validate after generating indexes.
 
-When local fingerprint tracking is enabled with a source `kind`, review its evidence and run
-`okf refresh <concept-id> <bundle> --fail-on skipped` to record the baseline. `okf stale <bundle>
---fail-on any` distinguishes `unrecorded` (no baseline), `missing` (cannot fingerprint), and
-`drifted` (changed baseline). Standard kind-less provenance is not fingerprint-checked. Inspect
-findings even when a command succeeds: stale defaults to a successful exit on findings, and
-`lint --fail-on never` is reporting only. Use `okf lint <bundle> --fail-on warn` when source warnings
-must fail a health gate; conformance validation alone does not establish source health.
+For authored sources that opt into fingerprints, review the final evidence before recording a
+baseline with `okf refresh <concept-id> <bundle> --fail-on skipped`. Interpret findings and failure
+policies using the shared source-health rules.
 
 ## Source locations
 
@@ -108,47 +99,3 @@ them. This command does not execute artifacts or grant permission to copy extern
 
 Report created/updated/skipped concepts, source evidence, validation, and any unresolved scope.
 Include optional extensions or copied artifacts only when used.
-
-## Bundle identity and examination scope
-
-Keep bundle paths and catalog IDs distinct. `OKF_BUNDLE` always selects a path; use the
-`--bundle-id <id>` for a registered identity. When a catalog is configured, use `okf catalog` to inspect effective local
-registrations, overrides, availability, and per-bundle settings. Catalog paths are relative to
-`okf.toml`, locations are relative to the catalog, and machine-local overrides change effective
-locations rather than accepting different snapshots. Inspect effective settings before relying on
-a per-bundle ontology or view. Equal or nested registered roots are configuration errors.
-
-Registration alone does not authorize catalog-wide traversal. Start with the selected bundle;
-request additional bundles explicitly with repeatable `--scope-bundle <id>` or deliberate
-`--catalog-scope` when the task requires them. Report requested and examined
-scope and unavailable members. Out-of-scope references remain unknown. Ordinary relative paths
-retain their meaning across registered boundaries; distributing one bundle alone can break them.
-Never infer another bundle from a matching filename or title.
-
-## Source baseline lint configuration
-
-`source-unrecorded` defaults to `warn`. If the user wants a different policy, configure
-`source_unrecorded = "off"`, `"info"`, `"warn"`, or `"error"` under
-`[bundle_settings.default.lint]` in `okf.toml` (or `[bundle_settings."<id>".lint]`
-for a named bundle). `off` suppresses this lint finding only; missing-source errors
-(default `error`, independently configurable via `source_missing`) and `stale` findings remain active. Do not suppress findings merely to pass a gate.
-
-All lint rule settings accept `off`, `info`, `warn`, or `error` in the same table.
-Defaults: `broken_link` and `source_missing` are `error`; `missing_title`, `spec_v02`
-(finding rule `okf-v02`), `ontology_violation`, `source_unrecorded`, and `index_coverage`
-are `warn`; `missing_description` and `orphan` are `info`. Omitted settings keep these
-severities. Turning a lint rule off does not change conformance validation or stale checks.
-
-## Frontmatter order
-
-When authoring concept frontmatter, put `type` first. For the matching ontology concept type,
-follow `fields` declaration order recursively, including nested objects and objects in lists;
-reusable field types use their resolved field order. Put reference-only keys next in reference
-declaration order. Put undeclared/custom fields last at each level, preserving their relative
-order. Without a matching ontology type, keep the other fields in their authored order.
-This is an authoring convention, not an additional OKF conformance requirement.
-CLI writes normalize this order. `okf lint <bundle>` reports `frontmatter-order` at warning by
-default; `okf lint <bundle> --fix` normalizes the bundle and reports remaining findings. The
-bundle lint setting `frontmatter_order` accepts `info`, `warn`, `error`, or `off`; an off rule
-is not fixed. Normalization preserves values, list order, body text, and verification metadata;
-YAML comments and scalar presentation may normalize.

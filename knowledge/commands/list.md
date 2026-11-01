@@ -21,10 +21,24 @@ Named views, explicit columns/projections, JSON facets, pagination, and related 
 same structured query interpretation as [search](search.md). Ordinary JSON concept records retain
 authored metadata. Unrequested catalog bundles remain outside examination scope.
 
+## Filter expanded relationships
+
+Expansion-specific options such as `--expand-kind`, `--expand-edge-filter`, and
+`--expand-related-filter` select expanded occurrences. They do not remove primary concept hits.
+Apply these predicates before expansion limits and retain separate expansion completeness evidence.
+Primary query filters and presets remain separate from expansion filtering.
+
 ## Arguments
 
 | Argument | Type | Required | Description |
 |----------|------|----------|-------------|
+| `--preset <value>` | string | no | — |
+| `--clear-filter <value>` | list<string> | no | — |
+| `--expand-kind <value>` | list<string> | no | — |
+| `--expand-inverse-kind <value>` | list<string> | no | — |
+| `--expand-related-type <value>` | list<string> | no | — |
+| `--expand-edge-filter <value>` | list<string> | no | — |
+| `--expand-related-filter <value>` | list<string> | no | — |
 | `<bundle>` | positional | no | Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory) |
 | `--type <value>` | string | no | Filter by exact concept `type` |
 | `--tag <value>` | string | no | Filter by membership in the concept's `tags` |
@@ -54,6 +68,6 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `concept,concept-identity,scope,projection,query-summary,facet,facet-excluded,relationship,related-concept,expansion-summary,warning`.
 
-Supported global options: `--bundle-id`, `--catalog-scope`, `--json`, `--revision`, `--scope-bundle`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
 
 JSON records contain frontmatter and computed lifecycle/trust metadata, not bodies. Aggregate field occurrence counts only after checking scan completeness and output warnings. The default scan budget is 1,000 eligible documents across scope; --limit bounds output, not scan work. For exhaustive inventory use a sufficient --scan-limit or deliberate --full-scan, and aggregate metadata locally rather than loading all records into context. Each offset invocation rescans; an incomplete scan has no authoritative continuation.

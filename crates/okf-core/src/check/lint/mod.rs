@@ -153,6 +153,14 @@ pub struct RuleContext<'a> {
     pub config: &'a LintConfig,
 }
 
+/// Configuration diagnostics are errors, not advisory findings. Call before resolving
+/// configurable severities, including for `--fail-on never`, so invalid configuration
+/// cannot suppress its own diagnostics.
+pub fn validate_configuration(root: &std::path::Path) -> crate::error::Result<()> {
+    crate::bundle::manifest::validate_resources(root)?;
+    Ok(())
+}
+
 /// Run every lint rule over a bundle and collect the findings. The ontology is optional —
 /// when absent, the ontology-violation rule is skipped (the rest still run). Findings are
 /// returned rule-by-rule in bundle order; the caller decides how to sort/render.

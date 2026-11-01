@@ -2,6 +2,7 @@
 //!
 //! Thin layer over okf-core (the deterministic "hands"). See knowledge/contributing/architecture/overview.md.
 #![allow(dead_code, unused)]
+#![recursion_limit = "256"]
 
 mod cli;
 mod commands;

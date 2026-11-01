@@ -21,6 +21,18 @@ pub struct Cli {
     /// Inspect a locally available Git revision; never fetches missing objects.
     #[arg(long, global = true)]
     pub revision: Option<String>,
+    /// Select a catalog explicitly; relative paths are resolved from the invocation directory.
+    #[arg(long, global = true)]
+    pub catalog: Option<String>,
+    /// Incidental guidance delivery; explicit context requests always return selected instructions.
+    #[arg(long, global = true, value_parser = ["full", "summary", "off"])]
+    pub guidance: Option<String>,
+    /// Inspect the consumer repository and its catalog/lock at this revision.
+    #[arg(long, global = true, conflicts_with = "revision")]
+    pub workspace_revision: Option<String>,
+    /// Inspect a registered bundle at an exact local commit, ID=COMMIT (repeatable).
+    #[arg(long, global = true, conflicts_with = "revision")]
+    pub bundle_revision: Vec<String>,
     #[command(subcommand)]
     pub command: Command,
 }
@@ -31,7 +43,10 @@ pub enum Command {
     /// Print machine-readable CLI metadata (all commands, args, output shapes) as NDJSON.
     Schema,
     /// List effective catalog registrations, locations, and availability.
-    Catalog,
+    Catalog(CatalogArgs),
+    /// Inspect portable bundle configuration, guidance, and support resources.
+    #[command(subcommand)]
+    Bundle(BundleCmd),
     /// Print the CLI version and the OKF spec version(s) it supports.
     Version,
 
@@ -45,9 +60,9 @@ pub enum Command {
     /// Show a directory's index.md, synthesizing it when absent.
     Browse(BrowseArgs),
     /// Concepts that link to a given concept.
-    Backlinks(IdArgs),
+    Backlinks(RelationshipArgs),
     /// List the direct concept links defined by one concept.
-    Links(IdArgs),
+    Links(RelationshipArgs),
     /// Render the link graph (or a bounded rooted neighborhood) as mermaid/dot/graphml.
     Graph(GraphArgs),
     /// Resolve a link/concept-id to a concrete bundle-relative file path.
@@ -65,7 +80,7 @@ pub enum Command {
     /// Inventory every regular source file without parsing it as an OKF concept.
     SourceScan(SourceScanArgs),
     /// Conformance validation — the spec's three hard rules only.
-    Validate(BundleArgs),
+    Validate(ValidateArgs),
     /// Advisory checks (broken links, missing fields, orphans, ontology violations).
     Lint(LintArgs),
     /// Drift detection: recorded vs. recomputed source fingerprints (+ `stale_after`).
@@ -160,6 +175,120 @@ pub enum ComputationCmd {
     Check(IdArgs),
 }
 
+#[derive(Debug, Args)]
+pub struct CatalogArgs {
+    #[command(subcommand)]
+    pub command: Option<CatalogCmd>,
+}
+#[derive(Debug, Subcommand)]
+pub enum CatalogCmd {
+    /// Materialize exact accepted revisions; --check performs offline verification only.
+    Sync(CatalogSyncArgs),
+    /// Plan an upstream update, or explicitly apply a saved reviewed plan.
+    Update(CatalogUpdateArgs),
+}
+#[derive(Debug, Args)]
+pub struct CatalogSyncArgs {
+    #[arg(long, conflicts_with = "rebuild")]
+    pub check: bool,
+    #[arg(long, conflicts_with = "check")]
+    pub rebuild: bool,
+}
+#[derive(Debug, Args)]
+pub struct CatalogUpdateArgs {
+    #[arg(long, conflicts_with = "apply")]
+    pub plan: Option<String>,
+    #[arg(long, conflicts_with = "plan")]
+    pub apply: Option<String>,
+    #[arg(long, requires = "apply")]
+    pub allow_incomplete_impact: bool,
+}
+#[derive(Debug, Subcommand)]
+pub enum BundleCmd {
+    /// Return effective settings and selected agent guidance without running a workflow.
+    Context(BundleContextArgs),
+    /// Validate the manifest and explicitly declared local resources.
+    Validate(BundleArgs),
+    /// Explicitly inspect support resources hidden from knowledge discovery.
+    #[command(subcommand)]
+    Resource(BundleResourceCmd),
+}
+#[derive(Debug, Args)]
+pub struct BundleContextArgs {
+    pub bundle: Option<String>,
+    #[arg(long)]
+    pub operation: Vec<String>,
+    #[arg(long)]
+    pub workflow: Vec<String>,
+    #[arg(long, conflicts_with_all = ["operation", "workflow"])]
+    pub all: bool,
+    /// JSON input object or @file; values remain typed data.
+    #[arg(long)]
+    pub inputs: Option<String>,
+    /// JSON query object or @file; resolve without executing the query.
+    #[arg(long)]
+    pub query: Option<String>,
+}
+#[derive(Debug, Subcommand)]
+pub enum BundleResourceCmd {
+    /// Inventory support files and the manifest without loading instruction bodies.
+    List(BundleArgs),
+    /// Read a bounded support file without executing it.
+    Show(BundleResourceShowArgs),
+}
+#[derive(Debug, Args)]
+pub struct BundleResourceShowArgs {
+    pub resource: String,
+    pub bundle: Option<String>,
+    #[arg(long, default_value_t = 65536)]
+    pub max_bytes: usize,
+    #[arg(long)]
+    pub lines: Option<String>,
+}
+#[derive(Debug, Args)]
+pub struct ValidateArgs {
+    pub bundle: Option<String>,
+    /// Core preserves OKF v0.2 file boundaries; bundle excludes the support namespace.
+    #[arg(long, default_value="core", value_parser=["core", "bundle"])]
+    pub profile: String,
+}
+#[derive(Debug, Args, Clone, Default)]
+pub struct EdgeFilterArgs {
+    #[arg(long)]
+    pub kind: Vec<String>,
+    #[arg(long)]
+    pub inverse_kind: Vec<String>,
+    #[arg(long)]
+    pub related_type: Vec<String>,
+    #[arg(long)]
+    pub rule: Vec<String>,
+    #[arg(long)]
+    pub edge_filter: Vec<String>,
+    #[arg(long)]
+    pub related_filter: Vec<String>,
+    #[arg(long)]
+    pub preset: Option<String>,
+    #[arg(long, value_parser=["kind","inverse-kind","related-type","rule","edge","related"])]
+    pub clear_filter: Vec<String>,
+}
+#[derive(Debug, Args)]
+pub struct RelationshipArgs {
+    pub concept: String,
+    pub bundle: Option<String>,
+    #[arg(long)]
+    pub details: bool,
+    #[command(flatten)]
+    pub filters: EdgeFilterArgs,
+    #[arg(long)]
+    pub limit: Option<usize>,
+    #[arg(long, default_value_t = 0, requires = "limit")]
+    pub offset: usize,
+    #[arg(long, conflicts_with = "full_scan")]
+    pub scan_limit: Option<usize>,
+    #[arg(long)]
+    pub full_scan: bool,
+}
+
 /// A bare bundle positional, shared by commands that take no other argument.
 #[derive(Debug, Args)]
 pub struct BundleArgs {
@@ -175,6 +304,20 @@ pub struct SourceScanArgs {
 
 #[derive(Debug, Args)]
 pub struct SearchArgs {
+    #[arg(long)]
+    pub preset: Option<String>,
+    #[arg(long, value_parser=["type","tag","text","field","facet-filter"])]
+    pub clear_filter: Vec<String>,
+    #[arg(long)]
+    pub expand_kind: Vec<String>,
+    #[arg(long)]
+    pub expand_inverse_kind: Vec<String>,
+    #[arg(long)]
+    pub expand_related_type: Vec<String>,
+    #[arg(long)]
+    pub expand_edge_filter: Vec<String>,
+    #[arg(long)]
+    pub expand_related_filter: Vec<String>,
     /// Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory).
     pub bundle: Option<String>,
     /// Filter by exact concept `type`.
@@ -321,6 +464,8 @@ pub struct BrowseArgs {
 
 #[derive(Debug, Args)]
 pub struct GraphArgs {
+    #[command(flatten)]
+    pub filters: EdgeFilterArgs,
     /// Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory).
     pub bundle: Option<String>,
     /// Optional concept at the neighborhood root; without one, render the entire graph.
@@ -533,6 +678,17 @@ pub struct DiffArgs {
 
 #[derive(Debug, Args)]
 pub struct DoctorArgs {
+    #[arg(long, requires = "migrate_config")]
+    pub default_bundle_id: Option<String>,
+    /// Plan legacy TOML migration from this exact configuration file.
+    #[arg(long, conflicts_with_all=["migration_apply", "fix_safe"])]
+    pub migrate_config: Option<String>,
+    /// Save a migration plan to this path.
+    #[arg(long, requires = "migrate_config")]
+    pub migration_plan: Option<String>,
+    /// Explicitly apply a saved configuration migration plan.
+    #[arg(long, conflicts_with_all=["migrate_config", "fix_safe"])]
+    pub migration_apply: Option<String>,
     /// Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory).
     pub bundle: Option<String>,
     /// Target OKF version.
@@ -935,16 +1091,58 @@ pub struct ChangeSetArgs {
 pub fn supports_scope(name: &str) -> bool {
     matches!(
         name,
-        "graph" | "backlinks" | "links" | "resolve" | "affected" | "lint" | "search" | "list"
+        "graph"
+            | "backlinks"
+            | "links"
+            | "resolve"
+            | "affected"
+            | "lint"
+            | "search"
+            | "list"
+            | "artifact resolve"
+            | "artifact show"
+            | "stale"
+            | "refresh"
+            | "bundle context"
+            | "catalog update"
+            | "mv"
+            | "rm"
     )
 }
 pub fn supports_revision(name: &str) -> bool {
-    supports_scope(name) && name != "lint"
+    matches!(
+        name,
+        "graph"
+            | "backlinks"
+            | "links"
+            | "resolve"
+            | "affected"
+            | "search"
+            | "list"
+            | "show"
+            | "browse"
+            | "artifact resolve"
+            | "artifact show"
+            | "artifact list"
+            | "ontology list"
+            | "ontology show"
+            | "ontology field-type list"
+            | "ontology field-type show"
+            | "bundle context"
+            | "bundle resource list"
+            | "bundle resource show"
+    )
 }
 pub fn supports_bundle(name: &str) -> bool {
     !matches!(name, "schema" | "catalog" | "version" | "source-scan")
 }
 
+pub fn supports_catalog(name: &str) -> bool {
+    !matches!(name, "schema" | "version" | "source-scan")
+}
+pub fn supports_guidance(name: &str) -> bool {
+    supports_bundle(name) && !name.starts_with("catalog")
+}
 pub fn command_tree() -> clap::Command {
     let mut command = Cli::command();
     let globals = command
@@ -966,6 +1164,10 @@ pub fn command_tree() -> clap::Command {
         }
         for (arg, supported) in [
             ("revision", supports_revision(&name)),
+            ("workspace_revision", supports_revision(&name)),
+            ("bundle_revision", supports_revision(&name)),
+            ("catalog", supports_catalog(&name)),
+            ("guidance", supports_guidance(&name)),
             ("scope_bundle", supports_scope(&name)),
             ("catalog_scope", supports_scope(&name)),
             ("bundle_id", supports_bundle(&name)),

@@ -55,6 +55,7 @@ const ONTOLOGY_VERSION: &str = "0.1";
 /// Initialize a bundle at `root`. Creates the directory (idempotent) and, per `opts`, writes a
 /// root `index.md` and/or an empty `ontology.yaml`, never clobbering existing ones.
 pub fn init(root: &Path, opts: &InitOptions) -> Result<InitResult> {
+    crate::bundle::remote::ensure_writable(root)?;
     let created_dir = !root.exists();
     if root.exists() && !root.is_dir() {
         return Err(OkfError::Usage(format!(

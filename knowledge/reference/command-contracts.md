@@ -6,16 +6,17 @@ description: Shared CLI input, output, scope, source-health and publication beha
 ---
 # Consistent command behavior
 
-OKF CLI 0.5.0 provides predictable input handling, structured results, guarded writes,
+OKF CLI 0.6 provides predictable input handling, structured results, guarded writes,
 and source-health checks for people, agents, and programs. These capabilities operate
-on ordinary OKF v0.2 bundles; they do not introduce a new document format.
+on OKF v0.2 knowledge with optional manifest, catalog, and support-resource extensions.
+Core conformance and the bundle tooling profile have distinct file boundaries.
 
 Use this guide to choose commands and understand their shared behavior. The
 [CLI reference](../commands/index.md) and `okf schema` describe the exact arguments
 available in your binary. See [checking results and recovering writes](troubleshooting.md)
 for automation and troubleshooting, and [performance and bounded reads](../guides/bounded-reads.md)
-for larger bundles. Integrations upgrading from 0.4.x should first read the
-[migration guide](migrations/0.5.0.md).
+for larger bundles. Integrations upgrading to 0.6 should read the
+[migration guide](migrations/0.6.0.md); the [0.5 guide](migrations/0.5.0.md) records earlier changes.
 
 ## Find and inspect knowledge
 
@@ -66,23 +67,45 @@ okf search --bundle-id acme.product --scope-bundle acme.policy --text "retention
 
 Inspect requested, examined, and unavailable scope in results before drawing conclusions.
 A scoped query is not a global inventory of every possible consumer. See the
-[multi-bundle capability](../contributing/design/multi-bundle-capability.md) for registration and reference rules.
+[selection and scope](../concepts/selection-and-scope.md) and
+[multi-bundle guide](../guides/work-with-multiple-bundles.md) for registration and reference rules.
 
 ### Which commands support which reads?
 
 | Task | Commands | Scope and read controls |
 | --- | --- | --- |
 | Search or inventory concepts | `list`, `search` | Catalog scope, existing `--revision`, filters, projections, scan budgets, pagination |
-| Read one concept or navigation page | `show`, `browse` | Selected bundle; `show` offers projections, outline, body, and line slices |
+| Read one concept or navigation page | `show`, `browse` | Selected bundle and supported historical selectors; `show` offers projections, outline, body, and line slices |
 | Inspect references and impact | `links`, `backlinks`, `graph`, `resolve`, `affected` | Catalog scope and existing `--revision`; command-specific traversal controls |
-| Check conformance or source health | `validate`, `stale`, `stats`, `doctor` | Selected bundle; diagnostics and applicable failure controls |
+| Check conformance or source health | `validate`, `bundle validate`, `stale`, `stats`, `doctor` | Explicit validation profile, manifest checks, source diagnostics; source checks can examine declared scope |
 | Lint concepts | `lint` | Catalog scope for reads; fixes apply to one selected bundle |
-| Inspect artifacts or computations | `artifact list/resolve/show`, `computation check` | Selected bundle and explicit resource context; bounded artifact reads; no code execution |
+| Inspect resources | `artifact list/resolve/show`, `bundle resource list/show` | Bounded reads; resolution/show support declared scope and snapshot selectors; support resources require explicit inspection |
+| Inspect computations | `computation check` | Contract inspection only; no execution or runtime attestation |
 | Inspect configuration or source files | `catalog`, ontology inspection, `scan`, `source-scan` | Each command's declared configuration or directory scope; `source-scan` does not require a bundle |
 | Compare content with Git | `diff` | Selected bundle and its explicit comparison revision |
 
 Unsupported options are rejected rather than silently expanding capabilities. For example,
-`show` does not acquire catalog scope or revision support merely because `search` has it.
+`show` accepts supported snapshot selectors but does not become a multi-bundle inventory.
+Use `--workspace-revision` for a historical consumer catalog/lock and `--bundle-revision` for
+explicit bundle inspection. A reported snapshot can be reopened without fetching or substituting
+current files. See [selection and scope](../concepts/selection-and-scope.md).
+
+## Load bundle context and choose a validation profile
+
+Use `okf bundle context knowledge --json` for global guidance and a rule/workflow inventory, then
+select applicable command paths before acting. Context inspection does not execute workflows;
+`--all` returns instruction bodies for inspection. Context identity includes loaded instruction files.
+See [bundle customization](../guides/customize-a-bundle.md) for a complete example.
+
+`bundle validate` checks the manifest and declared support resources. `validate --profile bundle`
+checks knowledge documents while excluding root support Markdown; `validate --profile core` checks
+the physical core-format boundary. Report the profile and do not confuse either check with source
+health or verification. Ordinary knowledge discovery excludes root manifest/support files.
+
+Explicit relationship presets narrow query results; they never narrow integrity checks. Filters
+on edge attributes stay correlated to one occurrence, and graph predicates filter traversal.
+Catalog updates are separate operations: plan a candidate, review its impact, then explicitly apply
+it. [Remote dependencies](../guides/remote-dependencies.md) explains locks, acquisition, and recovery.
 
 ## Supply changed resources explicitly
 
@@ -154,6 +177,7 @@ okf stale knowledge --fail-on-state drifted,missing,unavailable,unsupported,expi
 
 | Observation | Meaning and next step |
 | --- | --- |
+| `revision-changed` | A bundle-resource revision changed with identical content bytes. Review snapshot expectations separately from content drift. |
 | `drifted` | A supported fingerprint changed. Review the source and the concept's claims. |
 | `unrecorded` | A source requests fingerprinting but has no recorded baseline. Review before establishing one. |
 | `missing` | The check established that a local artifact is absent. Correct the source location or restore the artifact. |
@@ -163,7 +187,7 @@ okf stale knowledge --fail-on-state drifted,missing,unavailable,unsupported,expi
 | Provenance only | A valid source has no fingerprint kind. Its presence makes no fingerprint-health claim. |
 
 Backends without enough evidence to establish absence report unavailable conservatively.
-Provenance-only sources are not a seventh failure state; summaries can count them separately.
+Provenance-only sources are not a failure state; summaries can count them separately.
 `--only` does not suppress findings from the exit policy. Summary counts describe findings,
 not necessarily the number of source files or concepts examined.
 
@@ -238,19 +262,21 @@ gate. Review the affected referrers before using either override.
 ## Apply a local ontology write policy
 
 An optional write gate prevents new or worsened ontology violations. It is disabled by
-default and does not change format conformance. For an uncataloged bundle, configure:
+default and does not change format conformance. Configure it inside the bundle's manifest:
 
-```toml
-[bundle_settings.default.write_policy]
-ontology_gate = true
-ontology_severity = "error"
-blocking_threshold = "error"
+```yaml
+manifest_version: 1
+settings:
+  write_policy:
+    ontology_gate: true
+    ontology_severity: error
+    blocking_threshold: error
 ```
 
-For a registered bundle, use its settings key, such as
-`[bundle_settings."acme.product".write_policy]`. Severity and threshold accept `info`, `warn`,
-or `error`. The gate's defaults are error-level violations and an error-level blocking
-threshold. Lint display settings, including `off`, do not weaken this write policy.
+Severity and threshold accept `info`, `warn`, or `error`. The defaults are error-level violations
+and an error-level blocking threshold. Lint display settings, including `off`, do not weaken the
+gate. Legacy TOML settings remain compatibility input; [configuration](configuration.md) describes
+precedence and conflict diagnostics.
 
 Supported authoring commands offer `--require-ontology-gate` to require the check even if
 configuration leaves it disabled. There is no command-line override that weakens an enabled
@@ -291,11 +317,12 @@ has no selected-bundle policy context and is not a substitute for the guarded CL
 ## Current boundaries
 
 The current interface does not provide batch refresh, batch link resolution, map-value
-wildcard selectors, persistent query-result handles, general immutable bundle snapshots,
-cross-bundle content transactions, or a selective export pipeline. Use existing single-record
+wildcard selectors, persistent query-result handles, cross-bundle content transactions,
+or a selective export pipeline. Managed Git snapshots and historical inspection are supported;
+working-tree queries are not automatically snapshot-isolated. Use existing single-record
 commands, supported graph queries, and explicit scope; do not rely on flags from older
 planning material. Existing typed filters, projections, and nested list-reference selectors
-remain available as described in the [structured metadata capability](../contributing/design/structured-metadata-capability.md).
+remain available as described in the [selector reference](selectors.md) and [query guide](../guides/find-and-read-knowledge.md).
 
 Unknown types and metadata, optional families, and broken links remain consumable under
 OKF v0.2. A local write policy, unsupported operation, or unavailable resource is reported

@@ -1,12 +1,12 @@
 # okf CLI — retrieval command reference
 
-> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.5.2, OKF spec 0.2). Do not hand-edit; regenerate instead.
+> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.6.0, OKF spec 0.2). Do not hand-edit; regenerate instead.
 
 This focused reference contains only commands selected for the `retrieval` workflow. First pass the skill CLI compatibility preflight. Consult this reference when exact arguments or output shapes are needed. For a compatible CLI that rejects documented syntax, use that command's `--help` output as the runtime authority.
 
 Commands with a human form accept global `--json` for NDJSON; `schema` is always NDJSON. Bundle-aware commands take an optional trailing `bundle` path or a separate `--bundle-id` selector. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Catalog registration alone does not extend examination scope. Meta commands have no bundle, and `source-scan` takes an explicit arbitrary directory.
 
-Exit codes: 0 means success under the selected failure threshold, not necessarily no findings; 1 means findings or an unsuccessful resolution; 2 means usage errors; 3 means environment/I/O/YAML errors; 4 means an internal error. Inspect findings even with `--fail-on never`. NDJSON is one record per line, not a JSON array. In CLI 0.5, JSON operations begin with `operation-start` and normally end with `operation-complete`; require the terminal record and check the actual exit before accepting a complete result. A successful bounded read may still report partial examination or matching. Preview and dry-run operations do not publish authored content but may create coordination state.
+Exit codes: 0 means success under the selected failure threshold, not necessarily no findings; 1 means findings or an unsuccessful resolution; 2 means usage errors; 3 means environment/I/O/YAML errors; 4 means an internal error. Inspect findings even with `--fail-on never`. NDJSON is one record per line, not a JSON array. In CLI 0.6, JSON operations begin with `operation-start` and normally end with `operation-complete`; require the terminal record and check the actual exit before accepting a complete result. A successful bounded read may still report partial examination or matching. Preview and dry-run operations do not publish authored content but may create coordination state.
 
 ## Global arguments
 
@@ -17,8 +17,12 @@ Exit codes: 0 means success under the selected failure threshold, not necessaril
 | `--scope-bundle <value>` | list<string> | no | Add a registered bundle to the examination scope (repeatable) |
 | `--catalog-scope` | bool | no | Examine every locally available registered bundle (default: `false`) |
 | `--revision <value>` | string | no | Inspect a locally available Git revision; never fetches missing objects |
+| `--catalog <value>` | string | no | Select a catalog explicitly; relative paths are resolved from the invocation directory |
+| `--guidance <value>` | string | no | Incidental guidance delivery; explicit context requests always return selected instructions |
+| `--workspace-revision <value>` | string | no | Inspect the consumer repository and its catalog/lock at this revision |
+| `--bundle-revision <value>` | list<string> | no | Inspect a registered bundle at an exact local commit, ID=COMMIT (repeatable) |
 
-Scope defaults to the selected bundle. Use scope options only for graph, links, backlinks, resolve, affected, lint, search, and list; other commands reject additional scope. `--revision` supports graph, links, backlinks, resolve, affected, search, and list. Scope and effective settings are interpretation context, not authored concept metadata.
+Scope defaults to the selected bundle. Each command advertises its supported scope, snapshot, catalog, and guidance options below; unsupported options are errors. Catalog registration does not authorize traversal. Explicit historical inspection never acquires objects or accepts a new lock. Scope and effective settings are interpretation context, not authored concept metadata.
 
 ## Extension record contracts
 
@@ -31,12 +35,22 @@ Authored concept metadata remains open. These computed records describe scope, i
     "id": "string",
     "version": "string"
   },
+  "bundle-context": {
+    "context_digest": "string",
+    "context_digest_version": 1,
+    "effective_settings": "object",
+    "manifest": "object|null",
+    "selection": "object",
+    "setting_origins": "object"
+  },
   "bundle-edge": {
     "evidence": "string",
     "fingerprint_status": "string|null",
     "location": "string",
     "relationship": "{source:string,rule:string,field_path:string,raw_reference:string,target:string,authored_kind:string|null,inverse:string|null,attributes:object,status:string}|null",
     "resource": "string",
+    "resource_bundle": "string (non-concept resources only)",
+    "resource_kind": "reserved|artifact|support (non-concept resources only)",
     "snapshot": "{requested:object,status:string,evidence:string,resolved:qualified_identity|null,candidate:qualified_identity|null}|null",
     "source": "qualified_identity",
     "status": "string",
@@ -54,11 +68,23 @@ Authored concept metadata remains open. These computed records describe scope, i
     "overridden": "boolean",
     "root": "path"
   },
+  "bundle-resource": {
+    "content": "string|null",
+    "path": "path",
+    "sha256": "string|null",
+    "truncated": "boolean"
+  },
   "concept-identity": {
     "bundle": "string",
     "id": "string",
     "schema_version": 1,
     "version": "string"
+  },
+  "context-scope": {
+    "complete": "boolean",
+    "examined": "array<object>",
+    "requested": "array<string>",
+    "unavailable": "array<string>"
   },
   "effective-settings": {
     "bundle": "string",
@@ -91,6 +117,14 @@ Authored concept metadata remains open. These computed records describe scope, i
     "reason": "string",
     "schema_version": 1,
     "threshold": "integer"
+  },
+  "guidance": {
+    "content": "full|summary",
+    "context_digest": "string",
+    "id": "string",
+    "instruction_role": "task-guidance|inspected",
+    "instructions": "string (full only)",
+    "origin": "object"
   },
   "ontology_field_type": {
     "definition": "object",
@@ -149,12 +183,22 @@ Authored concept metadata remains open. These computed records describe scope, i
     "snapshot_examined": "array<qualified_identity> (optional)",
     "unavailable": "array<string>"
   },
+  "validation-profile": {
+    "conformant": "boolean",
+    "profile": "bundle"
+  },
   "warning": {
     "limit": "integer|null",
     "message": "string",
     "omitted": "integer|null",
     "reason": "string",
     "schema_version": 1
+  },
+  "workflow": {
+    "content": "full|summary",
+    "id": "string",
+    "inputs_complete": "boolean (selected only)",
+    "selected": "boolean"
   }
 }
 ```
@@ -169,7 +213,7 @@ _No arguments._
 
 Output stream: `bundle-registration,effective-settings`.
 
-Supported global options: `--json`.
+Supported global options: `--catalog`, `--json`.
 
 ## query
 
@@ -185,9 +229,9 @@ Resolve any OKF path-valued resource with document context.
 
 Output stream: `artifact-resolution`.
 
-Supported global options: `--bundle-id`, `--json`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
 
-**Path namespaces:** a leading `/` means bundle-root-relative, not an operating-system absolute path. Other local paths resolve against the declaring concept's directory when `--from` is supplied, otherwise the bundle root. Keep `--from` on the subsequent read too. JSON uses `artifact_kind` (concept, artifact, reserved, external, scope, missing, or blocked), `path`, `exists`, `size`, and `message`. Missing/blocked resolution exits 1. A scope descriptor is provenance, not a missing file.
+**Path namespaces:** a leading `/` means bundle-root-relative, not an operating-system absolute path. Other local paths resolve against the declaring concept's directory when `--from` is supplied, otherwise the bundle root. Keep `--from` on the subsequent read too. JSON uses `artifact_kind` (concept, artifact, reserved, support, external, scope, missing, or blocked), `path`, `exists`, `size`, and `message`. Missing/blocked resolution exits 1. A scope descriptor is provenance, not a missing file.
 
 **Repository sources:** with repo `/work/app`, bundle `/work/app/knowledge`, and declaring concept `notes/service`, `/references/spec.txt` resolves to `/work/app/knowledge/references/spec.txt`. A `kind=git-path` or `git-commit` source `src/service.rs` is instead fingerprinted from the Git worktree root as `/work/app/src/service.rs`; the artifact resolver does not reinterpret paths by source kind. File/line-range/markdown-heading fingerprints use bundle-relative paths. Record the actual source location and convention; do not assume fingerprint and artifact paths coincide. Inspect external repository evidence with normal source tools within existing read authorization. Do not rewrite provenance, bypass containment, or mirror files merely to make artifact resolution succeed.
 
@@ -206,11 +250,11 @@ Retrieve a bounded local text artifact; binary files return metadata only.
 
 Output stream: `artifact-content`.
 
-Supported global options: `--bundle-id`, `--json`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
 
 For document-relative paths, pass the same `--from` used during resolution. JSON includes `text`, `binary`, `truncated`, `size`, `sha256`, and `path`. Binary files provide metadata only. Inspect `truncated` before treating a read as complete; human output alone does not expose this flag. Use bounded line windows and a sufficient byte budget for the needed range; do not infer absence from a truncated result. Use `show` for concepts and this command for opaque or reserved files.
 
-Local artifact reads remain inside the canonical bundle after symlinks. For a URL, `--fetch` requires a network-enabled build and authorization covering that source. A user request to inspect a named source can supply that authorization; no separate OKF policy file is specified by this command. If unavailable, use an authorized external retrieval tool or report the evidence gap. Do not send ambient credentials. Reading computation, executor, or attester code never authorizes execution.
+Local artifact reads remain inside the resolved target bundle and requested examination scope. For an HTTP(S) URL, `--fetch` requires a network-enabled build and authorization covering that source. A user request to inspect a named source can supply that authorization; no separate OKF policy file is specified by this command. If unavailable, use an authorized external retrieval tool or report the evidence gap. Do not send ambient credentials. Reading computation, executor, or attester code never authorizes execution.
 
 ### `okf backlinks`
 
@@ -218,13 +262,25 @@ Concepts that link to a given concept.
 
 | Argument | Type | Required | Description |
 |----------|------|----------|-------------|
-| `<concept>` | positional | yes | Concept id (leading slash optional), e.g. `tables/customers` |
-| `<bundle>` | positional | no | Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory) |
-| `--details` | bool | no | Show individual semantic relationship occurrences and configured inverse labels (default: `false`) |
+| `<concept>` | positional | yes | — |
+| `<bundle>` | positional | no | — |
+| `--details` | bool | no |  (default: `false`) |
+| `--kind <value>` | list<string> | no | — |
+| `--inverse-kind <value>` | list<string> | no | — |
+| `--related-type <value>` | list<string> | no | — |
+| `--rule <value>` | list<string> | no | — |
+| `--edge-filter <value>` | list<string> | no | — |
+| `--related-filter <value>` | list<string> | no | — |
+| `--preset <value>` | string | no | — |
+| `--clear-filter <value>` | list<string> | no | — |
+| `--limit <value>` | string | no | — |
+| `--offset <value>` | string | no |  (default: `0`) |
+| `--scan-limit <value>` | string | no | — |
+| `--full-scan` | bool | no |  (default: `false`) |
 
 Output stream: `concept,relationship,scope,bundle-backlink,bundle-edge`.
 
-Supported global options: `--bundle-id`, `--catalog-scope`, `--json`, `--revision`, `--scope-bundle`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
 
 ### `okf browse`
 
@@ -237,7 +293,57 @@ Show a directory's index.md, synthesizing it when absent.
 
 Output stream: `index`.
 
-Supported global options: `--bundle-id`, `--json`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
+
+### `okf bundle context`
+
+Return effective settings and selected agent guidance without running a workflow.
+
+| Argument | Type | Required | Description |
+|----------|------|----------|-------------|
+| `<bundle>` | positional | no | — |
+| `--operation <value>` | list<string> | no | — |
+| `--workflow <value>` | list<string> | no | — |
+| `--all` | bool | no |  (default: `false`) |
+| `--inputs <value>` | string | no | JSON input object or @file; values remain typed data |
+| `--query <value>` | string | no | JSON query object or @file; resolve without executing the query |
+
+Output stream: `context-scope,bundle-context,guidance,workflow,effective-query`.
+
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
+
+Load global task context before source access, then full applicable command guidance before acting. Context includes effective settings and origins, instruction content/completeness, and an effective digest including loaded instruction files. --all and historical context are inspection, not workflow activation. Missing required instructions block dependent agent work. Incidental guidance output does not replace pre-action loading.
+
+### `okf bundle resource list`
+
+Inventory support files and the manifest without loading instruction bodies.
+
+| Argument | Type | Required | Description |
+|----------|------|----------|-------------|
+| `<bundle>` | positional | no | Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory) |
+
+Output stream: `bundle-resource`.
+
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
+
+Support files are excluded from ordinary knowledge discovery. Explicit inspection is bounded, preserves containment, and never executes scripts or treats support Markdown as concepts.
+
+### `okf bundle resource show`
+
+Read a bounded support file without executing it.
+
+| Argument | Type | Required | Description |
+|----------|------|----------|-------------|
+| `<resource>` | positional | yes | — |
+| `<bundle>` | positional | no | — |
+| `--max-bytes <value>` | string | no |  (default: `65536`) |
+| `--lines <value>` | string | no | — |
+
+Output stream: `bundle-resource`.
+
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
+
+Support files are excluded from ordinary knowledge discovery. Explicit inspection is bounded, preserves containment, and never executes scripts or treats support Markdown as concepts.
 
 ### `okf graph`
 
@@ -245,6 +351,14 @@ Render the link graph (or a bounded rooted neighborhood) as mermaid/dot/graphml.
 
 | Argument | Type | Required | Description |
 |----------|------|----------|-------------|
+| `--kind <value>` | list<string> | no | — |
+| `--inverse-kind <value>` | list<string> | no | — |
+| `--related-type <value>` | list<string> | no | — |
+| `--rule <value>` | list<string> | no | — |
+| `--edge-filter <value>` | list<string> | no | — |
+| `--related-filter <value>` | list<string> | no | — |
+| `--preset <value>` | string | no | — |
+| `--clear-filter <value>` | list<string> | no | — |
 | `<bundle>` | positional | no | Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory) |
 | `--root <value>` | string | no | Optional concept at the neighborhood root; without one, render the entire graph |
 | `--format <value>` | string | no | Output format: mermaid (default), dot, or graphml (default: `mermaid`) |
@@ -253,7 +367,7 @@ Render the link graph (or a bounded rooted neighborhood) as mermaid/dot/graphml.
 
 Output stream: `graph,scope,bundle-node,bundle-edge`.
 
-Supported global options: `--bundle-id`, `--catalog-scope`, `--json`, `--revision`, `--scope-bundle`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
 
 ### `okf links`
 
@@ -261,13 +375,25 @@ List the direct concept links defined by one concept.
 
 | Argument | Type | Required | Description |
 |----------|------|----------|-------------|
-| `<concept>` | positional | yes | Concept id (leading slash optional), e.g. `tables/customers` |
-| `<bundle>` | positional | no | Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory) |
-| `--details` | bool | no | Show individual semantic relationship occurrences and configured inverse labels (default: `false`) |
+| `<concept>` | positional | yes | — |
+| `<bundle>` | positional | no | — |
+| `--details` | bool | no |  (default: `false`) |
+| `--kind <value>` | list<string> | no | — |
+| `--inverse-kind <value>` | list<string> | no | — |
+| `--related-type <value>` | list<string> | no | — |
+| `--rule <value>` | list<string> | no | — |
+| `--edge-filter <value>` | list<string> | no | — |
+| `--related-filter <value>` | list<string> | no | — |
+| `--preset <value>` | string | no | — |
+| `--clear-filter <value>` | list<string> | no | — |
+| `--limit <value>` | string | no | — |
+| `--offset <value>` | string | no |  (default: `0`) |
+| `--scan-limit <value>` | string | no | — |
+| `--full-scan` | bool | no |  (default: `false`) |
 
 Output stream: `link,relationship,scope,bundle-edge`.
 
-Supported global options: `--bundle-id`, `--catalog-scope`, `--json`, `--revision`, `--scope-bundle`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
 
 ### `okf list`
 
@@ -275,6 +401,13 @@ List all concepts (search with no filter).
 
 | Argument | Type | Required | Description |
 |----------|------|----------|-------------|
+| `--preset <value>` | string | no | — |
+| `--clear-filter <value>` | list<string> | no | — |
+| `--expand-kind <value>` | list<string> | no | — |
+| `--expand-inverse-kind <value>` | list<string> | no | — |
+| `--expand-related-type <value>` | list<string> | no | — |
+| `--expand-edge-filter <value>` | list<string> | no | — |
+| `--expand-related-filter <value>` | list<string> | no | — |
 | `<bundle>` | positional | no | Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory) |
 | `--type <value>` | string | no | Filter by exact concept `type` |
 | `--tag <value>` | string | no | Filter by membership in the concept's `tags` |
@@ -302,7 +435,7 @@ List all concepts (search with no filter).
 
 Output stream: `concept,concept-identity,scope,projection,query-summary,facet,facet-excluded,relationship,related-concept,expansion-summary,warning`.
 
-Supported global options: `--bundle-id`, `--catalog-scope`, `--json`, `--revision`, `--scope-bundle`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
 
 JSON records contain frontmatter and computed lifecycle/trust metadata, not bodies. Aggregate field occurrence counts only after checking scan completeness and output warnings. The default scan budget is 1,000 eligible documents across scope; --limit bounds output, not scan work. For exhaustive inventory use a sufficient --scan-limit or deliberate --full-scan, and aggregate metadata locally rather than loading all records into context. Each offset invocation rescans; an incomplete scan has no authoritative continuation.
 
@@ -316,7 +449,7 @@ List reusable field-type definitions.
 
 Output stream: `ontology_field_type`.
 
-Supported global options: `--bundle-id`, `--json`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
 
 Inspect authored reusable definitions and resolved inherited constraints. JSON includes both definition and effective fields.
 
@@ -331,7 +464,7 @@ Show a reusable field-type definition and its effective fields.
 
 Output stream: `ontology_field_type`.
 
-Supported global options: `--bundle-id`, `--json`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
 
 Inspect authored reusable definitions and resolved inherited constraints. JSON includes both definition and effective fields.
 
@@ -345,7 +478,7 @@ List the defined concept types.
 
 Output stream: `ontology_type`.
 
-Supported global options: `--bundle-id`, `--json`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
 
 ### `okf ontology show`
 
@@ -358,7 +491,7 @@ Show one concept type and its rules.
 
 Output stream: `ontology_type`.
 
-Supported global options: `--bundle-id`, `--json`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
 
 ### `okf resolve`
 
@@ -372,7 +505,7 @@ Resolve a link/concept-id to a concrete bundle-relative file path.
 
 Output stream: `resolved,scope,bundle-edge`.
 
-Supported global options: `--bundle-id`, `--catalog-scope`, `--json`, `--revision`, `--scope-bundle`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
 
 ### `okf search`
 
@@ -380,6 +513,13 @@ Search concepts by type, tag, text, and/or frontmatter field.
 
 | Argument | Type | Required | Description |
 |----------|------|----------|-------------|
+| `--preset <value>` | string | no | — |
+| `--clear-filter <value>` | list<string> | no | — |
+| `--expand-kind <value>` | list<string> | no | — |
+| `--expand-inverse-kind <value>` | list<string> | no | — |
+| `--expand-related-type <value>` | list<string> | no | — |
+| `--expand-edge-filter <value>` | list<string> | no | — |
+| `--expand-related-filter <value>` | list<string> | no | — |
 | `<bundle>` | positional | no | Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory) |
 | `--type <value>` | string | no | Filter by exact concept `type` |
 | `--tag <value>` | string | no | Filter by membership in the concept's `tags` |
@@ -407,7 +547,7 @@ Search concepts by type, tag, text, and/or frontmatter field.
 
 Output stream: `concept,concept-identity,scope,projection,query-summary,facet,facet-excluded,relationship,related-concept,expansion-summary,warning`.
 
-Supported global options: `--bundle-id`, `--catalog-scope`, `--json`, `--revision`, `--scope-bundle`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
 
 The positional argument is the bundle, never query text. Text requires `--text`; structured filters work without it. No filters means inventory. Text-search JSON adds `search.score` and bounded `search.matches` to metadata records, not full bodies. Structured-only search has no text-match evidence. `--in title,description` narrows the default fields; adding `frontmatter` broadens them. Empty results exit successfully and establish only that this query found no matches. Check query-summary and warning records: incomplete scans cannot establish absence, exact totals, or globally ordered pages. --limit does not reduce scan work; offset requests rescan without shared query caches. Separate nested filters may match different list records; inspect concrete occurrences before attributing their combined conditions to one relationship. Expansion completeness and facet truncation are independent of primary scan completeness.
 
@@ -427,11 +567,25 @@ Show one concept's content, heading outline, or selected line range.
 
 Output stream: `concept,projection`.
 
-Supported global options: `--bundle-id`, `--json`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
 
 Without `--json`, show includes the serialized frontmatter and full Markdown body. Plain `show --json` returns metadata only: frontmatter plus `id`, `trust_tier`, `effective_status`, `effective_generated_at`, `latest_verified_at`, and `verification_current`. It does not include the body. `--outline --json` returns `headings` with `line`, `level`, and `text`; `--lines START:END --json` returns `start`, actual `end`, and `lines` containing `line` and `text`. Line numbers refer to the serialized document, including frontmatter, excluding the three-line display header. `show -n` (or `--numbered`) prints the full document with these numbers and no header; its JSON uses the same line-range record. `show --body` prints only raw Markdown; with `--json` it returns a body record containing `id` and `body`. An outline or selected slice does not establish complete document-review coverage.
 
 ## check
+
+### `okf bundle validate`
+
+Validate the manifest and explicitly declared local resources.
+
+| Argument | Type | Required | Description |
+|----------|------|----------|-------------|
+| `<bundle>` | positional | no | Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory) |
+
+Output stream: `manifest-validation`.
+
+Supported global options: `--bundle-id`, `--catalog`, `--guidance`, `--json`.
+
+Validate the optional manifest's structure and supported schema without treating prose instructions as executable checks. Manifest validation is distinct from core concept conformance and bundle-profile knowledge validation.
 
 ### `okf computation check`
 
@@ -445,7 +599,7 @@ Check and display a computation contract; never executes code.
 
 Output stream: `computation-contract`.
 
-Supported global options: `--bundle-id`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--guidance`, `--json`.
 
 Inspect-only: `execution: not-run` is not a passing runtime attestation. Document verification and inspection of executable resources never establish a run verdict.
 
@@ -455,8 +609,9 @@ Conformance validation — the spec's three hard rules only.
 
 | Argument | Type | Required | Description |
 |----------|------|----------|-------------|
-| `<bundle>` | positional | no | Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory) |
+| `<bundle>` | positional | no | — |
+| `--profile <value>` | string | no | Core preserves OKF v0.2 file boundaries; bundle excludes the support namespace (default: `core`) |
 
-Output stream: `violation`.
+Output stream: `violation,validation-profile`.
 
-Supported global options: `--bundle-id`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--guidance`, `--json`.

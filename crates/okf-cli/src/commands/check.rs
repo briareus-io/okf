@@ -71,10 +71,22 @@ pub fn run_source_scan(args: &SourceScanArgs, json_output: bool) -> Result<i32> 
 }
 
 /// `okf validate [bundle]` — conformance (three hard rules). Exit 1 on nonconformance.
-pub fn run_validate(args: &BundleArgs, json: bool) -> Result<i32> {
+pub fn run_validate(args: &crate::cli::ValidateArgs, json: bool) -> Result<i32> {
     let root = resolve_bundle(args.bundle.as_deref())?;
-    let report = validate_bundle(&root)?;
+    let report = okf_core::check::validate::validate_bundle_profile(
+        &root,
+        if args.profile == "bundle" {
+            okf_core::check::validate::ValidationProfile::Bundle
+        } else {
+            okf_core::check::validate::ValidationProfile::Core
+        },
+    )?;
     if json {
+        if args.profile == "bundle" {
+            output::print_line(
+                &json!({"kind":"validation-profile","profile":args.profile,"conformant":report.is_conformant()}),
+            )?;
+        }
         for v in &report.violations {
             output::print_line(&json!({
                 "kind": "violation",
@@ -101,6 +113,7 @@ pub fn run_validate(args: &BundleArgs, json: bool) -> Result<i32> {
 
 /// `okf lint [bundle] [--fix] [--fail-on <sev>]`.
 pub fn run_lint(args: &LintArgs, json: bool) -> Result<i32> {
+    okf_core::check::lint::validate_configuration(&resolve_bundle(args.bundle.as_deref())?)?;
     let fail_on = match &args.fail_on {
         Some(s) => FailOn::from_str(s)?,
         None => FailOn::default(), // error
@@ -209,7 +222,12 @@ pub fn run_lint(args: &LintArgs, json: bool) -> Result<i32> {
 pub fn run_stale(args: &StaleArgs, json: bool) -> Result<i32> {
     let root = resolve_bundle(args.bundle.as_deref())?;
     let bundle = load_bundle_metadata(&root)?;
-    let report = check_stale(&bundle);
+    let context = okf_core::bundle::context::current_context(Some(&root.to_string_lossy()), None)?;
+    let report = okf_core::check::stale::check_stale_in_context(
+        &bundle,
+        &context,
+        &super::catalog::examination_scope(),
+    );
     let provenance_only = bundle
         .concepts
         .iter()
@@ -524,6 +542,42 @@ fn discovery_exit(fail_on: &Option<String>, empty: bool) -> Result<i32> {
 
 /// Compatibility-first preflight and conservative repair for existing bundles.
 pub fn run_doctor(args: &DoctorArgs, json_output: bool) -> Result<i32> {
+    if let Some(config) = &args.migrate_config {
+        let plan = okf_core::bundle::migration::plan_with_options(
+            Path::new(config),
+            okf_core::bundle::migration::MigrationOptions {
+                default_bundle_id: args.default_bundle_id.clone(),
+            },
+        )?;
+        if let Some(path) = &args.migration_plan {
+            okf_core::bundle::migration::save(&plan, Path::new(path))?;
+        }
+        if json_output {
+            output::print_line(
+                &json!({"kind":"migration-plan","plan":plan,"saved":args.migration_plan}),
+            )?
+        } else {
+            output::print_text_line(format_args!(
+                "{}",
+                serde_yaml::to_string(&plan).map_err(|e| OkfError::Internal(e.to_string()))?
+            ))?
+        }
+        return Ok(if plan.unresolved.is_empty() { 0 } else { 1 });
+    }
+    if let Some(path) = &args.migration_apply {
+        let plan = okf_core::bundle::migration::load(Path::new(path))?;
+        let report = okf_core::bundle::migration::apply(&plan)?;
+        output::mark_committed();
+        if json_output {
+            output::print_line(&json!({"kind":"migration-applied","report":report}))?
+        } else {
+            output::print_text_line(format_args!(
+                "{}",
+                serde_yaml::to_string(&report).map_err(|e| OkfError::Internal(e.to_string()))?
+            ))?
+        }
+        return Ok(0);
+    }
     let root = resolve_bundle(args.bundle.as_deref())?;
     let apply = args.fix_safe && args.yes && !args.dry_run;
     let report = doctor(&root, &args.target, args.fix_safe, apply)?;

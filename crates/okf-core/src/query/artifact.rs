@@ -13,6 +13,7 @@ pub enum ArtifactKind {
     Concept,
     Reserved,
     Artifact,
+    Support,
     External,
     Scope,
     Missing,
@@ -25,6 +26,7 @@ impl ArtifactKind {
             Self::Concept => "concept",
             Self::Reserved => "reserved",
             Self::Artifact => "artifact",
+            Self::Support => "support",
             Self::External => "external",
             Self::Scope => "scope",
             Self::Missing => "missing",
@@ -88,7 +90,11 @@ pub fn put_artifact(
     let rel = normalize_local(resource, None)?;
     if rel.components().any(|part| {
         let name = part.as_os_str().to_string_lossy();
-        name.starts_with('.') || matches!(name.as_ref(), "okf.toml" | "ontology.yaml")
+        name.starts_with('.')
+            || matches!(
+                name.as_ref(),
+                "okf.toml" | "ontology.yaml" | "okf-bundle.yaml"
+            )
     }) {
         return Err(OkfError::Usage(
             "artifact put cannot write hidden paths or tool configuration (okf.toml, ontology.yaml)".to_string(),
@@ -169,6 +175,16 @@ pub fn list_artifacts(
     directory: Option<&str>,
     digest: bool,
 ) -> Result<Vec<ArtifactEntry>> {
+    list_artifacts_with_support(root, directory, digest, false)
+}
+
+/// Explicit support inventory retains the true bundle root when classifying entries.
+pub fn list_artifacts_with_support(
+    root: &Path,
+    directory: Option<&str>,
+    digest: bool,
+    include_support: bool,
+) -> Result<Vec<ArtifactEntry>> {
     let prefix = normalize_local(directory.unwrap_or(""), None)?;
     let mut out = Vec::new();
     let scan_root = root.join(&prefix);
@@ -182,9 +198,20 @@ pub fn list_artifacts(
             "artifact directory escapes bundle".to_string(),
         ));
     }
-    for nested in walk_files(&canonical_scan_root)? {
+    if !include_support && crate::bundle::walk::is_support_path(&prefix) {
+        return Ok(out);
+    }
+    let files = if !include_support && canonical_scan_root == canonical_root {
+        crate::bundle::walk::walk_content_files(&canonical_root)?
+    } else {
+        walk_files(&canonical_scan_root)?
+    };
+    for nested in files {
         let abs = canonical_scan_root.join(&nested);
         let rel = prefix.join(nested);
+        if !include_support && crate::bundle::walk::is_support_path(&rel) {
+            continue;
+        }
         let metadata =
             std::fs::metadata(&abs).map_err(|e| OkfError::Io(format!("{}: {e}", abs.display())))?;
         let kind = classify_existing(&rel);
@@ -224,6 +251,18 @@ fn resolve_artifact_with_root(
             exists: false,
             size: None,
             message: Some("filesystem-prefixed artifact paths are not bundle-relative".to_string()),
+        };
+    }
+    if crate::model::link::is_logical_reference(trimmed) {
+        return ResolvedArtifact {
+            resource: resource.into(),
+            kind: ArtifactKind::Blocked,
+            path: None,
+            exists: false,
+            size: None,
+            message: Some(
+                "logical reference requires catalog-aware resolution and explicit scope".into(),
+            ),
         };
     }
     if is_uri(trimmed) {
@@ -296,6 +335,65 @@ fn resolve_artifact_with_root(
     }
 }
 
+/// Resolve using a deliberately selected consumer catalog and explicit examination scope.
+/// The returned root belongs to the target bundle; paths never refer to cache-relative
+/// locations without that root. This operation never acquires remote content.
+pub fn resolve_artifact_in_context(
+    context: &crate::bundle::context::Context,
+    scope_ids: &[String],
+    from: Option<&str>,
+    resource: &str,
+) -> Result<(PathBuf, ResolvedArtifact)> {
+    let Some(reference) = crate::model::link::LogicalReference::parse(resource)? else {
+        return Ok((
+            context.primary.root.clone(),
+            resolve_artifact(&context.primary.root, from, resource),
+        ));
+    };
+    let catalog = context
+        .catalog
+        .as_ref()
+        .ok_or_else(|| OkfError::Usage("logical reference requires a selected catalog".into()))?;
+    let entry = catalog.entry(&reference.bundle)?;
+    if context.primary.id.as_deref() != Some(&reference.bundle)
+        && !scope_ids.contains(&reference.bundle)
+    {
+        return Err(OkfError::Usage(format!(
+            "out-of-scope logical reference: {}",
+            reference.bundle
+        )));
+    }
+    if !entry.available {
+        return Err(OkfError::Environment(format!(
+            "unavailable bundle {} (no implicit acquisition)",
+            reference.bundle
+        )));
+    }
+    let mut resolved = resolve_artifact(&entry.root, None, &reference.path);
+    resolved.resource = resource.into();
+    Ok((entry.root.clone(), resolved))
+}
+
+pub fn show_artifact_in_context(
+    context: &crate::bundle::context::Context,
+    scope_ids: &[String],
+    from: Option<&str>,
+    resource: &str,
+    max_bytes: usize,
+    lines: Option<(usize, usize)>,
+) -> Result<ArtifactContent> {
+    let (root, resolved) = resolve_artifact_in_context(context, scope_ids, from, resource)?;
+    let path = resolved.path.as_ref().ok_or_else(|| {
+        OkfError::Usage(format!(
+            "artifact cannot be read: {}",
+            resolved.kind.as_str()
+        ))
+    })?;
+    let mut content = show_artifact(&root, None, &path.to_string_lossy(), max_bytes, lines)?;
+    content.resolved.resource = resource.into();
+    Ok(content)
+}
+
 pub fn show_artifact(
     root: &Path,
     from: Option<&str>,
@@ -306,7 +404,7 @@ pub fn show_artifact(
     let resolved = resolve_artifact(root, from, resource);
     if !matches!(
         resolved.kind,
-        ArtifactKind::Artifact | ArtifactKind::Reserved
+        ArtifactKind::Artifact | ArtifactKind::Reserved | ArtifactKind::Support
     ) {
         return Err(OkfError::Usage(format!(
             "artifact show requires a local opaque/reserved artifact; resolved as {}",
@@ -392,6 +490,11 @@ fn decode_prefix(bytes: &[u8], truncated: bool) -> (Option<String>, bool) {
 /// Fetch a bounded HTTP(S) artifact only when the network feature is compiled in. The caller
 /// must still enforce its explicit authorization/policy boundary.
 pub fn fetch_artifact(resource: &str, max_bytes: usize) -> Result<ArtifactContent> {
+    if crate::model::link::is_logical_reference(resource) {
+        return Err(OkfError::Usage(
+            "--fetch cannot acquire logical references; use explicit catalog sync".into(),
+        ));
+    }
     if !(resource.starts_with("https://") || resource.starts_with("http://")) {
         return Err(OkfError::Usage(
             "remote artifact scheme must be http or https".to_string(),
@@ -486,7 +589,9 @@ fn normalize_local(resource: &str, from: Option<&str>) -> Result<PathBuf> {
 
 fn classify_existing(path: &Path) -> ArtifactKind {
     let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
-    if matches!(name, "index.md" | "log.md") {
+    if crate::bundle::walk::is_support_path(path) {
+        ArtifactKind::Support
+    } else if matches!(name, "index.md" | "log.md") {
         ArtifactKind::Reserved
     } else if path.extension().and_then(|e| e.to_str()) == Some("md") {
         ArtifactKind::Concept

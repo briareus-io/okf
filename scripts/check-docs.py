@@ -13,7 +13,7 @@ from urllib.parse import unquote, urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 BUNDLE = ROOT / "knowledge"
 BINARY = Path(os.environ.get("OKF_DOCS_BIN", ROOT / "target/debug/okf")).resolve()
-ENV = {k: v for k, v in os.environ.items() if k not in ("OKF_BUNDLE", "OKF_CATALOG_OVERRIDES")}
+ENV = {k: v for k, v in os.environ.items() if k not in ("OKF_BUNDLE", "OKF_CATALOG", "OKF_CATALOG_OVERRIDES")}
 
 
 def run(*args, expected=0, cwd=ROOT):
@@ -131,6 +131,35 @@ def check_examples():
         assert authored["sources"] == [{"resource": "references/service.txt", "kind": "file"}], authored
         assert "three times" in run("show", "notes/service", maintenance / "bundle", "--body")
 
+        customization = tmp / "customization"
+        customization.mkdir()
+        shell_example("\n".join(blocks("guides/customize-a-bundle.md")), customization)
+        custom_bundle = customization / "bundle"
+        missing = records("bundle", "context", custom_bundle, "--workflow", "import-specification", cwd=customization)
+        missing_workflow = next(row for row in missing if row.get("kind") == "workflow")
+        assert missing_workflow["inputs_complete"] is False
+        assert missing_workflow["missing_required"] == ["source"]
+        selected_workflow = records("bundle", "context", custom_bundle, "--workflow", "import-specification",
+                                    "--inputs", '{"source":"supplied-vendor-specification"}', cwd=customization)
+        workflow = next(row for row in selected_workflow if row.get("kind") == "workflow")
+        assert workflow["inputs_complete"] is True
+        assert workflow["effective_inputs"]["review_level"] == "standard"
+        assert workflow["input_origins"]["review_level"] == "default"
+        assert (custom_bundle / ".okf-bundle/references/import-specification.md").exists()
+        inspected = records("bundle", "context", custom_bundle, "--all", cwd=customization)
+        assert all(row["instruction_role"] == "inspected" for row in inspected
+                   if row.get("kind") == "guidance")
+        assert not next(row for row in inspected if row.get("kind") == "workflow")["selected"]
+        viewed = records("list", custom_bundle, "--view", "overview", cwd=customization)
+        assert any(row.get("kind") == "projection" for row in viewed), viewed
+        preset_query = records("bundle", "context", custom_bundle, "--operation", "list",
+                               "--query", '{"preset":"documented-notes"}', cwd=customization)
+        assert next(row for row in preset_query if row.get("kind") == "effective-query")["query"]["type"] == "Note"
+        inventory = records("list", custom_bundle, cwd=customization)
+        assert [row["id"] for row in inventory if row.get("trust_tier") is not None] == ["/notes/overview"]
+        run("validate", custom_bundle, "--profile", "bundle", cwd=customization)
+        run("validate", custom_bundle, expected=1, cwd=customization)
+
         catalog = tmp / "catalog"
         catalog.mkdir()
         shell_example("\n".join(blocks("guides/work-with-multiple-bundles.md")), catalog)
@@ -143,6 +172,17 @@ def check_examples():
 
         for guide in ["find-and-read-knowledge", "bounded-reads", "tour-the-bundle"]:
             shell_example("\n".join(blocks(f"guides/{guide}.md")), tmp)
+
+        relationships = tmp / "relationships"
+        blockers = records("backlinks", "features/export", relationships, "--preset", "blocking-defects", cwd=relationships)
+        assert [row["id"] for row in blockers if row.get("trust_tier") is not None] == ["/defects/csv"]
+        inverse = records("backlinks", "features/export", relationships, "--inverse-kind", "is-blocked-by",
+                          "--related-type", "Defect", "--details", cwd=relationships)
+        occurrences = [row["edge"] for row in inverse if row.get("kind") == "relationship"]
+        assert len(occurrences) == 1 and occurrences[0]["source"] == "/defects/csv"
+        assert occurrences[0]["authored_kind"] == "blocks"
+        unfiltered = records("backlinks", "features/export", relationships, cwd=relationships)
+        assert {row["id"] for row in unfiltered if row.get("trust_tier") is not None} == {"/defects/csv", "/notes/discussion"}
 
         consumer = blocks("guides/automate-with-json.md")[0]
         negative_checks = '''
@@ -163,17 +203,18 @@ for label, output, exit_code in [
         raise AssertionError("Consumer accepted " + label)
 '''
         shell_example(consumer.replace("\nPY\n", "\n" + negative_checks + "\nPY\n"), tmp)
-    print("Worked examples: all eight guides plus quickstart passed; incomplete/failed JSON results rejected")
+    print("Worked examples: nine guides plus quickstart passed; workflow inputs, relationship presets, and incomplete/failed JSON results checked")
 
 
 def check_bundle():
-    records("validate", BUNDLE)
+    records("bundle", "validate", BUNDLE)
+    records("validate", BUNDLE, "--profile", "bundle")
     lint = records("lint", BUNDLE, "--fail-on", "any")
     actionable = [row for row in lint if row.get("rule") in
                   ("broken-link", "ontology-violation", "index-coverage", "frontmatter-order")]
     assert not actionable, actionable
     notices = collections.Counter(row["rule"] for row in lint if row.get("kind") == "finding")
-    print("Bundle: conformant; advisory findings:", dict(notices))
+    print("Bundle tooling profile: conformant; manifest valid; advisory findings:", dict(notices))
 
     schema = [json.loads(line) for line in run("schema").splitlines()]
     commands = {row["name"].replace(" ", "-"): row for row in schema if row.get("kind") == "command"}
@@ -191,6 +232,18 @@ def check_bundle():
             assert "fingerprint" not in source, row["id"]
             assert not re.search(r"github\.com/[^/]+/[^/]+/blob/", source.get("resource", "")), row["id"]
 
+    context = records("bundle", "context", BUNDLE)
+    settings = next(row for row in context if row.get("kind") == "bundle-context")["effective_settings"]
+    assert settings["bundle"] == "okf.docs", settings
+    assert settings["settings"]["lint"]["source_unrecorded"] == "off"
+    assert set(settings["settings"]["views"]) >= {"commands", "guides"}
+    preset_writers = records("list", BUNDLE, "--preset", "writing-commands", "--full-scan")
+    assert any(row.get("id") == "/commands/refresh" for row in preset_writers)
+    assert all(row.get("mutates") is True for row in preset_writers if row.get("type") == "Command")
+    guide_users = records("backlinks", "commands/refresh", BUNDLE, "--preset", "guides-using-command")
+    assert "/guides/maintain-source-backed-knowledge" in json.dumps(guide_users)
+    workflow = records("bundle", "context", BUNDLE, "--workflow", "check-documentation")
+    assert any(row.get("kind") == "workflow" and row.get("selected") is True for row in workflow)
     writers = records("search", BUNDLE, "--type", "Command", "--facet-filter", "mutates=true", "--full-scan")
     assert "/commands/refresh" in {row.get("id") for row in writers}
     run("search", BUNDLE, "--type", "Command", "--facet-filter", "mutates=true", "--view", "commands")
@@ -198,7 +251,8 @@ def check_bundle():
     assert "/guides/maintain-source-backed-knowledge" in json.dumps(back)
     assert "/skills/update" in json.dumps(back)
     edges = records("links", "guides/maintain-source-backed-knowledge", BUNDLE, "--details")
-    assert any(row.get("kind") == "relationship" for row in edges), edges
+    assert any(row.get("kind") == "relationship" or
+               row.get("kind") == "bundle-edge" and row.get("relationship") for row in edges), edges
     expanded = records("search", BUNDLE, "--type", "Guide", "--text", "Maintain source-backed knowledge",
                        "--in", "title", "--expand", "uses", "--target-field", "title")
     assert any(row.get("kind") == "related-concept" for row in expanded), expanded
@@ -209,7 +263,7 @@ def check_bundle():
     assert "/commands/refresh" in json.dumps(impact), impact
     for path in ["references/changesets/reorganize.yaml", "references/authoring/guide.yaml", "references/authoring/concept-patch.json"]:
         records("artifact", "show", path, BUNDLE)
-    print(f"Showcase: {len(commands)} commands covered; views, relationships, expansion, artifacts and impact passed")
+    print(f"Showcase: {len(commands)} commands covered; manifest/catalog, lint policy, views, presets, workflow context, relationships, expansion, artifacts and impact passed")
 
 
 if __name__ == "__main__":

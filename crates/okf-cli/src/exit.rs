@@ -93,7 +93,7 @@ pub fn run() -> i32 {
     code
 }
 
-fn command_name(command: &crate::cli::Command) -> String {
+pub(crate) fn command_name(command: &crate::cli::Command) -> String {
     use crate::cli::{
         ArtifactCmd, ChangeSetCmd, Command, ComputationCmd, OntFieldTypeCmd, OntologyCmd,
     };
@@ -136,7 +136,23 @@ fn command_name(command: &crate::cli::Command) -> String {
             }
         ),
         Command::Schema => "schema".into(),
-        Command::Catalog => "catalog".into(),
+        Command::Catalog(a) => match &a.command {
+            None => "catalog",
+            Some(crate::cli::CatalogCmd::Sync(_)) => "catalog sync",
+            Some(crate::cli::CatalogCmd::Update(_)) => "catalog update",
+        }
+        .into(),
+        Command::Bundle(sub) => match sub {
+            crate::cli::BundleCmd::Context(_) => "bundle context",
+            crate::cli::BundleCmd::Validate(_) => "bundle validate",
+            crate::cli::BundleCmd::Resource(crate::cli::BundleResourceCmd::List(_)) => {
+                "bundle resource list"
+            }
+            crate::cli::BundleCmd::Resource(crate::cli::BundleResourceCmd::Show(_)) => {
+                "bundle resource show"
+            }
+        }
+        .into(),
         Command::Version => "version".into(),
         Command::List(_) => "list".into(),
         Command::Search(_) => "search".into(),

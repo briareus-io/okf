@@ -1,0 +1,7 @@
+catalog_version: 2
+bundles:
+  okf.docs:
+    location:
+      type: directory
+      path: knowledge
+default_bundle: okf.docs

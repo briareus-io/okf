@@ -22,8 +22,9 @@ last_modified: 2026-10-04T20:39:29Z
 Lists effective local registrations without selecting a primary bundle. IDs, configured and
 overridden locations, availability and applicable tool settings are inspection context. Unknown
 override IDs, conflicting registrations and malformed configuration are errors. Catalog
-registration does not authorize traversal or prove publisher identity. The CLI does not acquire
-remote bundles or accept different snapshots through a location override.
+registration does not authorize traversal or prove publisher identity. Bare catalog inspection does not acquire
+remote bundles or accept different snapshots through a location override. Explicit catalog sync
+and reviewed update operations manage Git dependencies; see [remote dependencies](../guides/remote-dependencies.md).
 
 ## Arguments
 
@@ -33,4 +34,4 @@ Global `--json` requests NDJSON.
 
 Output stream: `bundle-registration,effective-settings`.
 
-Supported global options: `--json`.
+Supported global options: `--catalog`, `--json`.

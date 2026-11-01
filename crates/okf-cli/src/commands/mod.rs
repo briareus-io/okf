@@ -4,9 +4,11 @@
 //! at/above a command's threshold. Errors bubble as [`OkfError`] and are mapped to 2/3/4 by
 //! [`crate::exit`]. Core never calls `process::exit`.
 pub mod artifact;
+pub mod bundle;
 pub mod catalog;
 pub mod changeset;
 pub mod check;
+pub mod filters;
 pub mod mutate;
 pub mod ontology;
 pub mod query;
@@ -18,6 +20,21 @@ use okf_core::error::Result;
 
 /// Dispatch a parsed CLI invocation to its command handler, returning an exit code.
 pub fn run(mut cli: Cli) -> Result<i32> {
+    let _command_registry = okf_core::bundle::manifest::command_registry(bundle::command_names());
+    let command_name = crate::exit::command_name(&cli.command);
+    if cli.catalog.is_some() && !crate::cli::supports_catalog(&command_name) {
+        return Err(okf_core::error::OkfError::Usage(format!(
+            "{command_name} does not accept --catalog"
+        )));
+    }
+    if cli.guidance.is_some() && !crate::cli::supports_guidance(&command_name) {
+        return Err(okf_core::error::OkfError::Usage(format!(
+            "{command_name} does not accept --guidance"
+        )));
+    }
+    if let Some(path) = &cli.catalog {
+        std::env::set_var("OKF_CATALOG", std::env::current_dir()?.join(path));
+    }
     match &cli.command {
         Command::Computation(ComputationCmd::Check(a)) if a.details => {
             return Err(okf_core::error::OkfError::Usage(
@@ -47,6 +64,97 @@ pub fn run(mut cli: Cli) -> Result<i32> {
     if matches!(failure_alias, Some("info" | "warn" | "error")) {
         eprintln!("okf: discovery --fail-on {} is a compatibility alias for any; results have no severity", failure_alias.unwrap());
     }
+    let legacy_materialize = cli.revision.is_some()
+        && matches!(
+            &cli.command,
+            Command::Show(_)
+                | Command::Browse(_)
+                | Command::Artifact(_)
+                | Command::Ontology(_)
+                | Command::Bundle(_)
+        );
+    let _legacy_snapshot_guard = if legacy_materialize {
+        let name = crate::exit::command_name(&cli.command);
+        if !crate::cli::supports_revision(&name) || catalog::writes_command(&cli.command) {
+            return Err(okf_core::error::OkfError::Usage(format!(
+                "{name} does not support historical inspection"
+            )));
+        }
+        if !cli.scope_bundle.is_empty() || cli.catalog_scope {
+            return Err(okf_core::error::OkfError::Usage("legacy --revision with multiple bundles is ambiguous; use --workspace-revision or --bundle-revision".into()));
+        }
+        let path = catalog::bundle_slot(&mut cli.command).and_then(|v| v.clone());
+        let context =
+            okf_core::bundle::context::current_context(path.as_deref(), cli.bundle_id.as_deref())?;
+        let snapshot = okf_core::bundle::snapshot_context::prepare_primary_revision(
+            &context,
+            cli.revision.as_deref().unwrap(),
+        )?;
+        if let Some(slot) = catalog::bundle_slot(&mut cli.command) {
+            *slot = Some(snapshot.context.primary.root.to_string_lossy().into_owned())
+        }
+        cli.bundle_id = None;
+        cli.revision = None;
+        if cli.json {
+            output_snapshot_evidence(&snapshot.evidence)?;
+        }
+        Some(snapshot.install())
+    } else {
+        None
+    };
+    let historical = cli.workspace_revision.is_some() || !cli.bundle_revision.is_empty();
+    let _snapshot_guard = if historical {
+        let name = crate::exit::command_name(&cli.command);
+        if !crate::cli::supports_revision(&name) || catalog::writes_command(&cli.command) {
+            return Err(okf_core::error::OkfError::Usage(format!(
+                "{name} does not support historical inspection"
+            )));
+        }
+        let path = catalog::bundle_slot(&mut cli.command).and_then(|v| v.clone());
+        let context =
+            okf_core::bundle::context::current_context(path.as_deref(), cli.bundle_id.as_deref())?;
+        let mut ids = cli.scope_bundle.clone();
+        if cli.catalog_scope {
+            if let Some(c) = &context.catalog {
+                ids.extend(c.entries.keys().cloned())
+            }
+        }
+        if let Some(id) = &context.primary.id {
+            ids.push(id.clone())
+        }
+        ids.sort();
+        ids.dedup();
+        let selection = okf_core::bundle::snapshot_context::SnapshotSelection::parse(
+            cli.workspace_revision.clone(),
+            &cli.bundle_revision,
+        )?;
+        let snapshot = okf_core::bundle::snapshot_context::prepare(&context, selection, &ids)?;
+        if let Some(slot) = catalog::bundle_slot(&mut cli.command) {
+            *slot = Some(snapshot.context.primary.root.to_string_lossy().into_owned())
+        }
+        cli.bundle_id = None;
+        if cli.json {
+            output_snapshot_evidence(&snapshot.evidence)?;
+        }
+        Some(snapshot.install())
+    } else {
+        None
+    };
+    let _protection_guard = if !matches!(
+        cli.command,
+        Command::Schema | Command::Version | Command::SourceScan(_) | Command::Catalog(_)
+    ) {
+        let path = catalog::bundle_slot(&mut cli.command).and_then(|v| v.clone());
+        let context =
+            okf_core::bundle::context::current_context(path.as_deref(), cli.bundle_id.as_deref())?;
+        context
+            .catalog
+            .as_ref()
+            .map(okf_core::bundle::remote::protect_catalog)
+            .transpose()?
+    } else {
+        None
+    };
     if let Some(code) = catalog::prepare(&mut cli)? {
         return Ok(code);
     }
@@ -54,7 +162,8 @@ pub fn run(mut cli: Cli) -> Result<i32> {
     match &cli.command {
         // META
         Command::Schema => schema::run_schema(json),
-        Command::Catalog => catalog::run_catalog(json),
+        Command::Catalog(a) => catalog::run_catalog_command(a, &cli),
+        Command::Bundle(a) => bundle::run(a, json),
         Command::Version => schema::run_version(json),
         // QUERY
         Command::List(a) => query::run_list(a, json),
@@ -106,4 +215,8 @@ pub fn run(mut cli: Cli) -> Result<i32> {
         // RENDER
         Command::Docs(a) => render::run_docs(a, json),
     }
+}
+
+fn output_snapshot_evidence<T: serde::Serialize>(value: &T) -> Result<()> {
+    crate::output::print_line(&serde_json::json!({"kind":"snapshot-context","evidence":value}))
 }

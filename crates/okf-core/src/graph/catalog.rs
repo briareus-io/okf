@@ -5,7 +5,7 @@ use crate::bundle::loader::{load_bundle, Bundle};
 use crate::error::{OkfError, Result};
 use crate::fingerprint::canonicalize::sha256_hex;
 use crate::model::concept::{Concept, ConceptId};
-use crate::model::link::{classify, raw_links, LinkKind};
+use crate::model::link::{classify, is_logical_reference, raw_links, LinkKind, LogicalReference};
 use crate::model::source::Source;
 use crate::ontology::load::try_load;
 use crate::parse::parse_concept;
@@ -60,6 +60,11 @@ pub struct Edge {
     pub fingerprint_status: Option<String>,
     pub relationship: Option<crate::graph::relationships::Relationship>,
     pub reference_rule: Option<String>,
+    /// Non-concept resource classification; no concept node is invented for these files.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resource_kind: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resource_bundle: Option<String>,
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct ExaminedBundle {
@@ -85,11 +90,19 @@ pub struct ResourceDependency {
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct CatalogGraph {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub examination: Option<DocumentExamination>,
     pub scope: Scope,
     pub nodes: BTreeSet<Node>,
     pub edges: Vec<Edge>,
     #[serde(skip)]
     pub resource_dependencies: Vec<ResourceDependency>,
+}
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct DocumentExamination {
+    pub examined_documents: usize,
+    pub eligible_documents: usize,
+    pub scan_complete: bool,
 }
 /// No fetch, including Git's implicit fetching in partial clones.
 fn git(root: &Path, args: &[&str]) -> Option<Vec<u8>> {
@@ -102,6 +115,11 @@ fn git_text(root: &Path, args: &[&str]) -> Option<String> {
         .map(|s| s.trim().to_string())
 }
 fn revision(root: &Path, requested: &str) -> Option<String> {
+    if crate::bundle::remote::origin(root).ok().flatten().is_some() {
+        return crate::bundle::remote::materialize_local(root, requested)
+            .ok()
+            .map(|snapshot| snapshot.commit);
+    }
     if requested.starts_with('-') || requested.contains(['\n', '\0', ':']) {
         return None;
     }
@@ -111,6 +129,11 @@ fn revision(root: &Path, requested: &str) -> Option<String> {
     )
 }
 fn historical_bytes(root: &Path, path: &Path, requested: &str) -> Option<(String, Vec<u8>)> {
+    if crate::bundle::remote::origin(root).ok().flatten().is_some() {
+        let relative = path.strip_prefix(root).ok()?;
+        let bytes = crate::bundle::remote::read_snapshot(root, requested, relative).ok()?;
+        return Some((requested.to_string(), bytes));
+    }
     let commit = revision(root, requested)?;
     let repo = PathBuf::from(git_text(root, &["rev-parse", "--show-toplevel"])?);
     let rel = path.strip_prefix(&repo).ok()?;
@@ -138,7 +161,56 @@ pub fn load_revision_limited(
     requested: &str,
     limit: Option<usize>,
 ) -> Result<Option<(Bundle, String, usize)>> {
+    load_revision_selected(root, requested, limit, None)
+}
+fn load_revision_selected(
+    root: &Path,
+    requested: &str,
+    limit: Option<usize>,
+    priority: Option<&str>,
+) -> Result<Option<(Bundle, String, usize)>> {
     let _reads = crate::ports::git_read::ReadSession::new();
+    if crate::bundle::remote::origin(root)?.is_some() {
+        let snapshot = crate::bundle::remote::materialize_local(root, requested)?;
+        let bundle_root = snapshot.root.join(&snapshot.bundle_relative);
+        let mut paths = crate::bundle::walk::walk_markdown(&bundle_root)?
+            .into_iter()
+            .filter(|path| {
+                !matches!(
+                    path.file_name().and_then(|s| s.to_str()),
+                    Some("index.md" | "log.md")
+                )
+            })
+            .collect::<Vec<_>>();
+        let total = paths.len();
+        if let Some(priority) = priority {
+            let wanted = PathBuf::from(format!(
+                "{}.md",
+                ConceptId::parse(priority)?.0.trim_start_matches('/')
+            ));
+            let at = paths
+                .iter()
+                .position(|p| p == &wanted)
+                .ok_or_else(|| OkfError::Usage(format!("concept not found: {priority}")))?;
+            let path = paths.remove(at);
+            paths.insert(0, path);
+        }
+        let mut concepts = Vec::new();
+        for path in paths.into_iter().take(limit.unwrap_or(usize::MAX)) {
+            let id = ConceptId::from_relative(path.to_string_lossy().strip_suffix(".md").unwrap());
+            let bytes = std::fs::read_to_string(bundle_root.join(&path))?;
+            concepts
+                .push(parse_concept(id, &bytes).map_err(|e| e.at_path(&bundle_root.join(&path)))?);
+        }
+        return Ok(Some((
+            Bundle {
+                root: root.to_path_buf(),
+                concepts,
+            },
+            format!("git:{}", snapshot.commit),
+            total,
+        )));
+    }
     let mut failures = Vec::new();
     let mut encoding_error = None;
     let loaded = (|| {
@@ -163,10 +235,28 @@ pub fn load_revision_limited(
         };
         let mut concepts = Vec::new();
         let mut total = 0usize;
-        for path in tree.split(|c| *c == 0).filter(|s| !s.is_empty()) {
+        let mut tree_paths = tree
+            .split(|c| *c == 0)
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>();
+        if let Some(priority) = priority {
+            let wanted = prefix.join(format!(
+                "{}.md",
+                ConceptId::from_relative(priority).0.trim_start_matches('/')
+            ));
+            let at = tree_paths.iter().position(|bytes| {
+                std::str::from_utf8(bytes)
+                    .ok()
+                    .is_some_and(|p| Path::new(p) == wanted)
+            })?;
+            let path = tree_paths.remove(at);
+            tree_paths.insert(0, path);
+        }
+        for path in tree_paths {
             let path = PathBuf::from(std::str::from_utf8(path).ok()?);
             let rel = path.strip_prefix(prefix).ok()?;
-            if path.extension().and_then(|s| s.to_str()) != Some("md")
+            if crate::bundle::walk::is_support_path(rel)
+                || path.extension().and_then(|s| s.to_str()) != Some("md")
                 || matches!(
                     path.file_name().and_then(|s| s.to_str()),
                     Some("index.md" | "log.md")
@@ -254,10 +344,20 @@ fn validate_scope_roots(
 impl CatalogGraph {
     /// Qualified targets accept `acme.finance:/policy`; unqualified IDs select the primary.
     pub fn target(&self, context: &Context, raw: &str) -> Node {
-        let (bundle, id) = raw
-            .split_once(":/")
-            .map(|(bundle, id)| (bundle.to_string(), format!("/{id}")))
-            .unwrap_or_else(|| (primary_id(context), ConceptId::from_relative(raw).0));
+        let logical = LogicalReference::parse(raw).ok().flatten();
+        let (bundle, id) = logical
+            .as_ref()
+            .map(|r| {
+                (
+                    r.bundle.clone(),
+                    ConceptId::from_relative(r.path.strip_suffix(".md").unwrap_or(&r.path)).0,
+                )
+            })
+            .unwrap_or_else(|| {
+                raw.split_once(":/")
+                    .map(|(bundle, id)| (bundle.to_string(), format!("/{id}")))
+                    .unwrap_or_else(|| (primary_id(context), ConceptId::from_relative(raw).0))
+            });
         let version = self
             .scope
             .examined
@@ -313,10 +413,15 @@ impl CatalogGraph {
             .collect();
         let mut paths = BTreeSet::new();
         for raw in changed {
-            let (bundle, resource) = raw
-                .split_once(":/")
-                .map(|(bundle, resource)| (bundle.to_string(), resource))
-                .unwrap_or_else(|| (primary_id(context), raw.as_str()));
+            let logical = LogicalReference::parse(raw).ok().flatten();
+            let (bundle, resource) = logical
+                .as_ref()
+                .map(|r| (r.bundle.clone(), r.path.as_str()))
+                .unwrap_or_else(|| {
+                    raw.split_once(":/")
+                        .map(|(bundle, resource)| (bundle.to_string(), resource))
+                        .unwrap_or_else(|| (primary_id(context), raw.as_str()))
+                });
             let Some(entry) = entries.get(&bundle) else {
                 continue;
             };
@@ -423,7 +528,10 @@ pub fn resolve_scope(context: &Context, scope_ids: &[String], all: bool) -> Resu
             scope.examined.push(ExaminedBundle {
                 id,
                 root: entry.root.clone(),
-                version: "working-tree".into(),
+                version: crate::bundle::remote::origin(&entry.root)?
+                    .and_then(|o| o.commit)
+                    .map(|c| format!("git:{c}"))
+                    .unwrap_or_else(|| "working-tree".into()),
                 interpretation: crate::bundle::settings::for_context(context, &entry.root)?,
             });
         } else {
@@ -466,6 +574,48 @@ pub fn build_catalog_graph(
     all: bool,
     requested_revision: Option<&str>,
 ) -> Result<CatalogGraph> {
+    build_catalog_graph_impl(
+        context,
+        scope_ids,
+        all,
+        requested_revision,
+        None,
+        None,
+        false,
+    )
+}
+/// Bound document parsing before constructing occurrences. `source` prioritizes an explicitly
+/// named outgoing anchor; the remaining budget can supply endpoint metadata.
+pub fn build_catalog_graph_limited(
+    context: &Context,
+    scope_ids: &[String],
+    all: bool,
+    requested_revision: Option<&str>,
+    limit: Option<usize>,
+    source: Option<&str>,
+) -> Result<CatalogGraph> {
+    if limit == Some(0) {
+        return Err(OkfError::Usage("scan limit must be positive".into()));
+    }
+    build_catalog_graph_impl(
+        context,
+        scope_ids,
+        all,
+        requested_revision,
+        limit,
+        source,
+        true,
+    )
+}
+fn build_catalog_graph_impl(
+    context: &Context,
+    scope_ids: &[String],
+    all: bool,
+    requested_revision: Option<&str>,
+    limit: Option<usize>,
+    source: Option<&str>,
+    bounded: bool,
+) -> Result<CatalogGraph> {
     let _reads = crate::ports::git_read::ReadSession::new();
     let entries = entries(context);
     let mut requested = BTreeSet::from([primary_id(context)]);
@@ -488,23 +638,65 @@ pub fn build_catalog_graph(
     };
     let mut bundles = BTreeMap::new();
     let mut ontologies = BTreeMap::new();
-    for id in &requested {
+    let priority = source.map(|raw| CatalogGraph::default().target(context, raw));
+    if let Some(target) = &priority {
+        if !requested.contains(&target.bundle) {
+            return Err(OkfError::Usage(format!(
+                "outgoing anchor bundle is outside scope: {}",
+                target.bundle
+            )));
+        }
+    }
+    let mut ordered = requested.iter().collect::<Vec<_>>();
+    ordered.sort_by_key(|id| {
+        (
+            priority
+                .as_ref()
+                .map(|p| p.bundle.as_str())
+                .unwrap_or_else(|| context.primary.id.as_deref().unwrap_or(""))
+                != id.as_str(),
+            (*id).clone(),
+        )
+    });
+    let mut examination = DocumentExamination::default();
+    for id in ordered {
         let entry = &entries[id];
         if !entry.available {
             graph.scope.unavailable.push(id.clone());
             continue;
         }
-        let (bundle, version) = if let Some(rev) = requested_revision {
-            match load_revision_limited(&entry.root, rev, None)? {
-                Some((bundle, version, _)) => (bundle, version),
+        let remaining = limit.map(|n| n.saturating_sub(examination.examined_documents));
+        let selected = priority
+            .as_ref()
+            .filter(|p| p.bundle == *id)
+            .map(|p| p.id.as_str());
+        let (bundle, version, eligible) = if let Some(rev) = requested_revision {
+            match load_revision_selected(&entry.root, rev, remaining, selected)? {
+                Some((bundle, version, eligible)) => (bundle, version, eligible),
                 None => {
                     graph.scope.unavailable.push(format!("{id}@{rev}"));
                     continue;
                 }
             }
         } else {
-            (load_bundle(&entry.root)?, "working-tree".into())
+            let (bundle, eligible) = if bounded {
+                crate::graph::filter::load_bundle_limited(&entry.root, remaining, selected)?
+            } else {
+                let bundle = load_bundle(&entry.root)?;
+                let n = bundle.concepts.len();
+                (bundle, n)
+            };
+            (
+                bundle,
+                crate::bundle::remote::origin(&entry.root)?
+                    .and_then(|o| o.commit)
+                    .map(|c| format!("git:{c}"))
+                    .unwrap_or_else(|| "working-tree".into()),
+                eligible,
+            )
         };
+        examination.examined_documents += bundle.concepts.len();
+        examination.eligible_documents += eligible;
         for concept in &bundle.concepts {
             graph.nodes.insert(Node {
                 bundle: id.clone(),
@@ -582,7 +774,34 @@ pub fn build_catalog_graph(
                         source: source.clone(),
                     });
                 }
-                if classify(resource) == LinkKind::External && value.get("bundle_ref").is_none() {
+                if let Ok(Some(reference)) = LogicalReference::parse(resource) {
+                    if let Some(entry) = entries
+                        .get(&reference.bundle)
+                        .filter(|_| requested.contains(&reference.bundle))
+                    {
+                        let path = entry.root.join(&reference.path);
+                        let path = std::fs::canonicalize(&path).unwrap_or(path);
+                        if path.starts_with(&entry.root) {
+                            graph.resource_dependencies.push(ResourceDependency {
+                                path,
+                                source: source.clone(),
+                            });
+                        }
+                    }
+                }
+                // Producer-defined Git sources use repository-relative paths. Retain
+                // them above as resource dependencies, but do not turn a .md suffix
+                // into a concept assertion unless the author supplies a bundle mapping
+                // or a logical reference. Otherwise catalog discovery would invent
+                // missing-target warnings for ordinary repository documentation.
+                if git_kind && value.get("bundle_ref").is_none() && !is_logical_reference(resource)
+                {
+                    continue;
+                }
+                if classify(resource) == LinkKind::External
+                    && !is_logical_reference(resource)
+                    && value.get("bundle_ref").is_none()
+                {
                     continue;
                 }
                 if !resource
@@ -634,8 +853,13 @@ pub fn build_catalog_graph(
                         {
                             pending_git_fingerprints.push((graph.edges.len(), source_value));
                         } else {
-                            edge.fingerprint_status =
-                                fingerprint_status(&source_value, &bundle.root, &concept.id);
+                            edge.fingerprint_status = fingerprint_status(
+                                &source_value,
+                                &bundle.root,
+                                &concept.id,
+                                context,
+                                &requested,
+                            );
                         }
                     }
                 }
@@ -666,7 +890,9 @@ pub fn build_catalog_graph(
                         };
                         for (value, location) in values {
                             if let Some(resource) = value.as_str() {
-                                if classify(resource) != LinkKind::External {
+                                if classify(resource) != LinkKind::External
+                                    || is_logical_reference(resource)
+                                {
                                     let mut edge = resolve_edge(
                                         ResolutionContext {
                                             entries: &entries,
@@ -692,7 +918,8 @@ pub fn build_catalog_graph(
                     dest_url, ..
                 }) = event
                 {
-                    if classify(&dest_url) != LinkKind::External {
+                    if classify(&dest_url) != LinkKind::External || is_logical_reference(&dest_url)
+                    {
                         let line = concept.body[..range.start]
                             .bytes()
                             .filter(|c| *c == b'\n')
@@ -715,7 +942,9 @@ pub fn build_catalog_graph(
             }
             if let Some(ontology) = &ontology {
                 for relationship in crate::graph::relationships::relationships(concept, ontology) {
-                    if classify(&relationship.raw_reference) == LinkKind::External {
+                    if classify(&relationship.raw_reference) == LinkKind::External
+                        && !is_logical_reference(&relationship.raw_reference)
+                    {
                         continue;
                     }
                     let mut edge = resolve_edge(
@@ -793,6 +1022,40 @@ pub fn build_catalog_graph(
             }
         }
     }
+    if bounded {
+        examination.scan_complete = examination.examined_documents
+            == examination.eligible_documents
+            && graph.scope.unavailable.is_empty();
+        if !examination.scan_complete {
+            for edge in &mut graph.edges {
+                if edge.status == "missing-target"
+                    && edge
+                        .target
+                        .as_ref()
+                        .is_some_and(|t| !graph.nodes.contains(t))
+                {
+                    edge.status = "unexamined-target".into();
+                    edge.evidence = "target metadata not examined within document budget".into();
+                }
+            }
+        }
+        graph.examination = Some(examination);
+    }
+    // Semantic extraction knows the authored occurrence, but only catalog resolution
+    // knows its bundle-relative endpoint and scope/snapshot status. Keep both layers
+    // consistent without replacing the authored reference or masking unknown kinds.
+    for edge in &mut graph.edges {
+        if let Some(relationship) = &mut edge.relationship {
+            if let Some(target) = &edge.target {
+                relationship.target = target.id.clone();
+            } else if is_logical_reference(&relationship.raw_reference) {
+                relationship.target = relationship.raw_reference.clone();
+            }
+            if relationship.status != "unknown-kind" {
+                relationship.status = edge.status.clone();
+            }
+        }
+    }
     Ok(graph)
 }
 pub(crate) fn source_dependency_path(
@@ -840,7 +1103,13 @@ fn source_dependency_path_with_git_root(
     Some(std::fs::canonicalize(&path).unwrap_or(path))
 }
 
-fn fingerprint_status(source: &Source, root: &Path, id: &ConceptId) -> Option<String> {
+fn fingerprint_status(
+    source: &Source,
+    root: &Path,
+    id: &ConceptId,
+    context: &Context,
+    scope: &BTreeSet<String>,
+) -> Option<String> {
     if source.fingerprint.is_empty() {
         return None;
     }
@@ -853,7 +1122,8 @@ fn fingerprint_status(source: &Source, root: &Path, id: &ConceptId) -> Option<St
         &crate::ports::fs::RealFs,
         &crate::ports::git::RealGit,
         None,
-    );
+    )
+    .with_bundle_context(context, &scope.iter().cloned().collect::<Vec<_>>());
     use crate::fingerprint::Fingerprinter;
     match engine.fingerprint(source) {
         Ok(current) => Some(
@@ -924,7 +1194,8 @@ fn target_for_path(
 ) -> Option<Node> {
     let entry = entry_for_path(entries, path)?;
     let rel = path.strip_prefix(&entry.root).ok()?;
-    if rel.extension().and_then(|s| s.to_str()) != Some("md")
+    if crate::bundle::walk::is_support_path(rel)
+        || rel.extension().and_then(|s| s.to_str()) != Some("md")
         || matches!(
             rel.file_name().and_then(|s| s.to_str()),
             Some("index.md" | "log.md")
@@ -959,7 +1230,17 @@ fn resolve_edge(
         scope,
         bundles,
     } = context;
-    let path = ordinary_path(root, &source.id, resource);
+    let logical = LogicalReference::parse(resource);
+    let path = match &logical {
+        Ok(Some(reference)) => entries.get(&reference.bundle).map(|entry| {
+            let mut path = entry.root.join(&reference.path);
+            if path.extension().is_none() {
+                path.set_extension("md");
+            }
+            std::fs::canonicalize(&path).unwrap_or(path)
+        }),
+        _ => ordinary_path(root, &source.id, resource),
+    };
     let ordinary = path
         .as_ref()
         .and_then(|p| target_for_path(entries, p, bundles));
@@ -974,7 +1255,37 @@ fn resolve_edge(
         fingerprint_status: None,
         relationship: None,
         reference_rule: None,
+        resource_kind: None,
+        resource_bundle: None,
     };
+    match &logical {
+        Err(error) => {
+            edge.status = "invalid-reference".into();
+            edge.evidence = error.to_string();
+            return edge;
+        }
+        Ok(Some(reference)) => {
+            let Some(entry) = entries.get(&reference.bundle) else {
+                edge.status = "unknown-bundle-id".into();
+                edge.evidence = "logical-reference".into();
+                return edge;
+            };
+            if path.as_ref().is_some_and(|p| !p.starts_with(&entry.root)) {
+                edge.status = "blocked".into();
+                edge.evidence = "logical reference escapes registered root".into();
+                return edge;
+            }
+            if let Some(declared) = declared {
+                if declared.id != reference.bundle || declared.path != reference.path {
+                    edge.status = "reference-mismatch".into();
+                    edge.evidence = "logical URI and bundle_ref disagree".into();
+                    return edge;
+                }
+            }
+            edge.evidence = "logical-reference".into();
+        }
+        _ => {}
+    }
     if let Some(declared) = declared {
         let Some(entry) = entries.get(&declared.id) else {
             edge.status = "unknown-bundle-id".into();
@@ -1023,6 +1334,22 @@ fn resolve_edge(
                     edge.target.as_ref(),
                     path.is_some(),
                 ));
+                if logical.as_ref().ok().and_then(Option::as_ref).is_some() {
+                    if let (Some(expected), Some(selected)) = (
+                        snapshot.commit.as_deref(),
+                        edge.target
+                            .as_ref()
+                            .and_then(|n| n.version.strip_prefix("git:")),
+                    ) {
+                        if expected != selected {
+                            if let Some(result) = &mut edge.snapshot {
+                                result.status = "mismatched".into();
+                                result.evidence = "source snapshot differs from selected catalog snapshot; historical evidence is not a substitute".into();
+                                result.candidate = edge.target.clone();
+                            }
+                        }
+                    }
+                }
             } else {
                 edge.snapshot = Some(SnapshotResult {
                     requested: snapshot.clone(),
@@ -1031,6 +1358,56 @@ fn resolve_edge(
                     resolved: None,
                     candidate: None,
                 });
+            }
+        }
+    }
+    // Body/provenance links can address structural documents and opaque artifacts.
+    // Resolve their existence separately from concept identity; ontology references
+    // still require concept targets and must not become satisfied by arbitrary files.
+    if edge.target.is_none()
+        && (location.starts_with("body:")
+            || location.starts_with("sources[")
+            || location == "argument")
+    {
+        if let Some(path) = &path {
+            if let Some(entry) = entry_for_path(entries, path) {
+                let rel = path.strip_prefix(&entry.root).unwrap();
+                let kind = if crate::bundle::walk::is_support_path(rel) {
+                    Some("support")
+                } else if matches!(
+                    rel.file_name().and_then(|s| s.to_str()),
+                    Some("index.md" | "log.md")
+                ) {
+                    Some("reserved")
+                } else if rel.extension().and_then(|s| s.to_str()) != Some("md") {
+                    Some("artifact")
+                } else {
+                    None
+                };
+                if let Some(kind) = kind {
+                    edge.resource_kind = Some(kind.into());
+                    edge.resource_bundle = Some(entry.id.clone());
+                    edge.evidence = format!("{kind}-resource");
+                    edge.status = if !entry.available {
+                        "unavailable-root"
+                    } else if !scope.contains(&entry.id) {
+                        "out-of-scope"
+                    } else if let Some((_, version)) = bundles.get(&entry.id) {
+                        let exists = version
+                            .strip_prefix("git:")
+                            .map(|rev| historical_bytes(&entry.root, path, rev).is_some())
+                            .unwrap_or_else(|| path.is_file());
+                        if exists {
+                            "resolved"
+                        } else {
+                            "missing-target"
+                        }
+                    } else {
+                        "unavailable-root-or-revision"
+                    }
+                    .into();
+                    return edge;
+                }
             }
         }
     }

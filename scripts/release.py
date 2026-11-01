@@ -34,8 +34,12 @@ def metadata():
     assert semver(minimum) <= semver(version) < semver(maximum), 'CLI outside plugin range'
     notes = ROOT / 'releases' / f'{version}.md'
     assert notes.is_file() and len(notes.read_text().strip()) > 100, 'Detailed release notes required'
+    protocol = ROOT / 'plugins/okf/references/bundle-context.md'
+    assert protocol.is_file(), 'Missing shared skill operating protocol'
+    assert '../../scripts/check-cli.sh' in protocol.read_text(), 'Shared protocol omits compatibility preflight'
+    assert (ROOT / 'plugins/okf/scripts/check-cli.sh').is_file(), 'Missing CLI compatibility checker'
     for skill in (ROOT / 'plugins/okf/skills').glob('*/SKILL.md'):
-        assert '../../scripts/check-cli.sh' in skill.read_text(), f'Missing preflight: {skill}'
+        assert '../../references/bundle-context.md' in skill.read_text(), f'Missing shared preflight protocol: {skill}'
     return version
 
 

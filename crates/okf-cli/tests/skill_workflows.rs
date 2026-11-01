@@ -718,6 +718,215 @@ fn structured_mutation() {
     assert_eq!(fs::read_to_string(&concept).unwrap(), content);
 }
 
+fn manifest_pre_action_guidance() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("okf-bundle.yaml"), "manifest_version: 1\nguidance:\n  instructions: Preserve URL data; do not fetch targets without explicit authorization.\n  rules:\n    - id: writing\n      operations: [add]\n      instructions: Preserve source provenance.\n").unwrap();
+    let context = run(
+        root.path(),
+        &["bundle", "context", ".", "--operation", "add", "--json"],
+    );
+    assert!(record(&context, "bundle-context")["context_digest"].is_string());
+    assert!(context.iter().any(|r| r["kind"] == "guidance"
+        && r["instructions"]
+            .as_str()
+            .is_some_and(|s| s.contains("do not fetch"))));
+    assert!(context
+        .iter()
+        .any(|r| r["id"] == "writing" && r["content"] == "full"));
+    fs::write(
+        root.path().join("source.md"),
+        "---\ntype: Note\nurl: https://example.invalid/live\n---\nURL is data.\n",
+    )
+    .unwrap();
+    let rows = run(root.path(), &["show", "source", ".", "--json"]);
+    assert!(rows
+        .iter()
+        .any(|r| r["url"] == "https://example.invalid/live"));
+}
+
+fn instruction_file_context_change() {
+    let root = tempfile::tempdir().unwrap();
+    fs::create_dir(root.path().join(".okf-bundle")).unwrap();
+    fs::write(
+        root.path().join("okf-bundle.yaml"),
+        "manifest_version: 1\nguidance:\n  instructions_file: .okf-bundle/instructions.md\n",
+    )
+    .unwrap();
+    let instructions = root.path().join(".okf-bundle/instructions.md");
+    fs::write(&instructions, "Preserve supplied URLs.\n").unwrap();
+    let before = run(root.path(), &["bundle", "context", ".", "--json"]);
+    fs::write(
+        &instructions,
+        "Preserve supplied URLs and source timestamps.\n",
+    )
+    .unwrap();
+    let after = run(root.path(), &["bundle", "context", ".", "--json"]);
+    assert_ne!(
+        record(&before, "bundle-context")["context_digest"],
+        record(&after, "bundle-context")["context_digest"]
+    );
+    let inspected = run(root.path(), &["bundle", "context", ".", "--all", "--json"]);
+    assert!(inspected
+        .iter()
+        .filter(|r| r["kind"] == "guidance")
+        .all(|r| r["instruction_role"] == "inspected"));
+}
+
+fn support_profile_boundary() {
+    let root = tempfile::tempdir().unwrap();
+    fs::create_dir(root.path().join(".okf-bundle")).unwrap();
+    fs::write(root.path().join("okf-bundle.yaml"), "manifest_version: 1\n").unwrap();
+    fs::write(
+        root.path().join("visible.md"),
+        "---\ntype: Note\n---\n# Visible\n",
+    )
+    .unwrap();
+    fs::write(
+        root.path().join(".okf-bundle/template.md"),
+        "Unstructured template\n",
+    )
+    .unwrap();
+    let visible = run(root.path(), &["list", ".", "--json"]);
+    assert!(visible.iter().any(|r| r["id"] == "/visible"));
+    assert!(!visible.iter().any(|r| r["id"]
+        .as_str()
+        .is_some_and(|id| id.contains(".okf-bundle"))));
+    run(root.path(), &["validate", ".", "--profile", "bundle"]);
+    let core = Command::new(env!("CARGO_BIN_EXE_okf"))
+        .current_dir(root.path())
+        .env_remove("OKF_BUNDLE")
+        .env_remove("OKF_CATALOG")
+        .env_remove("OKF_CATALOG_OVERRIDES")
+        .args(["validate", ".", "--profile", "core"])
+        .output()
+        .unwrap();
+    assert!(!core.status.success());
+}
+
+#[cfg(unix)]
+fn remote_review_does_not_accept() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().unwrap();
+    let upstream = root.path().join("upstream");
+    fs::create_dir_all(upstream.join("bundle")).unwrap();
+    let git = |args: &[&str]| {
+        let output = Command::new("git")
+            .current_dir(&upstream)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    };
+    git(&["init", "-q", "-b", "main"]);
+    git(&["config", "user.email", "test@example.invalid"]);
+    git(&["config", "user.name", "Test"]);
+    fs::write(
+        upstream.join("bundle/index.md"),
+        "---\nokf_version: '0.2'\n---\n# Bundle\n",
+    )
+    .unwrap();
+    fs::write(
+        upstream.join("bundle/a.md"),
+        "---\ntype: Note\n---\nBefore\n",
+    )
+    .unwrap();
+    git(&["add", "."]);
+    git(&["commit", "-qm", "initial"]);
+    // Trusted local transport fixture: no network, credentials, or global Git configuration.
+    let ssh = root.path().join("ssh-fixture.sh");
+    fs::write(
+        &ssh,
+        "#!/bin/sh\nexec git-upload-pack \"$OKF_TEST_UPSTREAM\"\n",
+    )
+    .unwrap();
+    fs::set_permissions(&ssh, fs::Permissions::from_mode(0o700)).unwrap();
+    fs::write(root.path().join("okf-catalog.yaml"), "catalog_version: 2\nbundles:\n  test.remote:\n    location:\n      type: git\n      url: ssh://fixture.invalid/repository\n      ref: refs/heads/main\n      path: bundle\n").unwrap();
+    let invoke = |args: &[&str]| {
+        let output = Command::new(env!("CARGO_BIN_EXE_okf"))
+            .current_dir(root.path())
+            .env_remove("OKF_BUNDLE")
+            .env_remove("OKF_CATALOG")
+            .env_remove("OKF_CATALOG_OVERRIDES")
+            .env("OKF_CACHE_DIR", root.path().join("cache"))
+            .env("GIT_SSH_COMMAND", &ssh)
+            .env("GIT_SSH_VARIANT", "ssh")
+            .env("OKF_TEST_UPSTREAM", &upstream)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{args:?}: {}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        output
+    };
+    let initial = invoke(&["catalog", "update", "--plan", "initial.yaml", "--json"]);
+    let initial_rows: Vec<Value> = String::from_utf8(initial.stdout)
+        .unwrap()
+        .lines()
+        .map(|v| serde_json::from_str(v).unwrap())
+        .collect();
+    assert_eq!(
+        record(&initial_rows, "catalog-update-plan")["plan_kind"],
+        "initial"
+    );
+    assert!(!root.path().join("okf-catalog.lock").exists());
+    invoke(&[
+        "catalog",
+        "update",
+        "--apply",
+        "initial.yaml",
+        "--allow-incomplete-impact",
+    ]);
+    let accepted = fs::read(root.path().join("okf-catalog.lock")).unwrap();
+    fs::write(
+        upstream.join("bundle/a.md"),
+        "---\ntype: Note\n---\nAfter\n",
+    )
+    .unwrap();
+    fs::write(
+        upstream.join("bundle/okf-bundle.yaml"),
+        "manifest_version: 1\nguidance:\n  instructions: Preserve observations.\n",
+    )
+    .unwrap();
+    git(&["add", "."]);
+    git(&["commit", "-qm", "candidate"]);
+    let candidate = invoke(&["catalog", "update", "--plan", "candidate.yaml", "--json"]);
+    let candidate_rows: Vec<Value> = String::from_utf8(candidate.stdout)
+        .unwrap()
+        .lines()
+        .map(|v| serde_json::from_str(v).unwrap())
+        .collect();
+    assert_eq!(
+        record(&candidate_rows, "catalog-update-plan")["plan_kind"],
+        "update"
+    );
+    assert_eq!(
+        fs::read(root.path().join("okf-catalog.lock")).unwrap(),
+        accepted
+    );
+    let plan = fs::read_to_string(root.path().join("candidate.yaml")).unwrap();
+    assert!(plan.contains("bundle/a.md"));
+    assert!(plan.contains("bundle/okf-bundle.yaml"));
+    assert!(plan.contains("impact_complete: false"));
+}
+
+#[cfg(not(unix))]
+fn remote_review_does_not_accept() {
+    // The executable transport fixture needs a POSIX ssh-command shim.
+    // Preserve a non-network assertion on other hosts rather than invoking real upstreams.
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("okf-bundle.yaml"), "manifest_version: 1\n").unwrap();
+    run(root.path(), &["bundle", "context", ".", "--json"]);
+    assert!(!root.path().join("okf-catalog.lock").exists());
+}
+
 #[test]
 fn skill_behavior_scenarios() {
     let scenarios: Value =
@@ -754,9 +963,13 @@ fn skill_behavior_scenarios() {
             }
             "expansion-and-pagination-cost" => expansion_and_pagination_cost(&doc),
             "resumable-structured-migration" => resumable_structured_migration(&doc),
+            "manifest-pre-action-guidance" => manifest_pre_action_guidance(),
+            "instruction-file-context-change" => instruction_file_context_change(),
+            "remote-review-does-not-accept" => remote_review_does_not_accept(),
+            "support-profile-boundary" => support_profile_boundary(),
             _ => panic!("scenario {id} has no executable workflow"),
         }
         println!("skill workflow passed: {id}");
     }
-    assert_eq!(seen.len(), 7);
+    assert_eq!(seen.len(), 11);
 }

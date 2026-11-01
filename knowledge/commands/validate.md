@@ -19,10 +19,11 @@ Conformance validation: the spec's three hard rules only (parseable frontmatter,
 
 | Argument | Type | Required | Description |
 |----------|------|----------|-------------|
-| `<bundle>` | positional | no | Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory) |
+| `<bundle>` | positional | no | — |
+| `--profile <value>` | string | no | Core preserves OKF v0.2 file boundaries; bundle excludes the support namespace (default: `core`) |
 
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 
-Output stream: `violation`.
+Output stream: `violation,validation-profile`.
 
-Supported global options: `--bundle-id`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--guidance`, `--json`.

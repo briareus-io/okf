@@ -5,26 +5,20 @@ description: Reconcile OKF concepts after source or concept changes using lifecy
 
 # Update concepts after changes
 
+## Shared operating protocol
+
+Read and follow the [shared OKF protocol](../../references/bundle-context.md) before CLI-dependent
+work. It defines compatibility checks, bundle context, scope, output evidence, validation profiles,
+and authoring conventions. Use `references/cli.md` for exact command syntax as needed.
+
 Prefer `OKF_BUNDLE` for a workflow. Fully qualified examples include `okf diff <git-ref> <bundle>`
 and `okf affected <bundle> --changed <resource>`. Before using an unfamiliar command or flag, read
 its entry in `references/cli.md`. If the installed version differs or rejects documented syntax, use
 that command's `--help` output as the runtime authority.
 
-
-## CLI compatibility preflight
-
-Before CLI-dependent work, run `sh <this-skill-directory>/../../scripts/check-cli.sh`,
-resolving the path from this installed SKILL.md, not the working directory. This read-only
-check uses the plugin's `cli-compatibility.txt` range and reports the executable on PATH.
-If missing, incompatible, or unable to run, stop CLI-dependent work and show its installation
-instructions. Never invoke the installer, download a CLI, or update it from this skill.
-An explicit user request to install should be handled separately from this workflow.
-Only after this check passes may command help resolve syntax differences; help cannot waive
-compatibility. Recheck if the executable or PATH changes during the task.
-
 ## Detect and classify
 
-CLI 0.5 requires explicit `--changed -` to combine a changed-target argument
+Use explicit `--changed -` to combine a changed-target argument
 with piped changed targets. Use `--changed-base repo` for repository-worktree
 paths or `--changed-base filesystem` for explicit filesystem paths; the default
 remains bundle-relative. `--depth` requires `--transitive`. For JSON output,
@@ -49,6 +43,10 @@ Use the relevant detectors and keep their meanings separate:
 Triage findings as lifecycle expiry, standard source evidence change, tool fingerprint drift, or
 actual concept-content change. A concept may have more than one.
 
+For `revision-changed`, review the changed revision and authored snapshot expectations even when
+content bytes match; do not assume content drift or refresh automatically. Other states follow the
+shared source-health definitions.
+
 ## Reconcile
 
 1. Resolve bundle identity and the requested consumer scope before affected analysis; use detailed
@@ -71,7 +69,7 @@ actual concept-content change. A concept may have more than one.
 3. After checking changed sources against the final content, run `okf refresh <concept-id> <bundle>
    --fail-on skipped` if local fingerprints are in use. This applies after a substantive rewrite as
    well as after confirming unchanged content. Never refresh an unreviewed source merely to clear
-   drift; refresh operates on the concept's supported sources. In CLI 0.5, a missing,
+   drift; refresh operates on the concept's supported sources. A missing,
    unavailable, or unsupported required source blocks the whole single-concept refresh
    before publication. Inspect skipped/error results and keep unresolved sources in the
    report. Refresh updates the fingerprint extension only. It does
@@ -81,7 +79,7 @@ actual concept-content change. A concept may have more than one.
    an existing user instruction can supply that decision. These are distinct from refresh.
 5. If a concept moved, use `okf mv <old-id> <new-id> <bundle>`. When an opaque artifact moves,
    update its declaring standard path field and preserve provenance; never execute it.
-6. Re-run stale/affected checks, `okf validate <bundle>`, and advisory `okf lint <bundle> --fail-on
+6. Re-run stale/affected checks, `okf validate <bundle> --profile bundle`, and advisory `okf lint <bundle> --fail-on
    never`. Regenerate indexes with `okf docs <bundle> --format index` only when needed and their
    bodies are generated or replacement is already authorized; preserve curated prose otherwise.
    Validate after index generation. Inspect lint findings despite its reporting-only exit; use
@@ -111,22 +109,6 @@ them. This command does not execute artifacts or grant permission to copy extern
 Report changes, validation, and remaining evidence gaps. Include fingerprint-only refreshes,
 unchanged expiry, and verification consequences when relevant to this update.
 
-## Bundle identity and examination scope
-
-Keep bundle paths and catalog IDs distinct. `OKF_BUNDLE` always selects a path; use the
-`--bundle-id <id>` for a registered identity. When a catalog is configured, use `okf catalog` to inspect effective local
-registrations, overrides, availability, and per-bundle settings. Catalog paths are relative to
-`okf.toml`, locations are relative to the catalog, and machine-local overrides change effective
-locations rather than accepting different snapshots. Inspect effective settings before relying on
-a per-bundle ontology or view. Equal or nested registered roots are configuration errors.
-
-Registration alone does not authorize catalog-wide traversal. Start with the selected bundle;
-request additional bundles explicitly with repeatable `--scope-bundle <id>` or deliberate
-`--catalog-scope` when the task requires them. Report requested and examined
-scope and unavailable members. Out-of-scope references remain unknown. Ordinary relative paths
-retain their meaning across registered boundaries; distributing one bundle alone can break them.
-Never infer another bundle from a matching filename or title.
-
 ## Scoped reconciliation
 
 Use explicit examination scope for cross-bundle affected analysis. Record which consumers remain
@@ -139,31 +121,3 @@ Re-run nested metadata and index-coverage lint after metadata or layout changes.
 operations do not rewrite curated indexes. Use the declared selectors to locate affected records;
 use object paths or concrete JSON Pointer patches for writes, rather than list query selectors. Review the combined repository
 diff when changes span bundles; there is no automatic cross-bundle rename transaction.
-
-## Source baseline lint configuration
-
-`source-unrecorded` defaults to `warn`. If the user wants a different policy, configure
-`source_unrecorded = "off"`, `"info"`, `"warn"`, or `"error"` under
-`[bundle_settings.default.lint]` in `okf.toml` (or `[bundle_settings."<id>".lint]`
-for a named bundle). `off` suppresses this lint finding only; missing-source errors
-(default `error`, independently configurable via `source_missing`) and `stale` findings remain active. Do not suppress findings merely to pass a gate.
-
-All lint rule settings accept `off`, `info`, `warn`, or `error` in the same table.
-Defaults: `broken_link` and `source_missing` are `error`; `missing_title`, `spec_v02`
-(finding rule `okf-v02`), `ontology_violation`, `source_unrecorded`, and `index_coverage`
-are `warn`; `missing_description` and `orphan` are `info`. Omitted settings keep these
-severities. Turning a lint rule off does not change conformance validation or stale checks.
-
-## Frontmatter order
-
-When authoring concept frontmatter, put `type` first. For the matching ontology concept type,
-follow `fields` declaration order recursively, including nested objects and objects in lists;
-reusable field types use their resolved field order. Put reference-only keys next in reference
-declaration order. Put undeclared/custom fields last at each level, preserving their relative
-order. Without a matching ontology type, keep the other fields in their authored order.
-This is an authoring convention, not an additional OKF conformance requirement.
-CLI writes normalize this order. `okf lint <bundle>` reports `frontmatter-order` at warning by
-default; `okf lint <bundle> --fix` normalizes the bundle and reports remaining findings. The
-bundle lint setting `frontmatter_order` accepts `info`, `warn`, `error`, or `off`; an off rule
-is not fixed. Normalization preserves values, list order, body text, and verification metadata;
-YAML comments and scalar presentation may normalize.

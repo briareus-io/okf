@@ -208,7 +208,9 @@ pub fn relationships(concept: &Concept, ontology: &Ontology) -> Vec<Relationship
                     authored_kind: kind,
                     inverse: inverse.clone(),
                     attributes,
-                    status: if classify(raw) == LinkKind::External {
+                    status: if classify(raw) == LinkKind::External
+                        && !crate::model::link::is_logical_reference(raw)
+                    {
                         "external"
                     } else if rule.kind_selector.is_some() && inverse.is_none() {
                         "unknown-kind"

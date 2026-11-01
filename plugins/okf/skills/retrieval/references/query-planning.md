@@ -17,6 +17,9 @@ Add named bundles when the question needs them; catalog registration alone does 
 | Incoming assertions and their conditions | `backlinks --details` in the necessary scope |
 | Supporting prose | Open only relevant concepts after metadata identifies them |
 
+For a few metadata fields, use `okf search <bundle> --project '$id' --project 'owner' --limit 10 --json`
+and inspect separate projection records before opening bodies.
+
 Read the selected bundle's effective ontology to find actual relationship rule names. An ordinary
 path-looking field does not create an expansion rule. Expansion is one hop, outbound only, with
 deduplicated target payloads and distinct edge occurrences. It does not fetch target bodies.
@@ -103,3 +106,20 @@ Separate `tags[]="security"` and `tags[]="production"` conditions require both t
 `tags[] in ["security","production"]` condition accepts either. `not in` checks the entire list;
 missing/null fields do not satisfy it, while a present empty list can. Typed operands do not coerce
 strings to numbers or booleans.
+
+## Relationship filtering and snapshots
+
+Use explicit `--kind`, `--inverse-kind`, or `--preset` when the question needs a relationship subset.
+Authored kinds retain their meaning in incoming and outgoing queries; the related endpoint is the
+source for backlinks and the target for links. Edge predicates are evaluated on one occurrence.
+Expansion predicates affect expanded edges, not primary hits. Graph predicates constrain traversal.
+
+Only declared metadata references create semantic edges. Inspect edge attributes together when
+conditions must belong to the same record. An inverse label does not assert acceptance or fulfillment.
+For authored keys containing dots, use a literal-key selector such as `["policy.status"]` rather
+than interpreting it as a nested path. Consult the generated reference for the typed selector grammar.
+
+A view with `extended_output: true` explicitly enables configured JSON projections and expansion;
+ordinary views preserve default machine output. Read records by kind and inspect expansion bounds.
+Historical reads must reopen the reported immutable identity; a changed working tree is not a
+substitute for unavailable historical evidence. The shared protocol owns snapshot/lock distinctions.

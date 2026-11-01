@@ -52,10 +52,19 @@ pub fn rm_with_ontology(
     }
 
     let bundle = load_bundle(root)?;
+    let logical_bundle = super::mv::logical_bundle_id(root)?;
     let mut referrers: Vec<_> = bundle
         .concepts
         .iter()
-        .filter(|concept| super::mv::references_target(concept, ontology, &cid))
+        .filter(|concept| {
+            super::mv::references_target(concept, ontology, &cid)
+                || super::mv::logical_references_target(
+                    concept,
+                    ontology,
+                    logical_bundle.as_deref(),
+                    &cid,
+                )
+        })
         .map(|concept| concept.id.clone())
         .collect();
     referrers.extend(super::mv::structural_referrers(root, &cid)?);

@@ -7,3 +7,6 @@ __pycache__/
 .okf-transaction/
 
 .briareus
+
+# Local configuration migration recovery copies remain on disk, outside version control.
+.okf-migration/

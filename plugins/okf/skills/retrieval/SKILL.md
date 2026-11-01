@@ -5,6 +5,12 @@ description: Answer questions from OKF bundles using scoped structured queries, 
 
 # Retrieve knowledge from an OKF bundle
 
+## Shared operating protocol
+
+Read and follow the [shared OKF protocol](../../references/bundle-context.md) before CLI-dependent
+work. It defines compatibility checks, bundle context, scope, output evidence, validation profiles,
+and authoring conventions. Use `references/cli.md` for exact command syntax as needed.
+
 Query the bundle via the CLI rather than bulk-reading it. Use `OKF_BUNDLE` for multi-step work;
 explicit examples are `okf show <concept-id> <bundle>` and `okf links <concept-id> <bundle> --json`.
 Before using an unfamiliar command or flag, read its entry in `references/cli.md`. If the installed
@@ -17,21 +23,9 @@ Search text must follow `--text`; the positional argument to search is the bundl
 use `okf list <bundle> --json` for an intended inventory. Use `okf browse <bundle> --directory
 <directory>` to descend; its positional is also the bundle.
 
-
-## CLI compatibility preflight
-
-Before CLI-dependent work, run `sh <this-skill-directory>/../../scripts/check-cli.sh`,
-resolving the path from this installed SKILL.md, not the working directory. This read-only
-check uses the plugin's `cli-compatibility.txt` range and reports the executable on PATH.
-If missing, incompatible, or unable to run, stop CLI-dependent work and show its installation
-instructions. Never invoke the installer, download a CLI, or update it from this skill.
-An explicit user request to install should be handled separately from this workflow.
-Only after this check passes may command help resolve syntax differences; help cannot waive
-compatibility. Recheck if the executable or PATH changes during the task.
-
 ## Progressive disclosure
 
-For CLI 0.5 JSON operations, require the versioned `operation-start` and
+For JSON operations, require the versioned `operation-start` and
 `operation-complete` records and check the actual process exit before treating
 the payload as complete. An absent trailer after interruption proves neither
 an empty result nor a complete scan. Use the trailer's examination and matching
@@ -113,88 +107,29 @@ inspect-only and reports `execution: not-run`; never describe that as a passing 
 `references/` is an optional convention, not required. Markdown files beneath it are ordinary
 concepts; non-Markdown files are opaque artifacts. Path-valued fields may be URLs, bundle-relative,
 or document-relative. Resolve with `okf artifact resolve <resource> <bundle> --from <concept-id>`
-and report `concept`, `artifact`, `reserved`, `external`, `scope`, `missing`, and `blocked`
+and report `concept`, `artifact`, `reserved`, `support`, `external`, `scope`, `missing`, and `blocked`
 distinctly. Use `okf show` for concepts and bounded `okf artifact show <resource> <bundle> --from
 <concept-id> --lines <START:END> --max-bytes <N> --json` for artifacts. Never force SQL/Python
 through `okf show`.
 
 For path namespaces, external sources, and truncated reads, consult the artifact sections of
-`references/cli.md` when needed. Bundle artifact reads stay inside the bundle; existing user
+`references/cli.md` when needed. Artifact reads stay inside the resolved target bundle and requested scope; existing user
 authorization to inspect a named external source also counts. Reading code never authorizes
 execution.
 
 Answer with the concepts actually opened, source/artifact citations, precise caveats, and a precise
 statement of what could not be established from the material inspected. Do not mutate the bundle.
 
-## Bundle identity and examination scope
+## Structured queries and historical evidence
 
-Keep bundle paths and catalog IDs distinct. `OKF_BUNDLE` always selects a path; use the
-`--bundle-id <id>` for a registered identity. When a catalog is configured, use `okf catalog` to inspect effective local
-registrations, overrides, availability, and per-bundle settings. Catalog paths are relative to
-`okf.toml`, locations are relative to the catalog, and machine-local overrides change effective
-locations rather than accepting different snapshots. Inspect effective settings before relying on
-a per-bundle ontology or view. Equal or nested registered roots are configuration errors.
+For facets, paging, projection, expansion, or nested relationship conditions, read
+[query planning](references/query-planning.md). Its examples explain scan completeness and
+same-record correlation; use `references/cli.md` for exact selector and flag syntax.
 
-Registration alone does not authorize catalog-wide traversal. Start with the selected bundle;
-request additional bundles explicitly with repeatable `--scope-bundle <id>` or deliberate
-`--catalog-scope` when the task requires them. Report requested and examined
-scope and unavailable members. Out-of-scope references remain unknown. Ordinary relative paths
-retain their meaning across registered boundaries; distributing one bundle alone can break them.
-Never infer another bundle from a matching filename or title.
+When a source has `bundle_ref`, distinguish its requested snapshot from the actual resolved
+content and any separately labeled candidate. Open evidence using its returned bundle and revision.
+A matching digest or commit does not verify claims; retrieval neither accepts a lock update nor
+refreshes fingerprints. Follow the shared protocol for unavailable historical evidence.
 
-For cross-repository questions, distinguish qualified CLI targets such as
-`acme.finance:/policies/margin-standard` from authored links: body links and declared custom
-metadata references use ordinary paths, not that qualified syntax. Catalog IDs do not rebase
-those paths or acquire a checkout. For registration, source mappings, and sibling-repository
-examples, consult the [multi-bundle guide](../init/references/multi-bundle.md).
-
-## Structured retrieval and snapshot evidence
-
-Use the shared selector grammar for nested queries: `norms[].deadline.from` traverses explicit
-list items, while `["policy.status"]` names a literal dotted key. Existing literal-key field
-filters keep their meaning. Read `references/cli.md` for typed conditions, projections, facets,
-pages, and related-concept expansion. Conditions combine with AND; list membership alternatives
-belong inside one condition. Separate nested conditions can match different list records: bearer
-and deadline matches do not establish one obligation with both. Inspect the projected whole record
-or semantic edge's concrete occurrence and attributes before making that claim. Apply filters
-before pagination and retain reported completeness.
-JSON facets describe all examined matching documents, not only the displayed page; missing/null
-and overflow notices are evidence gaps, not empty vocabularies. Display cells and computed view
-records do not replace authored frontmatter.
-
-Only declared reference selectors create custom metadata edges. Relationship attributes must
-come from the same concrete list occurrence as their target. Inverse backlinks present incoming
-assertions with their conditions; they do not assert acceptance or fulfillment by the target.
-Expansion is one-hop outbound, bounded, and reports missing, out-of-scope, unavailable, or
-truncated context. Check expansion completeness separately from primary scan and facet completeness.
-Result/page limits bound output, not scan work. Each offset invocation rescans its scope without
-shared query caches; avoid many tiny pages for exhaustive analysis. Aggregate a complete metadata
-stream locally when needed and retain its scope/settings, rather than loading every record into
-context. Facets cost aggregation work; request them only when useful. Working-tree pages can shift.
-
-For source entries carrying `bundle_ref`, distinguish ordinary target resolution from requested
-snapshot satisfaction. Report matched, unverified, unavailable, or mismatched expectations and
-label current candidates separately. A candidate does not fulfill a known mismatch. Historical
-bytes, digest matches, or configured correspondence do not verify a concept's claims. Do not
-fetch Git objects, accept a candidate, or refresh fingerprints during retrieval.
-
-Qualified graph targets use `acme.finance:/policies/margin-standard`. Historical inspection uses
-`--revision <ref>` on graph, links, backlinks, resolve, affected analysis, search, or list; it is not a general
-artifact, mutation, or lint snapshot flag. Mutable working-tree versions remain identified
-as such. Each target's interpretation settings and unavailable revisions limit the answer.
-
-For example, `okf search <bundle> --facet-filter 'norms[].deadline.from="account-created"'
---facets --limit 20 --offset 0 --json` selects a typed nested condition and reports the first
-page alongside facets. Use `okf search <bundle> --project '$id' --project 'norms[].deadline'
---limit 10 --json` when only those cells are needed. Keep literal JSON strings quoted within
-the condition; JSON booleans and numbers keep their types.
-
-An explicitly selected view with `extended_output: true` opts JSON into its configured columns
-as separate projection records and its configured expansion. Ordinary views preserve legacy
-machine concept output. Confirm that opt-in before interpreting a JSON stream as concept records.
-
-When a read fails to parse concept YAML, use the file paths in its error to locate the failing documents. Full bundle reads report all malformed files they examined; bounded queries report only examined files. Use `okf validate <bundle> --json` for separate per-file conformance findings.
-
-`frontmatter-order` is an advisory warning: writes place `type` first, then ontology-declared
-fields recursively, then custom fields. Read-only views preserve authored order. Report ordering
-findings without modifying the bundle; route requested normalization to a writing workflow.
+If concept YAML fails to parse, report the named files and use `okf validate <bundle> --profile bundle --json`
+for document diagnostics. Do not repair or normalize files during retrieval.

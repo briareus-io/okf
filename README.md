@@ -7,21 +7,23 @@ supply the judgment around its deterministic operations.
 
 The [knowledge bundle](knowledge/index.md) is the user manual, CLI reference, contributor
 guide, and a working example of OKF. [Tour the bundle](knowledge/guides/tour-the-bundle.md)
-to query its real relationships, inspect artifacts, and trace source impact.
+to inspect its live manifest and catalog, use views and query presets, follow relationships,
+inspect workflow context and artifacts, and trace source impact.
 
 ## Install
 
-**Breaking change in CLI 0.5.0:** read the [migration guide](knowledge/reference/migrations/0.5.0.md)
-before updating a 0.4.x installation or automation. Install CLI and plugin together;
-the 0.5.2 plugin supports stable CLI versions `>=0.5.0, <0.6.0`. The document format remains OKF v0.2.
+**CLI/plugin 0.6.0 upgrade:** read the [migration guide](knowledge/reference/migrations/0.6.0.md)
+before updating an existing installation or automation. Install CLI and plugin together;
+the 0.6.0 plugin supports stable CLI versions `>=0.6.0, <0.7.0`. The document format remains OKF v0.2.
 
-Download the installer from the published release, inspect it, then run it:
+For a published release, download its matching installer, inspect it, then run it. If this
+checkout's version has not been published yet, use the source-build instructions below:
 
 ```sh
 curl --fail --location --proto '=https' --proto-redir '=https' \
-  https://github.com/briareus-io/okf/releases/download/v0.5.2/install.sh -o install.sh
+  https://github.com/briareus-io/okf/releases/download/v0.6.0/install.sh -o install.sh
 # Review install.sh before running it.
-sh install.sh 0.5.2
+sh install.sh 0.6.0
 export PATH="$HOME/.local/bin:$PATH"
 okf version
 ```

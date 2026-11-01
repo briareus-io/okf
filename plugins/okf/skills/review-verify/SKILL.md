@@ -5,20 +5,14 @@ description: Review OKF concepts against their declared sources and append docum
 
 # Review and verify concepts
 
+## Shared operating protocol
+
+Read and follow the [shared OKF protocol](../../references/bundle-context.md) before CLI-dependent
+work. It defines compatibility checks, bundle context, scope, output evidence, validation profiles,
+and authoring conventions. Use `references/cli.md` for exact command syntax as needed.
+
 `okf verify` records that a document was checked against its sources or resource. It does not
 execute an Attested Computation and is never a substitute for a deterministic run attestation.
-
-
-## CLI compatibility preflight
-
-Before CLI-dependent work, run `sh <this-skill-directory>/../../scripts/check-cli.sh`,
-resolving the path from this installed SKILL.md, not the working directory. This read-only
-check uses the plugin's `cli-compatibility.txt` range and reports the executable on PATH.
-If missing, incompatible, or unable to run, stop CLI-dependent work and show its installation
-instructions. Never invoke the installer, download a CLI, or update it from this skill.
-An explicit user request to install should be handled separately from this workflow.
-Only after this check passes may command help resolve syntax differences; help cannot waive
-compatibility. Recheck if the executable or PATH changes during the task.
 
 ## CLI and review scope
 
@@ -33,8 +27,10 @@ authority.
    use a sufficient `--scan-limit` or deliberate `--full-scan` for an exhaustive inventory, otherwise
    report the observed selection. Page limits do not reduce scan work. Check `okf stale
    <bundle>` but keep lifecycle expiry, source credibility/modification, and fingerprint drift as
-   separate review facts. `unrecorded` means no fingerprint baseline, `missing` means fingerprinting
-   failed, and `drifted` means the baseline changed. Stale findings exit successfully by default;
+   separate review facts. `unrecorded` means no fingerprint baseline; `missing`, `unavailable`, and `unsupported`
+   distinguish absent evidence, inaccessible evidence, and unsupported fingerprinting. `drifted`
+   means recorded fingerprint evidence changed; inspect the source before inferring content changes. `revision-changed` can indicate a different remote commit with identical
+   bytes. Review the reported evidence rather than equating all states with missing sources. Stale findings exit successfully by default;
    use `--fail-on any` for a health gate and inspect the findings either way. Kind-less sources are
    not fingerprint-checked. Review evidence directly; do not refresh merely to make checks green.
 2. Read the complete relevant document, using `okf show <concept-id> <bundle> --outline`, then `okf
@@ -46,7 +42,7 @@ authority.
    sections.
 3. Resolve internal sources with document context. Use `okf artifact resolve <resource> <bundle>
    --from <concept-id>` and bounded `okf artifact show` for opaque files; use `okf show` for
-   concepts. A `scope`, `missing`, or `blocked` result needs an explicit review decision and may
+   concepts, using the resolved bundle/snapshot identity rather than assuming the declaring bundle. A `scope`, `missing`, or `blocked` result needs an explicit review decision and may
    prevent verification. Consult the artifact reference for external source access and truncation. A
    request to check named external sources supplies read authorization within that scope;
    inaccessible evidence remains a review gap. Inspection never authorizes code execution.
@@ -56,7 +52,8 @@ authority.
    <concept-id> <bundle> --by <actor>`. Valid actors are `human:<id>`, `process:<id>`, or
    `<agent>/<version>`. Use `human:` only after that identified person explicitly confirms the
    completed review; prior confirmation of this same review counts. Never invent an agent version if
-   the actual identity is unavailable. The CLI appends a valid explicit-offset timestamp.
+   the actual identity is unavailable. If no legitimate actor can be established, report the completed
+   review without appending an event and request that identity. The CLI appends a valid explicit-offset timestamp.
 6. Re-read the concept and report the exact appended event and derived tier. Multiple `verified`
    entries are independent checks. Meaningful content changes invalidate current verification;
    history elsewhere does not make changed content reviewed.
@@ -73,22 +70,6 @@ opaque artifacts. Cite both the declaring concept and inspected source/artifact.
 concepts and events, or the incomplete review scope and outstanding claims/sources. Include
 lifecycle limitations and computation boundaries only when relevant.
 
-## Bundle identity and examination scope
-
-Keep bundle paths and catalog IDs distinct. `OKF_BUNDLE` always selects a path; use the
-`--bundle-id <id>` for a registered identity. When a catalog is configured, use `okf catalog` to inspect effective local
-registrations, overrides, availability, and per-bundle settings. Catalog paths are relative to
-`okf.toml`, locations are relative to the catalog, and machine-local overrides change effective
-locations rather than accepting different snapshots. Inspect effective settings before relying on
-a per-bundle ontology or view. Equal or nested registered roots are configuration errors.
-
-Registration alone does not authorize catalog-wide traversal. Start with the selected bundle;
-request additional bundles explicitly with repeatable `--scope-bundle <id>` or deliberate
-`--catalog-scope` when the task requires them. Report requested and examined
-scope and unavailable members. Out-of-scope references remain unknown. Ordinary relative paths
-retain their meaning across registered boundaries; distributing one bundle alone can break them.
-Never infer another bundle from a matching filename or title.
-
 ## Resolution is separate from review
 
 Catalog identity, relationship resolution, file digests, and requested-snapshot matches establish
@@ -96,17 +77,3 @@ reference evidence only. Inspect the source actually used and label unresolved e
 current candidates. Never manufacture a verification event from a successful resolver or lint
 result. Review the relevant nested relationship conditions and each bundle's interpretation
 settings before making a source-backed sign-off.
-
-## Frontmatter order
-
-When authoring concept frontmatter, put `type` first. For the matching ontology concept type,
-follow `fields` declaration order recursively, including nested objects and objects in lists;
-reusable field types use their resolved field order. Put reference-only keys next in reference
-declaration order. Put undeclared/custom fields last at each level, preserving their relative
-order. Without a matching ontology type, keep the other fields in their authored order.
-This is an authoring convention, not an additional OKF conformance requirement.
-CLI writes normalize this order. `okf lint <bundle>` reports `frontmatter-order` at warning by
-default; `okf lint <bundle> --fix` normalizes the bundle and reports remaining findings. The
-bundle lint setting `frontmatter_order` accepts `info`, `warn`, `error`, or `off`; an off rule
-is not fixed. Normalization preserves values, list order, body text, and verification metadata;
-YAML comments and scalar presentation may normalize.

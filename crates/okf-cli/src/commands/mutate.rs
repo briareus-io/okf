@@ -614,7 +614,9 @@ pub fn run_refresh(args: &RefreshArgs, json: bool) -> Result<i32> {
     let fs = RealFs;
     let git = RealGit;
     let clock = SystemClock;
-    let engine = Engine::new(&root, &fs, &git, None);
+    let context = okf_core::bundle::context::current_context(Some(&root.to_string_lossy()), None)?;
+    let scope = super::catalog::examination_scope();
+    let engine = Engine::new(&root, &fs, &git, None).with_bundle_context(&context, &scope);
     let reject_skips = matches!(args.fail_on.as_deref(), Some("skipped" | "any"));
     let r = refresh_with_policy(&root, &args.concept, &engine, &clock, reject_skips)?;
     if json {

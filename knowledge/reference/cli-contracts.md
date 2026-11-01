@@ -11,13 +11,13 @@ sources:
 ---
 # CLI globals and record contracts
 
-> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.5.2, OKF spec 0.2). Do not hand-edit; regenerate instead.
+> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.6.0, OKF spec 0.2). Do not hand-edit; regenerate instead.
 
 See the [command index](../commands/index.md) for individual arguments and [command contracts](command-contracts.md) for shared behavior. Skills carry focused generated references with their workflows.
 
 Commands with a human form accept global `--json` for NDJSON; `schema` is always NDJSON. Bundle-aware commands take an optional trailing `bundle` path or a separate `--bundle-id` selector. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Catalog registration alone does not extend examination scope. Meta commands have no bundle, and `source-scan` takes an explicit arbitrary directory.
 
-Exit codes: 0 means success under the selected failure threshold, not necessarily no findings; 1 means findings or an unsuccessful resolution; 2 means usage errors; 3 means environment/I/O/YAML errors; 4 means an internal error. Inspect findings even with `--fail-on never`. NDJSON is one record per line, not a JSON array. In CLI 0.5, JSON operations begin with `operation-start` and normally end with `operation-complete`; require the terminal record and check the actual exit before accepting a complete result. A successful bounded read may still report partial examination or matching. Preview and dry-run operations do not publish authored content but may create coordination state.
+Exit codes: 0 means success under the selected failure threshold, not necessarily no findings; 1 means findings or an unsuccessful resolution; 2 means usage errors; 3 means environment/I/O/YAML errors; 4 means an internal error. Inspect findings even with `--fail-on never`. NDJSON is one record per line, not a JSON array. In CLI 0.6, JSON operations begin with `operation-start` and normally end with `operation-complete`; require the terminal record and check the actual exit before accepting a complete result. A successful bounded read may still report partial examination or matching. Preview and dry-run operations do not publish authored content but may create coordination state.
 
 ## Global arguments
 
@@ -28,8 +28,12 @@ Exit codes: 0 means success under the selected failure threshold, not necessaril
 | `--scope-bundle <value>` | list<string> | no | Add a registered bundle to the examination scope (repeatable) |
 | `--catalog-scope` | bool | no | Examine every locally available registered bundle (default: `false`) |
 | `--revision <value>` | string | no | Inspect a locally available Git revision; never fetches missing objects |
+| `--catalog <value>` | string | no | Select a catalog explicitly; relative paths are resolved from the invocation directory |
+| `--guidance <value>` | string | no | Incidental guidance delivery; explicit context requests always return selected instructions |
+| `--workspace-revision <value>` | string | no | Inspect the consumer repository and its catalog/lock at this revision |
+| `--bundle-revision <value>` | list<string> | no | Inspect a registered bundle at an exact local commit, ID=COMMIT (repeatable) |
 
-Scope defaults to the selected bundle. Use scope options only for graph, links, backlinks, resolve, affected, lint, search, and list; other commands reject additional scope. `--revision` supports graph, links, backlinks, resolve, affected, search, and list. Scope and effective settings are interpretation context, not authored concept metadata.
+Scope defaults to the selected bundle. Each command advertises its supported scope, snapshot, catalog, and guidance options below; unsupported options are errors. Catalog registration does not authorize traversal. Explicit historical inspection never acquires objects or accepts a new lock. Scope and effective settings are interpretation context, not authored concept metadata.
 
 ## Extension record contracts
 
@@ -52,12 +56,22 @@ Authored concept metadata remains open. These computed records describe scope, i
     "id": "string",
     "version": "string"
   },
+  "bundle-context": {
+    "context_digest": "string",
+    "context_digest_version": 1,
+    "effective_settings": "object",
+    "manifest": "object|null",
+    "selection": "object",
+    "setting_origins": "object"
+  },
   "bundle-edge": {
     "evidence": "string",
     "fingerprint_status": "string|null",
     "location": "string",
     "relationship": "{source:string,rule:string,field_path:string,raw_reference:string,target:string,authored_kind:string|null,inverse:string|null,attributes:object,status:string}|null",
     "resource": "string",
+    "resource_bundle": "string (non-concept resources only)",
+    "resource_kind": "reserved|artifact|support (non-concept resources only)",
     "snapshot": "{requested:object,status:string,evidence:string,resolved:qualified_identity|null,candidate:qualified_identity|null}|null",
     "source": "qualified_identity",
     "status": "string",
@@ -74,6 +88,18 @@ Authored concept metadata remains open. These computed records describe scope, i
     "id": "string",
     "overridden": "boolean",
     "root": "path"
+  },
+  "bundle-resource": {
+    "content": "string|null",
+    "path": "path",
+    "sha256": "string|null",
+    "truncated": "boolean"
+  },
+  "catalog-update-plan": {
+    "impact": "object",
+    "impact_complete": "boolean",
+    "plan_digest": "string",
+    "plan_kind": "initial|update|registration-change"
   },
   "changeset-file": {
     "after_bytes": "integer|null",
@@ -96,6 +122,12 @@ Authored concept metadata remains open. These computed records describe scope, i
     "id": "string",
     "schema_version": 1,
     "version": "string"
+  },
+  "context-scope": {
+    "complete": "boolean",
+    "examined": "array<object>",
+    "requested": "array<string>",
+    "unavailable": "array<string>"
   },
   "diagnostic-summary": {
     "displayed": "integer",
@@ -141,11 +173,31 @@ Authored concept metadata remains open. These computed records describe scope, i
     "schema_version": 1,
     "threshold": "integer"
   },
+  "guidance": {
+    "content": "full|summary",
+    "context_digest": "string",
+    "id": "string",
+    "instruction_role": "task-guidance|inspected",
+    "instructions": "string (full only)",
+    "origin": "object"
+  },
+  "guidance-scope": {
+    "complete": "boolean",
+    "requested": "array<string>",
+    "unavailable": "array<string>"
+  },
   "interpretation-settings": {
     "bundle": "string|null",
     "ontology_digest": "string|null",
     "ontology_path": "path|null",
     "settings": "object"
+  },
+  "migration-applied": {
+    "report": "object"
+  },
+  "migration-plan": {
+    "plan": "object",
+    "saved": "path|null"
   },
   "ontology_field_type": {
     "definition": "object",
@@ -177,6 +229,11 @@ Authored concept metadata remains open. These computed records describe scope, i
     "bundle": "string",
     "id": "string",
     "version": "string"
+  },
+  "query-filters": {
+    "filters": "object",
+    "origin": "string",
+    "preset": "string|null"
   },
   "query-summary": {
     "examined_documents": "integer",
@@ -212,11 +269,21 @@ Authored concept metadata remains open. These computed records describe scope, i
     "target_payload_status": "string (optional)",
     "version": "string"
   },
+  "relationship-query-summary": {
+    "evidence": "object (local)"
+  },
   "scope": {
     "examined": "array<{id:string,root:path,version:string,interpretation:interpretation-settings}>",
     "requested": "array<string>",
     "snapshot_examined": "array<qualified_identity> (optional)",
     "unavailable": "array<string>"
+  },
+  "snapshot-context": {
+    "evidence": "array<object>"
+  },
+  "validation-profile": {
+    "conformant": "boolean",
+    "profile": "bundle"
   },
   "warning": {
     "limit": "integer|null",
@@ -224,6 +291,12 @@ Authored concept metadata remains open. These computed records describe scope, i
     "omitted": "integer|null",
     "reason": "string",
     "schema_version": 1
+  },
+  "workflow": {
+    "content": "full|summary",
+    "id": "string",
+    "inputs_complete": "boolean (selected only)",
+    "selected": "boolean"
   }
 }
 ```

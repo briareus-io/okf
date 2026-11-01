@@ -248,7 +248,6 @@ fn catalog_rejects_selection_scope_and_revision_flags() {
         vec!["show", "one", "--scope-bundle", "acme.b"],
         vec!["validate", "--catalog-scope"],
         vec!["lint", "--revision", "HEAD"],
-        vec!["show", "one", "--revision", "HEAD"],
     ] {
         reject(d.path(), &args);
     }
@@ -1364,7 +1363,16 @@ fn deferred_acquisition_and_cross_bundle_artifact_reads_are_not_enabled_by_catal
         write(root,"config/catalog.yaml",&format!("catalog_version: 1\nbundles:\n  acme.a: {{location: {{type: {kind}, path: ../a}}}}\n"));
         let result = run(root, &["catalog", "--json"]);
         assert!(!result.status.success());
-        assert!(String::from_utf8_lossy(&result.stderr).contains("only directory is supported"));
+        let expected = if kind == "git" {
+            "Git registration requires catalog_version 2"
+        } else {
+            "unsupported location type"
+        };
+        assert!(
+            String::from_utf8_lossy(&result.stderr).contains(expected),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
     }
 }
 

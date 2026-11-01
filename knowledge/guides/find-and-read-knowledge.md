@@ -2,6 +2,8 @@
 type: Guide
 audience: user
 uses:
+- /commands/init
+- /commands/add
 - /commands/browse
 - /commands/search
 - /commands/show
@@ -17,7 +19,7 @@ description: Navigate, search, inspect and follow relationships in this manual.
 
 Use this workflow when you have a question rather than a known concept ID. The worked
 question is: **which workflow should I use after a source file changes?** Run the examples
-from this repository's root with a compatible CLI on PATH. These commands are read-only.
+from this repository's root with a compatible CLI on PATH. The manual queries are read-only; the optional relationship recipe writes only to a disposable bundle.
 
 ## Find the relevant explanation
 
@@ -73,6 +75,56 @@ and fix flags matter. Read the individual command page before using it.
 At this point you can answer the worked question: use `affected` to find documents citing
 a known changed file, read those sources and documents, and apply the maintenance workflow.
 The graph identifies relationships; it does not decide whether the prose is correct.
+
+## Find defects blocking a feature
+
+For a domain question, filter relationship occurrences rather than treating every backlink as the
+same assertion. This independent scratch example declares `Defect --blocks--> Feature`, its inverse
+label, and a named query preset:
+
+```sh
+demo_root=$(mktemp -d)
+cd "$demo_root"
+okf init "$demo_root/relationships"
+cat > "$demo_root/relationships/ontology.yaml" <<'YAML'
+okf_ontology: '0.1'
+concepts:
+  Feature: {}
+  Defect:
+    references:
+      blocks: {target: Feature, cardinality: '0..1'}
+    relationships:
+      blocking: {reference: blocks, kind: blocks, inverse: is-blocked-by}
+YAML
+cat > "$demo_root/relationships/okf-bundle.yaml" <<'YAML'
+manifest_version: 1
+settings:
+  query_presets:
+    blocking-defects:
+      description: Defects with authored blocking relationships to the selected feature.
+      operations: [backlinks]
+      filters:
+        kind: [blocks]
+        related_type: [Defect]
+YAML
+okf add features/export "$demo_root/relationships" --type Feature --title "Export" --description "Export feature" --body "Export records."
+okf add defects/csv "$demo_root/relationships" --type Defect --title "CSV defect" --description "Blocks export" --set blocks=/features/export.md --body "CSV serialization fails."
+okf add notes/discussion "$demo_root/relationships" --type Note --title "Discussion" --description "Context only" --body '[Export discussion](/features/export.md)'
+okf backlinks features/export "$demo_root/relationships" --preset blocking-defects --json
+okf backlinks features/export "$demo_root/relationships" --inverse-kind is-blocked-by --related-type Defect --details --json
+```
+
+Both queries identify `defects/csv`; the ordinary discussion link is not a blocking relationship.
+`--kind` always matches the authored kind, even for backlinks. `--inverse-kind` matches the configured
+inverse label of the same occurrence, and `--related-type` matches the other endpoint. For backlinks,
+that endpoint is the source defect. Detailed output preserves individual relationship occurrences.
+
+The preset is selected explicitly and does not narrow ordinary backlink queries or integrity checks.
+A query establishes declared blockers within its examined scope, not that a defect remains active or
+that the feature cannot be implemented. Add explicit lifecycle or edge-attribute predicates when the
+model requires them, and check scan completeness before saying “all blockers.” See
+[backlinks](../commands/backlinks.md) for the supported filters and [bounded reads](bounded-reads.md)
+for scan versus output limits.
 
 ## Know when the answer is complete
 

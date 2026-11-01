@@ -32,6 +32,8 @@ pub struct Engine<'a> {
     pub fs: &'a dyn FileSystem,
     pub git: &'a dyn Git,
     pub net: Option<&'a dyn Net>,
+    bundle_context: Option<&'a crate::bundle::context::Context>,
+    scope_ids: Vec<String>,
     git_root: OnceCell<Result<PathBuf>>,
     git_fingerprints: RefCell<HashMap<(String, String), Result<Fingerprint>>>,
     files: RefCell<FileCache>,
@@ -50,10 +52,23 @@ impl<'a> Engine<'a> {
             fs,
             git,
             net,
+            bundle_context: None,
+            scope_ids: Vec::new(),
             git_root: OnceCell::new(),
             git_fingerprints: RefCell::new(HashMap::new()),
             files: RefCell::new(HashMap::new()),
         }
+    }
+
+    /// Provide consumer context and the authorized scope for logical source reads.
+    pub fn with_bundle_context(
+        mut self,
+        context: &'a crate::bundle::context::Context,
+        scope_ids: &[String],
+    ) -> Self {
+        self.bundle_context = Some(context);
+        self.scope_ids = scope_ids.to_vec();
+        self
     }
 
     fn resolve(&self, rel: &str) -> PathBuf {
@@ -172,6 +187,11 @@ fn git_key(source: &Source) -> (String, String) {
 impl Fingerprinter for Engine<'_> {
     fn fingerprint(&self, source: &Source) -> Result<Fingerprint> {
         let (path_part, fragment) = split_fragment(&source.resource);
+        if crate::model::link::is_logical_reference(&source.resource)
+            && source.kind != SourceKind::BundleResource
+        {
+            return Err(OkfError::Usage("okf:// sources require kind bundle-resource for fingerprinting; existing kinds are not reinterpreted".into()));
+        }
         match &source.kind {
             SourceKind::GitPath | SourceKind::GitCommit => {
                 let key = git_key(source);
@@ -219,11 +239,122 @@ impl Fingerprinter for Engine<'_> {
                 text::markdown_heading_fp(&bytes, slug)
             }
             SourceKind::Url => url::url_fp(self.net, &source.resource),
+            SourceKind::BundleResource => {
+                let context = self.bundle_context.ok_or_else(|| {
+                    OkfError::Usage(
+                        "bundle-resource fingerprint requires explicit catalog context and scope"
+                            .into(),
+                    )
+                })?;
+                fingerprint_bundle_resource(source, context, &self.scope_ids)
+            }
             SourceKind::Other(k) => Err(OkfError::Usage(format!(
                 "no fingerprint rule for source kind `{k}`"
             ))),
         }
     }
+}
+
+/// Fingerprint a catalog-resolved file without changing its authored URI or fetching.
+pub fn fingerprint_bundle_resource(
+    source: &Source,
+    context: &crate::bundle::context::Context,
+    scope_ids: &[String],
+) -> Result<Fingerprint> {
+    let reference = crate::model::link::LogicalReference::parse(&source.resource)?
+        .ok_or_else(|| OkfError::Usage("bundle-resource requires an okf:// reference".into()))?;
+    if let Some(declared) = source.extra.get("bundle_ref") {
+        let _: crate::graph::catalog::BundleRef = serde_yaml::from_value(declared.clone())
+            .map_err(|e| OkfError::Usage(format!("invalid bundle_ref: {e}")))?;
+        if declared.get("id").and_then(serde_yaml::Value::as_str) != Some(&reference.bundle)
+            || declared.get("path").and_then(serde_yaml::Value::as_str) != Some(&reference.path)
+        {
+            return Err(OkfError::Usage(
+                "logical URI and bundle_ref disagree".into(),
+            ));
+        }
+        if declared.get("snapshot").is_some() {
+            // An explicit historical requirement must not be refreshed from whatever
+            // happens to be locally available. Snapshot satisfaction is checked below.
+            let entry = context
+                .catalog
+                .as_ref()
+                .and_then(|c| c.entries.get(&reference.bundle))
+                .ok_or_else(|| OkfError::Usage("unknown bundle ID".into()))?;
+            let expected = declared.get("snapshot").unwrap();
+            if let Some(commit) = expected.get("commit").and_then(serde_yaml::Value::as_str) {
+                let actual = if let Some(origin) = crate::bundle::remote::origin(&entry.root)? {
+                    origin.commit
+                } else {
+                    let run = crate::ports::git_read::output(
+                        &entry.root,
+                        &["rev-parse", "--verify", "HEAD^{commit}"],
+                    )?;
+                    run.status
+                        .success()
+                        .then(|| String::from_utf8_lossy(&run.stdout).trim().to_owned())
+                };
+                if actual.as_deref() != Some(commit) {
+                    return Err(OkfError::Usage("source snapshot does not match the selected bundle; refresh cannot accept a mismatch".into()));
+                }
+            }
+        }
+    }
+    let (root, resolved) = crate::query::artifact::resolve_artifact_in_context(
+        context,
+        scope_ids,
+        None,
+        &source.resource,
+    )?;
+    if !resolved.exists || resolved.kind == crate::query::artifact::ArtifactKind::Blocked {
+        return Err(OkfError::Environment(format!(
+            "bundle resource unavailable: {}",
+            source.resource
+        )));
+    }
+    let path = resolved
+        .path
+        .ok_or_else(|| OkfError::Usage("bundle resource has no local path".into()))?;
+    let bytes = std::fs::read(root.join(&path))?;
+    let digest = canonicalize::sha256_hex(&bytes);
+    if let Some(commit) = source
+        .extra
+        .get("bundle_ref")
+        .and_then(|v| v.get("snapshot"))
+        .and_then(|v| v.get("commit"))
+        .and_then(serde_yaml::Value::as_str)
+    {
+        let historical = crate::bundle::remote::read_snapshot(&root, commit, &path)?;
+        if historical != bytes {
+            return Err(OkfError::Usage("source bytes differ from the required snapshot; refresh cannot accept a dirty or mismatched target".into()));
+        }
+    }
+    if let Some(expected) = source
+        .extra
+        .get("bundle_ref")
+        .and_then(|v| v.get("snapshot"))
+        .and_then(|v| v.get("digest"))
+        .and_then(serde_yaml::Value::as_str)
+    {
+        if expected.strip_prefix("sha256:").unwrap_or(expected) != digest {
+            return Err(OkfError::Usage(
+                "source snapshot digest does not match; refresh cannot accept a mismatch".into(),
+            ));
+        }
+    }
+    let mut fields = vec![
+        ("fingerprint_version".into(), "1".into()),
+        ("bundle".into(), reference.bundle),
+        ("path".into(), reference.path),
+        ("sha256".into(), digest),
+    ];
+    if let Some(origin) = crate::bundle::remote::origin(&root)? {
+        fields.push(("repository".into(), origin.url));
+        if let Some(commit) = origin.commit {
+            fields.push(("commit".into(), commit));
+        }
+    }
+    Ok(Fingerprint::from_pairs(fields))
 }
 
 /// Split a resource into its path/URL part and optional `#fragment`.

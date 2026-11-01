@@ -44,16 +44,74 @@ pub fn resolve_context(
         .filter(|s| !s.is_empty())
         .map(PathBuf::from)
         .or_else(|| config.catalog_overrides.as_ref().map(|s| base.join(s)));
-    let catalog = match config
-        .catalog
+    let explicit_catalog = std::env::var("OKF_CATALOG")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .map(|s| cwd.join(s));
+    let selected_catalog = explicit_catalog
+        .clone()
+        .or_else(|| super::catalog::discover(cwd))
+        .or_else(|| config.catalog.as_ref().map(|p| base.join(p)));
+    if explicit_catalog.is_none() {
+        if let (Some(discovered), Some(old)) = (&selected_catalog, &config.catalog) {
+            let old = base.join(old);
+            if super::catalog::absolute(discovered)? != super::catalog::absolute(&old)? {
+                return Err(OkfError::Usage(
+                    "legacy and discovered catalog locations conflict".into(),
+                ));
+            }
+        }
+    }
+    let catalog = match selected_catalog
         .as_ref()
-        .map(|path| load_catalog(&base.join(path), overrides.as_deref()))
+        .map(|p| load_catalog(p, overrides.as_deref()))
         .transpose()
     {
         Ok(catalog) => catalog,
-        Err(_) if path.is_some() || env.is_some() => None,
+        Err(_) if explicit_catalog.is_none() && (path.is_some() || env.is_some()) => None,
         Err(error) => return Err(error),
     };
+    if let (Some(catalog), Some(old)) = (&catalog, &config.default_bundle) {
+        if let Some(new) = &catalog.default_bundle {
+            let same = old.id.as_ref() == Some(new)
+                || old.path.as_ref().is_some_and(|p| {
+                    catalog.entries.get(new).is_some_and(|e| {
+                        super::catalog::absolute(&base.join(p)).ok().as_ref() == Some(&e.root)
+                    })
+                });
+            if !same {
+                return Err(OkfError::Usage(
+                    "legacy and catalog default_bundle conflict".into(),
+                ));
+            }
+        }
+    }
+    if let Some(catalog) = &catalog {
+        if let Some(default) = &catalog.default_bundle {
+            if let Some(old) = &config.bundle {
+                if let Some(entry) = catalog.entries.get(default) {
+                    if super::catalog::absolute(&base.join(old))? != entry.root {
+                        return Err(OkfError::Usage(
+                            "legacy bundle and catalog default_bundle conflict".into(),
+                        ));
+                    }
+                }
+            }
+        }
+        if let (Some(entry), Some(manifest_root)) = (
+            catalog.containing(cwd),
+            cwd.ancestors()
+                .find(|p| p.join(super::manifest::FILENAME).is_file()),
+        ) {
+            if std::fs::canonicalize(manifest_root).unwrap_or_else(|_| manifest_root.to_path_buf())
+                != entry.root
+            {
+                return Err(OkfError::Usage(
+                    "containing manifest contradicts registered bundle boundary".into(),
+                ));
+            }
+        }
+    }
     let path_selection = |path: PathBuf| -> Result<SelectedBundle> {
         let root = absolute(&path)?;
         let root = std::fs::canonicalize(&root).unwrap_or(root);
@@ -84,6 +142,13 @@ pub fn resolve_context(
             id: Some(entry.id.clone()),
             root: entry.root.clone(),
         }
+    } else if let Some(root) = cwd
+        .ancestors()
+        .find(|p| p.join(super::manifest::FILENAME).is_file())
+    {
+        path_selection(root.to_path_buf())?
+    } else if let Some(default) = catalog.as_ref().and_then(|c| c.default_bundle.as_deref()) {
+        id_selection(default)?
     } else if let Some(selector) = &config.default_bundle {
         if let Some(id) = &selector.id {
             id_selection(id)?
@@ -117,6 +182,9 @@ pub fn resolve_context(
     })
 }
 pub fn current_context(path: Option<&str>, id: Option<&str>) -> Result<Context> {
+    if let Some(context) = super::snapshot_context::active_context(path, id)? {
+        return Ok(context);
+    }
     let env = std::env::var(super::resolve::ENV_BUNDLE).ok();
     resolve_context(path, id, env.as_deref(), &std::env::current_dir()?)
 }
@@ -199,5 +267,49 @@ mod tests {
         let context = resolve_context(Some("a"), None, None, dir.path()).unwrap();
         assert!(context.catalog.is_none());
         assert!(context.primary.root.ends_with("a"));
+    }
+}
+
+#[cfg(test)]
+mod manifest_context_tests {
+    use super::*;
+    #[test]
+    fn yaml_catalog_default_and_standalone_manifest_discovery() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("bundle/nested")).unwrap();
+        std::fs::write(
+            dir.path().join("bundle/okf-bundle.yaml"),
+            "manifest_version: 1\n",
+        )
+        .unwrap();
+        let context = resolve_context(None, None, None, &dir.path().join("bundle/nested")).unwrap();
+        assert_eq!(
+            context.primary.root,
+            std::fs::canonicalize(dir.path().join("bundle")).unwrap()
+        );
+        std::fs::write(dir.path().join("okf-catalog.yaml"),"catalog_version: 2\ndefault_bundle: example.docs\nbundles:\n  example.docs:\n    location: {type: directory, path: bundle}\n").unwrap();
+        let context = resolve_context(None, None, None, dir.path()).unwrap();
+        assert_eq!(context.primary.id.as_deref(), Some("example.docs"));
+    }
+    #[test]
+    fn conflicting_legacy_default_is_visible() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("a")).unwrap();
+        std::fs::create_dir(dir.path().join("b")).unwrap();
+        std::fs::write(dir.path().join("okf-catalog.yaml"),"catalog_version: 2\ndefault_bundle: example.a\nbundles:\n  example.a:\n    location: {type: directory, path: a}\n").unwrap();
+        std::fs::write(dir.path().join("okf.toml"), "bundle = 'b'\n").unwrap();
+        assert!(resolve_context(None, None, None, dir.path()).is_err());
+    }
+    #[test]
+    fn nested_manifest_cannot_redefine_registered_boundary() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("a/nested")).unwrap();
+        std::fs::write(dir.path().join("okf-catalog.yaml"),"catalog_version: 2\nbundles:\n  example.a:\n    location: {type: directory, path: a}\n").unwrap();
+        std::fs::write(
+            dir.path().join("a/nested/okf-bundle.yaml"),
+            "manifest_version: 1\n",
+        )
+        .unwrap();
+        assert!(resolve_context(None, None, None, &dir.path().join("a/nested")).is_err());
     }
 }

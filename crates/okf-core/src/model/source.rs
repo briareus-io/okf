@@ -11,6 +11,7 @@ pub enum SourceKind {
     LineRange,
     File,
     Url,
+    BundleResource,
     /// Producer-defined kind (the set is extensible).
     Other(String),
 }
@@ -25,6 +26,7 @@ impl SourceKind {
             "line-range" => SourceKind::LineRange,
             "file" => SourceKind::File,
             "url" => SourceKind::Url,
+            "bundle-resource" => SourceKind::BundleResource,
             other => SourceKind::Other(other.to_string()),
         }
     }
@@ -38,6 +40,7 @@ impl SourceKind {
             SourceKind::LineRange => "line-range",
             SourceKind::File => "file",
             SourceKind::Url => "url",
+            SourceKind::BundleResource => "bundle-resource",
             SourceKind::Other(s) => s,
         }
     }

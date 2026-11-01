@@ -149,6 +149,7 @@ impl Drop for WriterGuard {
 }
 
 fn acquire_lock(root: &Path) -> Result<WriterGuard> {
+    crate::bundle::remote::ensure_writable(root)?;
     let path = root.join(LOCK);
     let file = match std::fs::OpenOptions::new()
         .read(true)
@@ -278,6 +279,7 @@ fn publish(
     external: Option<&Path>,
 ) -> Result<()> {
     let path = target_path(root, change, external)?;
+    crate::bundle::remote::ensure_writable(&path)?;
     if let Some(bytes) = bytes {
         let parent = path.parent().unwrap();
         std::fs::create_dir_all(parent)?;
@@ -416,6 +418,10 @@ fn commit_under_lock(
     after_publish: &mut dyn FnMut(usize) -> Result<()>,
 ) -> Result<()> {
     set_evidence(PublicationEvidence::NotPublished);
+    crate::bundle::remote::ensure_writable(root)?;
+    if let Some(target) = &external_target {
+        crate::bundle::remote::ensure_writable(target)?;
+    }
     ensure_idle(root)?;
     let changes: Vec<_> = changes
         .into_iter()

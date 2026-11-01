@@ -99,15 +99,25 @@ Use this map to find implementation boundaries. Rust types and signatures belong
 
 ## bundle module
 
-Loads concepts while honoring reserved files, and keeps bundle selection separate from graph
-examination scope. Catalog identity qualifies ordinary concept IDs without changing their paths.
-Paths and namespaced IDs are distinct selectors; `OKF_BUNDLE` retains path semantics. Typed
-`default_bundle` replaces the deprecated path-only `bundle` setting.
+Loads concepts while honoring reserved files and the root support namespace, and keeps bundle
+selection separate from examination scope. Physical traversal remains available for snapshots and
+core-profile validation. Paths and namespaced IDs are distinct selectors; `OKF_BUNDLE` is a path.
 
-The optional catalog registers local directories, canonicalizes available roots, rejects equal or
-nested registrations, and reports unavailable material. Config paths are relative to `okf.toml`;
-locations are relative to the catalog. Per-bundle settings supply ontology, lint, query, view, and
-facet interpretation. Registration does not imply remote acquisition or catalog-wide traversal.
+The catalog owns registrations and default selection. Available roots are canonicalized, equal or
+nested registrations are rejected, and unavailable material remains explicit. Catalog locations are
+catalog-relative; manifest settings are bundle-root-relative. Legacy TOML inputs preserve their
+original bases. Registration alone neither acquires a dependency nor broadens examination scope.
+
+Manifest loading validates settings, guidance, workflow inputs, and declared resources. Context
+assembly returns applicable instruction bodies with a digest covering their contents and selection.
+Migration separately plans and applies legacy configuration changes with preservation and recovery.
+
+Remote services manage exact Git commits, immutable cache materialization, lock plans/apply, scoped
+impact evidence, and protected destinations. Snapshot context reopens historical consumer catalogs
+and locks or explicitly selected bundle revisions without depending on a `.git` directory in a cache.
+The consumer namespace remains authoritative when reading upstream content. The
+[manifest design](../design/bundle-manifest.md) and [remote design](../design/remote-bundles.md)
+define these boundaries.
 
 See the [multi-bundle decision](../decisions/multi-bundle-scope.md). Location:
 `crates/okf-core/src/bundle`.
@@ -218,7 +228,7 @@ It rejects ambiguous keys, unsupported YAML constructs and multiple stdin consum
 calling core mutation logic. This is input interpretation; object-path and patch semantics remain
 in the core mutation module.
 
-CLI 0.5 JSON operations declare a stream version and frame payload records
+CLI JSON operations declare a stream version and frame payload records
 with one start record and, when normal completion is possible, one terminal
 record. The terminal record carries outcome, publication and applicable
 completeness dimensions; the process exit remains authoritative. Argument

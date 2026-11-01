@@ -38,7 +38,7 @@ impl Fixture {
         )
         .unwrap();
         for index in 0..20 {
-            std::fs::write(root.join(format!("knowledge/n{index}.md")), "---\ntype: Note\nsources:\n- resource: knowledge/target.md\n  kind: git-path\n  fingerprint: {blob_sha: old}\n  bundle_ref:\n    id: test.notes\n    path: target.md\n    snapshot: {ref: HEAD}\n- resource: knowledge/target.md\n  kind: git-commit\n  fingerprint: {commit_sha: old}\n- {resource: src/main.rs, kind: git-path}\n---\nNeedle\n").unwrap();
+            std::fs::write(root.join(format!("knowledge/n{index}.md")), "---\ntype: Note\nsources:\n- resource: knowledge/target.md\n  kind: git-path\n  fingerprint: {blob_sha: old}\n  bundle_ref:\n    id: test.notes\n    path: target.md\n    snapshot: {ref: HEAD}\n- resource: knowledge/target.md\n  kind: git-commit\n  fingerprint: {commit_sha: old}\n  bundle_ref: {id: test.notes, path: target.md}\n- {resource: src/main.rs, kind: git-path}\n---\nNeedle\n").unwrap();
         }
         let fixture = Self { temp, git };
         fixture.git(&["init", "-q"]);

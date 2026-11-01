@@ -22,6 +22,7 @@ pub fn run_version(json: bool) -> Result<i32> {
             "tool": "okf",
             "tool_version": ver,
             "okf_spec": OKF_SPEC,
+            "manifest_versions": [1], "catalog_versions": [1,2], "lock_versions": [1],
         }))?;
     } else {
         println!("okf {ver} (OKF spec {})", OKF_SPEC.join(", "));
@@ -39,6 +40,7 @@ pub fn run_schema(_json: bool) -> Result<i32> {
         "tool_version": env!("CARGO_PKG_VERSION"),
         "okf_spec": OKF_SPEC,
         "ndjson_schema": "3",
+        "manifest_versions": [1], "catalog_versions": [1,2], "lock_versions": [1],
         "operation_stream": {"schema_version":1,"stream_version":1,"start":{"kind":"operation-start","cardinality":1,"position":"first"},"complete":{"kind":"operation-complete","cardinality":1,"position":"last"},"applies_to":"all commands except schema, version, and parse errors","extension_policy":"optional payload fields and records may be added within a stream version; required records, ordering, and closed enums require a new version"},
         "global_args": cli.get_arguments()
             .filter(|arg| arg.is_global_set() && arg.get_id() != "help" && arg.get_id() != "version")
@@ -58,6 +60,9 @@ pub fn run_schema(_json: bool) -> Result<i32> {
             format!("{prefix} {}", cmd.get_name())
         };
         if cmd.has_subcommands() {
+            if name == "catalog" {
+                output::print_line(&command_record(&name, cmd))?;
+            }
             for child in cmd.get_subcommands() {
                 emit_leaves(&name, child)?;
             }
@@ -78,6 +83,19 @@ fn output_record_contracts() -> Value {
     json!({
         "operation-start": {"schema_version":1,"command":"string","stream_version":1},
         "operation-complete": {"schema_version":1,"outcome":"ok|partial|failed","exit_code":"integer","publication":"not-applicable|not-published|committed|recovery-required","commit_reached":"boolean|null (when recovery-required)","completeness":"{examination,matching,delivery,expansion,content: complete|partial|not-applicable; consistency: working-tree|immutable-revision|guarded-baseline}","reasons":"array<diagnostic-code>"},
+        "guidance": {"id":"string","content":"full|summary","instructions":"string (full only)","instruction_role":"task-guidance|inspected","context_digest":"string","origin":"object"},
+        "context-scope": {"requested":"array<string>","examined":"array<object>","unavailable":"array<string>","complete":"boolean"},
+        "guidance-scope": {"requested":"array<string>","unavailable":"array<string>","complete":"boolean"},
+        "bundle-context": {"context_digest":"string","context_digest_version":1,"manifest":"object|null","effective_settings":"object","selection":"object","setting_origins":"object"},
+        "validation-profile": {"profile":"bundle","conformant":"boolean"},
+        "migration-plan": {"plan":"object","saved":"path|null"},
+        "migration-applied": {"report":"object"},
+        "workflow": {"id":"string","selected":"boolean","content":"full|summary","inputs_complete":"boolean (selected only)"},
+        "bundle-resource": {"path":"path","content":"string|null","sha256":"string|null","truncated":"boolean"},
+        "query-filters": {"filters":"object","preset":"string|null","origin":"string"},
+        "relationship-query-summary": {"evidence":"object (local)"},
+        "catalog-update-plan": {"plan_kind":"initial|update|registration-change","plan_digest":"string","impact_complete":"boolean","impact":"object"},
+        "snapshot-context": {"evidence":"array<object>"},
         "baseline": {"schema_version":1,"bundle":"path","base_digest":"opaque string"},
         "drift": {"schema_version":2,"concept":"string","expired":"timestamp|null","sources":"array<{resource:string,kind:string,state:drifted|unrecorded|missing|unavailable|unsupported,code:string,message:string}>"},
         "diagnostic-summary": {"schema_version":1,"examined":"integer","displayed":"integer","omitted":"integer"},
@@ -116,6 +134,8 @@ fn output_record_contracts() -> Value {
         "bundle-edge": {
             "source": "qualified_identity", "target": "qualified_identity|null",
             "resource": "string", "location": "string", "status": "string", "evidence": "string",
+            "resource_kind": "reserved|artifact|support (non-concept resources only)",
+            "resource_bundle": "string (non-concept resources only)",
             "snapshot": "{requested:object,status:string,evidence:string,resolved:qualified_identity|null,candidate:qualified_identity|null}|null",
             "fingerprint_status": "string|null",
             "relationship": "{source:string,rule:string,field_path:string,raw_reference:string,target:string,authored_kind:string|null,inverse:string|null,attributes:object,status:string}|null"
@@ -148,7 +168,11 @@ fn command_record(full_name: &str, cmd: &ClapCommand) -> Value {
 
     let mutates_when = match full_name {
         "lint" => json!({"fix": true}),
-        "doctor" => json!({"fix-safe": true, "yes": true, "dry-run": false}),
+        "doctor" => {
+            json!({"any_of":[{"fix-safe": true, "yes": true, "dry-run": false},{"migration-apply":"present"}]})
+        }
+        "catalog update" => json!({"apply":"present"}),
+        "catalog sync" => json!({"check":false}),
         "docs" => json!({"format": "index"}),
         _ if cmd
             .get_arguments()
@@ -170,9 +194,10 @@ fn command_record(full_name: &str, cmd: &ClapCommand) -> Value {
         "kind": "command",
         "name": full_name,
         "group": group,
+        "capabilities": {"scope":crate::cli::supports_scope(full_name),"revision":crate::cli::supports_revision(full_name),"catalog":crate::cli::supports_catalog(full_name),"guidance":crate::cli::supports_guidance(full_name)},
         "mutates": mutates,
         "mutates_when": if mutates {mutates_when} else {Value::Null},
-        "supported_globals": {"json":true,"bundle-id":crate::cli::supports_bundle(full_name),"scope-bundle":crate::cli::supports_scope(full_name),"catalog-scope":crate::cli::supports_scope(full_name),"revision":crate::cli::supports_revision(full_name)},
+        "supported_globals": {"json":true,"bundle-id":crate::cli::supports_bundle(full_name),"scope-bundle":crate::cli::supports_scope(full_name),"catalog-scope":crate::cli::supports_scope(full_name),"revision":crate::cli::supports_revision(full_name),"workspace-revision":crate::cli::supports_revision(full_name),"bundle-revision":crate::cli::supports_revision(full_name),"catalog":crate::cli::supports_catalog(full_name),"guidance":crate::cli::supports_guidance(full_name)},
         "availability": {"remote_fetch": cfg!(feature="url-sources"), "pdf":false},
         "summary": summary,
         "args": args,
@@ -187,7 +212,9 @@ fn effects(name: &str) -> Value {
     let authored = if mutates {
         match name {
             "lint" => json!({"when":{"fix":true}}),
-            "doctor" => json!({"when":{"fix-safe":true,"yes":true,"dry-run":false}}),
+            "doctor" => {
+                json!({"any_of":[{"fix-safe":true,"yes":true,"dry-run":false},{"migration-apply":"present"}]})
+            }
             "docs" => json!({"when":{"format":"index"}}),
             "changeset apply" => json!({"when":{"dry-run":false}}),
             _ => json!({"when":"successful non-no-op publication"}),
@@ -203,8 +230,17 @@ fn effects(name: &str) -> Value {
         "authored_bundle_writes":authored,
         "coordination_metadata_writes":coordination,
         "temporary_staging_writes":if name == "changeset digest" {json!(false)} else {json!(coordination)},
-        "external_output_file_writes":false,
-        "network_access": if name == "artifact show" {json!({"when":"explicit supported URL resource"})} else {json!(false)},
+        "external_output_file_writes":match name {
+            "doctor" => json!({"when":{"migration-plan":"present"}}),
+            "catalog update" => json!({"when":"candidate plan or acceptance report publication"}),
+            _ => json!(false),
+        },
+        "network_access": match name {
+            "artifact show" => json!({"when":"explicit supported URL resource"}),
+            "catalog sync" => json!({"when":{"check":false,"rebuild":false}}),
+            "catalog update" => json!({"when":{"apply":"absent"}}),
+            _ => json!(false),
+        },
     })
 }
 
@@ -379,6 +415,11 @@ fn meta(name: &str) -> (&'static str, bool, &'static str) {
         "schema" => ("meta", false, "schema"),
         "version" => ("meta", false, "version"),
         "catalog" => ("meta", false, "bundle-registration,effective-settings"),
+        "catalog sync" => ("meta", true, "catalog-sync"),
+        "catalog update" => ("meta", true, "catalog-update-plan,catalog-update-applied,plan-file"),
+        "bundle context" => ("query", false, "context-scope,bundle-context,guidance,workflow,effective-query"),
+        "bundle validate" => ("check", false, "manifest-validation"),
+        "bundle resource list"|"bundle resource show" => ("query", false, "bundle-resource"),
 
         "list" | "search" => ("query", false, "concept,concept-identity,scope,projection,query-summary,facet,facet-excluded,relationship,related-concept,expansion-summary,warning"),
         "show" => ("query", false, "concept,projection"),
@@ -402,13 +443,13 @@ fn meta(name: &str) -> (&'static str, bool, &'static str) {
 
         "scan" => ("check", false, "scan"),
         "source-scan" => ("check", false, "source-file"),
-        "validate" => ("check", false, "violation"),
+        "validate" => ("check", false, "violation,validation-profile"),
         "lint" => ("check", true, "finding,scope,fix"),
         "stale" => ("check", false, "drift"),
         "affected" => ("check", false, "affected,scope,bundle-affected"),
         "diff" => ("check", false, "diff"),
         "stats" => ("check", false, "stats"),
-        "doctor" => ("check", true, "doctor-finding,doctor-summary"),
+        "doctor" => ("check", true, "doctor-finding,doctor-summary,migration-plan,migration-applied"),
 
         "init" => ("mutate", true, "change"),
         "add" => ("mutate", true, "change"),

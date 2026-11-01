@@ -7,6 +7,8 @@ use std::path::{Component, Path, PathBuf};
 #[derive(Debug, Clone, Deserialize)]
 pub struct CatalogFile {
     pub catalog_version: u32,
+    pub default_bundle: Option<String>,
+    pub catalog_overrides: Option<String>,
     pub bundles: BTreeMap<String, Registration>,
 }
 #[derive(Debug, Clone, Deserialize)]
@@ -20,6 +22,9 @@ pub struct Location {
     #[serde(rename = "type")]
     pub type_: String,
     pub path: String,
+    pub url: Option<String>,
+    #[serde(rename = "ref")]
+    pub ref_: Option<String>,
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct CatalogEntry {
@@ -34,7 +39,95 @@ pub struct CatalogEntry {
 #[derive(Debug, Clone)]
 pub struct Catalog {
     pub path: PathBuf,
+    pub default_bundle: Option<String>,
     pub entries: BTreeMap<String, CatalogEntry>,
+}
+/// Resolve directory registrations without requiring remote locks or acquiring objects.
+/// Used by initial update planning and impact analysis; shares override precedence with
+/// ordinary context (environment, legacy workspace pointer, catalog pointer).
+pub fn declared_directory_entries(path: &Path) -> Result<BTreeMap<String, CatalogEntry>> {
+    let file: CatalogFile = serde_yaml::from_slice(&std::fs::read(path)?)
+        .map_err(|e| OkfError::Usage(format!("invalid catalog: {e}")))?;
+    if !matches!(file.catalog_version, 1 | 2) {
+        return Err(OkfError::Usage("unsupported catalog_version".into()));
+    }
+    let base = path.parent().unwrap_or(Path::new("."));
+    let legacy = super::config::find_config(base)
+        .map(|p| {
+            super::config::load_config(&p).map(|c| {
+                c.catalog_overrides
+                    .map(|v| p.parent().unwrap_or(base).join(v))
+            })
+        })
+        .transpose()?
+        .flatten();
+    let override_path = std::env::var_os("OKF_CATALOG_OVERRIDES")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .or(legacy)
+        .or_else(|| file.catalog_overrides.as_ref().map(|v| base.join(v)));
+    let overrides: BTreeMap<String, PathBuf> = if let Some(p) = override_path {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Overrides {
+            bundles: BTreeMap<String, String>,
+        }
+        let overrides: Overrides = serde_yaml::from_slice(&std::fs::read(&p)?)
+            .map_err(|e| OkfError::Usage(format!("invalid catalog overrides: {e}")))?;
+        let mut resolved = BTreeMap::new();
+        for (id, location) in overrides.bundles {
+            if !file.bundles.contains_key(&id) {
+                return Err(OkfError::Usage(format!(
+                    "override names unknown bundle ID: {id}"
+                )));
+            }
+            resolved.insert(
+                id,
+                absolute(&p.parent().unwrap_or(Path::new(".")).join(location))?,
+            );
+        }
+        resolved
+    } else {
+        BTreeMap::new()
+    };
+    let mut result = BTreeMap::new();
+    for (id, registration) in file.bundles {
+        if !valid_id(&id) {
+            return Err(OkfError::Usage(format!("invalid bundle ID: {id}")));
+        }
+        if registration.location.type_ != "directory" {
+            continue;
+        }
+        let configured_root = absolute(&base.join(registration.location.path))?;
+        let root = overrides
+            .get(&id)
+            .cloned()
+            .unwrap_or_else(|| configured_root.clone());
+        let root = std::fs::canonicalize(&root).unwrap_or(root);
+        result.insert(
+            id.clone(),
+            CatalogEntry {
+                overridden: overrides.contains_key(&id),
+                available: root.is_dir(),
+                id,
+                configured_root,
+                root,
+                settings: registration.settings,
+            },
+        );
+    }
+    let available: Vec<_> = result.values().filter(|entry| entry.available).collect();
+    for (index, first) in available.iter().enumerate() {
+        for second in &available[index + 1..] {
+            if first.root.starts_with(&second.root) || second.root.starts_with(&first.root) {
+                return Err(OkfError::Usage(format!(
+                    "conflicting consumer roots: {} and {} are equal or nested",
+                    first.id, second.id
+                )));
+            }
+        }
+    }
+    Ok(result)
 }
 /// Machine-local override file: `bundles: {acme.finance: /local/checkout}`.
 /// Paths are relative to the override file. Only registered IDs can be overridden.
@@ -44,11 +137,21 @@ pub fn load_catalog(path: &Path, overrides: Option<&Path>) -> Result<Catalog> {
         .map_err(|e| OkfError::Usage(format!("invalid catalog {}: {e}", path.display())))?;
     let file: CatalogFile = serde_yaml::from_value(value)
         .map_err(|e| OkfError::Usage(format!("invalid catalog {}: {e}", path.display())))?;
-    if file.catalog_version != 1 {
+    if !matches!(file.catalog_version, 1 | 2) {
         return Err(OkfError::Usage(
-            "unsupported catalog_version (expected 1)".into(),
+            "unsupported catalog_version (expected 1 or 2)".into(),
         ));
     }
+    if file.catalog_version == 1 && file.default_bundle.is_some() {
+        return Err(OkfError::Usage(
+            "default_bundle requires catalog_version 2".into(),
+        ));
+    }
+    let configured_override = file
+        .catalog_overrides
+        .as_ref()
+        .map(|p| path.parent().unwrap_or(Path::new(".")).join(p));
+    let overrides = overrides.or(configured_override.as_deref());
     let mut entries = BTreeMap::new();
     for (id, registration) in file.bundles {
         if !valid_id(&id) {
@@ -56,17 +159,29 @@ pub fn load_catalog(path: &Path, overrides: Option<&Path>) -> Result<Catalog> {
                 "bundle ID must be namespaced: {id:?}"
             )));
         }
-        if registration.location.type_ != "directory" {
-            return Err(OkfError::Usage(format!(
-                "unsupported location type for {id}: only directory is supported"
-            )));
-        }
-        let root = absolute(
-            &path
-                .parent()
-                .unwrap_or(Path::new("."))
-                .join(registration.location.path),
-        )?;
+        let mut settings = registration.settings;
+        let root = match registration.location.type_.as_str() {
+            "directory" => absolute(
+                &path
+                    .parent()
+                    .unwrap_or(Path::new("."))
+                    .join(&registration.location.path),
+            )?,
+            "git" => {
+                let resolved = super::remote::resolve_registration(path, &id)?;
+                settings.insert(
+                    "remote".into(),
+                    serde_yaml::to_value(&resolved.origin)
+                        .map_err(|e| OkfError::Usage(e.to_string()))?,
+                );
+                resolved.root
+            }
+            _ => {
+                return Err(OkfError::Usage(format!(
+                    "unsupported location type for {id}"
+                )))
+            }
+        };
         entries.insert(
             id.clone(),
             CatalogEntry {
@@ -75,7 +190,7 @@ pub fn load_catalog(path: &Path, overrides: Option<&Path>) -> Result<Catalog> {
                 root,
                 overridden: false,
                 available: false,
-                settings: registration.settings,
+                settings,
             },
         );
     }
@@ -94,11 +209,22 @@ pub fn load_catalog(path: &Path, overrides: Option<&Path>) -> Result<Catalog> {
                 OkfError::Usage(format!("override names unknown bundle ID: {id}"))
             })?;
             entry.root = absolute(&overrides.parent().unwrap_or(Path::new(".")).join(root))?;
+            if entry.settings.contains_key("remote") {
+                super::remote::validate_override(path, &id, &entry.root)?;
+            }
             entry.overridden = true;
         }
     }
     for entry in entries.values_mut() {
-        entry.available = entry.root.is_dir();
+        entry.available = entry.root.is_dir()
+            && entry
+                .settings
+                .get("remote")
+                .map(|origin| {
+                    entry.overridden
+                        || origin.get("state").and_then(|v| v.as_str()) == Some("matched")
+                })
+                .unwrap_or(true);
         if entry.available {
             entry.root = std::fs::canonicalize(&entry.root)?;
         }
@@ -117,8 +243,16 @@ pub fn load_catalog(path: &Path, overrides: Option<&Path>) -> Result<Catalog> {
             }
         }
     }
+    if let Some(id) = &file.default_bundle {
+        if !entries.contains_key(id) {
+            return Err(OkfError::Usage(format!(
+                "default_bundle names unknown ID: {id}"
+            )));
+        }
+    }
     Ok(Catalog {
         path: path.to_path_buf(),
+        default_bundle: file.default_bundle,
         entries,
     })
 }
@@ -210,4 +344,12 @@ mod tests {
         std::fs::write(&overrides, "bundles: {acme.a: b}\n").unwrap();
         assert!(load_catalog(&dir.path().join("catalog.yaml"), Some(&overrides)).is_err());
     }
+}
+
+/// Discover the nearest workspace catalog without merging ancestor catalogs.
+pub fn discover(start: &Path) -> Option<PathBuf> {
+    start
+        .ancestors()
+        .map(|p| p.join("okf-catalog.yaml"))
+        .find(|p| p.is_file())
 }

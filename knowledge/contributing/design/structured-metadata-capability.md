@@ -11,6 +11,10 @@ its deliberate limits; implemented CLI options and configured bounds are recorde
 Illustrative records in the design are examples; `okf schema` and the generated reference expose
 the current machine contract.
 
+[Bundle manifests](bundle-manifest.md) define current portable configuration, guidance, and query
+presets. [Remote bundles](remote-bundles.md) define acquisition and logical-reference extensions.
+This document owns the structured metadata model and query semantics shared by those features.
+
 This capability complements [multi-bundle capability](multi-bundle-capability.md), retaining
 its bundle selection, identity, ordinary path, snapshot, and scope semantics.
 
@@ -97,58 +101,52 @@ underlying content nonconformant.
 
 ### Existing configuration and per-bundle settings
 
-Settings will use `okf.toml` and the catalog described by the multi-bundle capability:
+Bundle-local settings live in `okf-bundle.yaml`; catalog identity and location remain in
+`okf-catalog.yaml`. For example:
 
-```toml
-# okf.toml
-catalog = "okf-catalog.yaml"
-default_bundle = { id = "acme.product" }
-
-[bundle_settings."acme.product"]
-ontology = "tooling/product-ontology.yaml"
-
-[bundle_settings."acme.product".lint]
-index_exclude = ["drafts/**"]
-
-[bundle_settings."acme.product".query]
-scan_limit = 1000
-
-[bundle_settings."acme.product".views.compact]
-columns = ["$id", "stable-id", "description", "tags"]
-
-[bundle_settings."acme.product".facets]
-fields = ["type", "tags[]", "norms[].deadline.from"]
-max_distinct_values = 100
-include_high_cardinality = []
+```yaml
+# knowledge/product/okf-bundle.yaml
+manifest_version: 1
+settings:
+  ontology: ontology.yaml
+  lint:
+    index_exclude: ["drafts/**"]
+  query:
+    scan_limit: 1000
+  views:
+    compact:
+      columns: ["$id", "stable-id", "description", "tags"]
+  facets:
+    fields: ["type", "tags[]", "norms[].deadline.from"]
+    max_distinct_values: 100
+    include_high_cardinality: []
 ```
 
 ```yaml
 # okf-catalog.yaml
-catalog_version: 1
+catalog_version: 2
+default_bundle: acme.product
 bundles:
   acme.product:
-    location:
-      type: directory
-      path: knowledge/product
+    location: {type: directory, path: knowledge/product}
   acme.finance:
-    location:
-      type: directory
-      path: knowledge/finance
+    location: {type: directory, path: knowledge/finance}
 ```
 
-Catalog and ontology paths resolve relative to `okf.toml`; bundle locations resolve relative
-to the catalog. Settings do not register bundles. Explicit command options override applicable
-bundle settings, which override built-in defaults. An unregistered path never borrows another
-bundle's named settings. For uncataloged single-bundle use, `[bundle_settings.default]` is
-the proposed settings table; `default` is reserved for that purpose in the settings namespace.
+Manifest paths resolve from the bundle root; catalog locations resolve from the catalog directory.
+Supported legacy `okf.toml` settings retain their configuration-file path base until explicitly
+migrated. Equal legacy/manifest values can coexist during compatibility; conflicts are diagnosed.
+Settings do not register bundles, and an unregistered path never borrows another bundle's named
+settings. Supported explicit command options retain their documented precedence. Discovery,
+configuration ownership, and migration are defined by the [manifest design](bundle-manifest.md).
 
 An unreadable explicitly configured ontology produces a configuration error. Without one,
 the optional `<bundle-root>/ontology.yaml` discovery fallback remains available. The ontology
-does not establish a bundle boundary. The multi-bundle proposal's distinct ID/path selectors,
+does not establish a bundle boundary. The local catalog design's distinct ID/path selectors,
 `OKF_BUNDLE` path meaning, typed default selector, and legacy path-only `bundle`
 configuration alias remain supported.
 
-Effective settings will be inspectable, including the matched bundle identity and ontology
+Effective settings are inspectable, including the matched bundle identity and ontology
 path. Each target bundle uses its own ontology; source definitions are not applied to its
 metadata. The explicit sidecar setting and root fallback make both currently documented
 tool-local placement and existing loader placement available without relocating files.
@@ -490,15 +488,15 @@ text also shows that metadata. Inverse labels do not create additional outgoing 
 Cross-bundle backlinks report examined bundles and versions. Unexamined consumers remain
 unknown. Matching kind labels from different bundle ontologies do not establish equivalent
 vocabularies. Machine output identifies the declaring bundle/rule so cross-bundle queries can
-select the intended declaration. Affected analysis will include declared nested targets.
+select the intended declaration. Affected analysis includes declared nested targets.
 Relationship-rule selectors, including expansion options, are likewise qualified by declaring
 bundle. Short forms select rules in the primary source bundle; multi-bundle queries require
 explicit qualification where declarations differ. Exact selector syntax remains provisional.
 
-Moves that rewrite declared structured references are out of scope for this capability.
-Any future support must preflight exact occurrences before mutation, preserve surrounding
-YAML and attributes, and diagnose unsupported rewrites before writing. Cross-bundle
-move/update orchestration remains deferred; this proposal makes no automatic rewrite promise.
+Supported single-bundle moves rewrite declared structured-reference occurrences. Mutation must
+preflight exact occurrences, preserve surrounding values and attributes, and reject unsupported
+rewrites before publication. Cross-bundle move/update orchestration remains deferred; scoped
+integrity checks can require explicit reconciliation instead of silently leaving dangling links.
 
 ### Detecting omissions in existing indexes
 
@@ -707,7 +705,7 @@ with no non-null leaves does not satisfy a filter unless it establishes an expli
 list under the membership rules above. Relationship extraction preserves same-record
 pairing independently of document-level query matching.
 
-Illustrative commands use proposed selector-aware filters and pagination options:
+Selector-aware filtering and pagination use the following command form:
 
 ```sh
 okf search knowledge/product --type Procedure --facet-filter 'tags[] in ["security","production"]' --facet-filter 'tags[] not in ["draft"]' --facet-filter 'norms[].deadline.from="account-created"' --facets --offset 0 --limit 20 --json
@@ -778,14 +776,14 @@ preserving a snapshot between page requests is not part of this capability.
 - Persistent metadata/query caches and saved results reused across independent page requests.
 - Early-stop query mode that stops after enough ordered matches, with different total,
   facet, and sorting guarantees.
-- General AI guidance. Structured completeness/page information is
-  included because bounded retrieval requires it.
+- General agent reasoning and task execution. Bundle-specific guidance delivery and interpreted
+  workflows are defined by the manifest design; structured query evidence remains deterministic.
 - Account-event ingestion, obligation instances, timestamp correlation, reminders, and
   live overdue/compliance evaluation.
-- Remote acquisition, automatic cross-bundle move orchestration, and general artifact or
-  computation execution. The multi-bundle capability's deferred features remain deferred.
-- Moves that rewrite declared structured-reference occurrences; future preflight and rewrite
-  requirements above are design boundaries, not initial supported functionality.
+- Automatic cross-bundle move orchestration and general artifact or computation execution.
+  Explicit remote acquisition is defined by the remote design. Supported single-bundle moves
+  rewrite declared structured-reference occurrences; external dependents require scoped integrity
+  checks and explicit reconciliation, and protected consumers are not rewritten.
 
 ### Deliberate limits
 

@@ -86,7 +86,13 @@ fn check_list_bundle_argument(bundle: Option<&str>) -> Result<()> {
 
 pub fn run_resolve(args: &ArtifactResolveArgs, json_output: bool) -> Result<i32> {
     let root = resolve_bundle(args.bundle.as_deref())?;
-    let result = resolve_artifact(&root, args.from.as_deref(), &args.resource);
+    let context = okf_core::bundle::context::current_context(Some(&root.to_string_lossy()), None)?;
+    let (_, result) = okf_core::query::artifact::resolve_artifact_in_context(
+        &context,
+        &super::catalog::examination_scope(),
+        args.from.as_deref(),
+        &args.resource,
+    )?;
     if json_output {
         output::print_line(&json!({
             "kind": "artifact-resolution",
@@ -120,7 +126,18 @@ pub fn run_resolve(args: &ArtifactResolveArgs, json_output: bool) -> Result<i32>
 
 pub fn run_show(args: &ArtifactShowArgs, json_output: bool) -> Result<i32> {
     let root = resolve_bundle(args.bundle.as_deref())?;
-    let resolved = resolve_artifact(&root, args.from.as_deref(), &args.resource);
+    let context = okf_core::bundle::context::current_context(Some(&root.to_string_lossy()), None)?;
+    let (_, resolved) = okf_core::query::artifact::resolve_artifact_in_context(
+        &context,
+        &super::catalog::examination_scope(),
+        args.from.as_deref(),
+        &args.resource,
+    )?;
+    if args.fetch && args.resource.starts_with("okf://") {
+        return Err(OkfError::Usage(
+            "--fetch does not acquire logical dependencies; use catalog sync".into(),
+        ));
+    }
     if resolved.kind == ArtifactKind::Missing {
         let canonical_root = root.canonicalize()?;
         let suggestion = if args.from.is_none() {
@@ -154,8 +171,9 @@ pub fn run_show(args: &ArtifactShowArgs, json_output: bool) -> Result<i32> {
         content.select_lines(lines)?;
         return print_content(content, json_output);
     }
-    let content = show_artifact(
-        &root,
+    let content = okf_core::query::artifact::show_artifact_in_context(
+        &context,
+        &super::catalog::examination_scope(),
         args.from.as_deref(),
         &args.resource,
         args.max_bytes,

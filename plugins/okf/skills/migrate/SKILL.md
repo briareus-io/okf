@@ -5,20 +5,14 @@ description: Migrate documents or prior OKF material into one or more OKF v0.2 b
 
 # Migrate documents into OKF v0.2
 
+## Shared operating protocol
+
+Read and follow the [shared OKF protocol](../../references/bundle-context.md) before CLI-dependent
+work. It defines compatibility checks, bundle context, scope, output evidence, validation profiles,
+and authoring conventions. Use `references/cli.md` for exact command syntax as needed.
+
 Preserve meaning and unknown data. The CLI handles writes and validation; classification,
 granularity, attribution, and unresolved legacy semantics require judgment.
-
-
-## CLI compatibility preflight
-
-Before CLI-dependent work, run `sh <this-skill-directory>/../../scripts/check-cli.sh`,
-resolving the path from this installed SKILL.md, not the working directory. This read-only
-check uses the plugin's `cli-compatibility.txt` range and reports the executable on PATH.
-If missing, incompatible, or unable to run, stop CLI-dependent work and show its installation
-instructions. Never invoke the installer, download a CLI, or update it from this skill.
-An explicit user request to install should be handled separately from this workflow.
-Only after this check passes may command help resolve syntax differences; help cannot waive
-compatibility. Recheck if the executable or PATH changes during the task.
 
 ## CLI and conformance model
 
@@ -81,7 +75,8 @@ conformance requirements.
    [structured authoring example](../ontology/references/structured-authoring.md); for cross-bundle
    source mappings use the init skill's [catalog example](../init/references/multi-bundle.md),
    including separate-repository layouts. Preserve catalog IDs as identities, but rebase authored
-   body and custom metadata links as ordinary paths; qualified CLI targets are not authored link syntax.
+   ordinary paths according to their layout and logical `okf://` references according to bundle ID/path.
+   Qualified CLI targets are not authored link syntax; do not convert reference formats heuristically.
    Preserve existing verification as historical evidence outside the active `verified`
    field if conversion changes meaning; do not create a new verification event from old evidence.
    For v0.1 material, translate `timestamp` to `generated.at` only when the producer actor is known.
@@ -96,12 +91,14 @@ conformance requirements.
    and ensure its ordinary resource addresses the same material. Preserve snapshot expectations;
    report mismatched/unavailable expectations and current candidates separately, never accept a
    substitution or refresh a baseline just to clear findings. Unknown path-like strings stay opaque.
-   Single-bundle move tooling does not perform these nested/cross-bundle rewrites. Use ontology
+   Single-bundle move tooling rewrites declared nested references within the selected bundle.
+   Cross-bundle migration still needs the explicit destination map and coordinated reconciliation;
+   scope guards do not perform multi-bundle rewrites. Use ontology
    references only as additional local modeling. Check migrated edges with
    `okf links <concept-id> <bundle> --json`;
    inspect wider impact with `okf graph <bundle> --root <concept-id> --direction both --depth <N>
    --format mermaid`. Graph depth requires a root.
-7. Validate every destination separately with `okf validate <bundle>`; run advisory
+7. Validate every destination separately with `okf validate <bundle> --profile bundle`; run advisory
    `okf lint <bundle> --fail-on never` and edge checks with the explicit combined examination scope.
    Reconcile every source against completed destinations, intentional splits/merges, skips, and
    unresolved rows; raw source and target counts need not match. Compare representative transformed
@@ -114,13 +111,9 @@ conformance requirements.
    Validate again after generating indexes. Unresolved optional evidence belongs in the report, not
    as a fabricated value.
 
-When local fingerprint tracking is enabled with a source `kind`, review its evidence and run
-`okf refresh <concept-id> <bundle> --fail-on skipped` to record the baseline. `okf stale <bundle>
---fail-on any` distinguishes `unrecorded` (no baseline), `missing` (cannot fingerprint), and
-`drifted` (changed baseline). Standard kind-less provenance is not fingerprint-checked. Inspect
-findings even when a command succeeds: stale defaults to a successful exit on findings, and
-`lint --fail-on never` is reporting only. Use `okf lint <bundle> --fail-on warn` when source warnings
-must fail a health gate; conformance validation alone does not establish source health.
+For authored sources that opt into fingerprints, review the final evidence before recording a
+baseline with `okf refresh <concept-id> <bundle> --fail-on skipped`. Interpret findings and failure
+policies using the shared source-health rules.
 
 ## Sources and artifacts
 
@@ -141,33 +134,3 @@ Migration does not establish verification. Report migrated/skipped concepts, sou
 extensions, unresolved mappings, per-bundle validation and scoped fidelity checks, and the ledger
 location/completion state for resumption. Include lifecycle or artifact details only when
 relevant; route a subsequent source-backed document review to `review-verify`.
-
-## Bundle identity and examination scope
-
-Keep bundle paths and catalog IDs distinct. `OKF_BUNDLE` always selects a path; use the
-`--bundle-id <id>` for a registered identity. When a catalog is configured, use `okf catalog` to inspect effective local
-registrations, overrides, availability, and per-bundle settings. Catalog paths are relative to
-`okf.toml`, locations are relative to the catalog, and machine-local overrides change effective
-locations rather than accepting different snapshots. Inspect effective settings before relying on
-a per-bundle ontology or view. Equal or nested registered roots are configuration errors.
-
-Registration alone does not authorize catalog-wide traversal. Start with the selected bundle;
-request additional bundles explicitly with repeatable `--scope-bundle <id>` or deliberate
-`--catalog-scope` when the task requires them. Report requested and examined
-scope and unavailable members. Out-of-scope references remain unknown. Ordinary relative paths
-retain their meaning across registered boundaries; distributing one bundle alone can break them.
-Never infer another bundle from a matching filename or title.
-
-## Frontmatter order
-
-When authoring concept frontmatter, put `type` first. For the matching ontology concept type,
-follow `fields` declaration order recursively, including nested objects and objects in lists;
-reusable field types use their resolved field order. Put reference-only keys next in reference
-declaration order. Put undeclared/custom fields last at each level, preserving their relative
-order. Without a matching ontology type, keep the other fields in their authored order.
-This is an authoring convention, not an additional OKF conformance requirement.
-CLI writes normalize this order. `okf lint <bundle>` reports `frontmatter-order` at warning by
-default; `okf lint <bundle> --fix` normalizes the bundle and reports remaining findings. The
-bundle lint setting `frontmatter_order` accepts `info`, `warn`, `error`, or `off`; an off rule
-is not fixed. Normalization preserves values, list order, body text, and verification metadata;
-YAML comments and scalar presentation may normalize.

@@ -10,14 +10,17 @@ OKF distinguishes format conformance, advisory quality checks, source health, an
 outcomes. Choose the check that answers your question instead of treating every successful
 command as proof that the bundle is complete, current, or verified.
 
-This guide covers OKF CLI 0.5.0. See [consistent command behavior](command-contracts.md)
+This guide covers the 0.6 CLI contracts. See [consistent command behavior](command-contracts.md)
 for capability examples and the [CLI reference](../commands/index.md) for exact options.
 
 ## Choose the right check
 
 | Question | Command | What a clean result establishes |
 | --- | --- | --- |
-| Is this bundle conformant with OKF v0.2? | `validate` | The examined documents satisfy format conformance rules. |
+| Do knowledge documents satisfy the bundle tooling profile? | `validate --profile bundle` | Examined knowledge documents conform, excluding root support Markdown. |
+| Does this directory satisfy the core format boundary? | `validate --profile core` | Physical Markdown files satisfy core rules, including files an older reader may see. |
+| Is the bundle manifest usable? | `bundle validate` | Supported schema, declarations, and required resources pass validation. |
+| Are accepted remote dependencies available locally? | `catalog sync --check` | Local snapshots match the accepted lock; this is offline, not a network/authentication check. |
 | Does the bundle satisfy our advisory conventions? | `lint` | Findings are interpreted under configured rules and the selected failure threshold. |
 | Have recorded source fingerprints changed, or has review expiry passed? | `stale` | The reported source checks and expiry observations; kindless provenance is not fingerprinted. |
 | What depends on changes I already know about? | `affected` | Dependents found within the command's examination and traversal scope. |
@@ -28,7 +31,8 @@ for capability examples and the [CLI reference](../commands/index.md) for exact 
 For example:
 
 ```sh
-okf validate knowledge
+okf bundle validate knowledge
+okf validate knowledge --profile bundle
 okf lint knowledge --fail-on error --json
 okf stale knowledge --fail-on-state drifted,missing,unavailable,unsupported,expired --json
 ```
@@ -42,7 +46,7 @@ can fail independently of format conformance.
 Read `--json` output as NDJSON, one object per line. Normal operation streams contain:
 
 1. An `operation-start` record naming the command and stream version.
-2. Command-specific payloads, such as concepts, findings, scope, query summaries, or file diffs.
+2. Command-specific payloads, such as concepts, guidance, findings, scope, query summaries, or file diffs.
 3. An `operation-complete` record with outcome, exit code, publication, and completeness evidence.
 
 Discover the contract through `okf schema`. Do not assume that the first or last payload is
@@ -92,6 +96,25 @@ consequences:
 
 See [performance and bounded reads](../guides/bounded-reads.md) for choosing limits without
 losing the evidence needed by your application.
+
+## Diagnose manifest and dependency problems
+
+| Symptom | Next action |
+| --- | --- |
+| Context fails on a malformed manifest | Run `bundle validate` or doctor and inspect the exact file. Repair the configuration before dependent work; do not silently substitute defaults. |
+| Core validation flags support instructions | Check whether bundle-profile validation was intended. Do not add concept metadata to support files solely to silence core validation. |
+| Instruction-file change is not reflected in an agent task | Reload context and compare `context_digest`, not only the manifest digest. |
+| Dependency has no accepted lock | Create and review an initial update plan; sync never invents a branch-tip lock. |
+| Accepted snapshot is absent locally | Explicitly run `catalog sync` within the requested dependency scope. Ordinary reads do not acquire it. |
+| Managed cache content differs from its commit | Preserve the diagnostic; use `catalog sync --rebuild` for explicit quarantine and offline reconstruction from available objects. Do not edit the snapshot or reset an owner's override checkout. |
+| Update plan is stale | Replan against current catalog, lock, and examined consumer content. |
+| Impact was not fully examined | Inspect the reported gap; an explicit `--allow-incomplete-impact` acceptance does not waive integrity, compatibility, or stale-plan failures. |
+| Write targets a managed dependency | Edit an owner-side working checkout instead; overrides do not weaken the consumer's access policy. |
+
+See [remote dependency maintenance](../guides/remote-dependencies.md) for the acquisition lifecycle
+and [configuration migration](migrations/0.6.0.md) for TOML plans and backups. Ordinary doctor diagnosis
+is read-only, safe document repairs are explicit, and configuration migration has separate plan/apply
+side effects. A pending configuration-migration backup is not a changeset journal.
 
 ## Recover an interrupted write
 

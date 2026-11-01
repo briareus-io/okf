@@ -23,6 +23,82 @@ use pulldown_cmark::{Event, Parser, Tag};
 use serde_yaml::Value;
 use std::collections::HashSet;
 
+/// A catalog-qualified reference. Bundle IDs remain case-sensitive, unlike DNS hosts.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LogicalReference {
+    pub bundle: String,
+    pub path: String,
+    pub fragment: Option<String>,
+}
+
+impl LogicalReference {
+    /// Parse only the `okf` scheme. Other URI schemes return `None`; malformed OKF
+    /// references are errors, never ordinary paths or HTTP fetch candidates.
+    pub fn parse(raw: &str) -> crate::error::Result<Option<Self>> {
+        use crate::error::OkfError;
+        let raw = raw.trim();
+        if !is_logical_reference(raw) {
+            return Ok(None);
+        }
+        let fail = || {
+            OkfError::Usage(format!("invalid logical reference {raw:?}: expected okf://<bundle-id>/<bundle-relative-path>"))
+        };
+        let value = raw.strip_prefix("okf://").ok_or_else(fail)?;
+        let (body, fragment) = value
+            .split_once('#')
+            .map_or((value, None), |(p, f)| (p, Some(f.to_owned())));
+        if body.contains('?') || body.contains('\\') || body.chars().any(char::is_control) {
+            return Err(fail());
+        }
+        let (bundle, encoded_path) = body.split_once('/').ok_or_else(fail)?;
+        if !crate::bundle::catalog::valid_id(bundle) {
+            return Err(fail());
+        }
+        let mut decoded = Vec::new();
+        let bytes = encoded_path.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == b'%' {
+                if i + 2 >= bytes.len() {
+                    return Err(fail());
+                }
+                let hex = std::str::from_utf8(&bytes[i + 1..i + 3]).map_err(|_| fail())?;
+                let ch = u8::from_str_radix(hex, 16).map_err(|_| fail())?;
+                // Decode once; reject encoded separators and residual escapes so a
+                // downstream reader cannot reinterpret a double-encoded traversal.
+                if matches!(ch, b'/' | b'\\' | b'%' | b'?' | b'#' | 0) {
+                    return Err(fail());
+                }
+                decoded.push(ch);
+                i += 3;
+            } else {
+                decoded.push(bytes[i]);
+                i += 1;
+            }
+        }
+        let path = String::from_utf8(decoded).map_err(|_| fail())?;
+        if path.is_empty()
+            || path.chars().any(char::is_control)
+            || path
+                .split('/')
+                .any(|part| part.is_empty() || matches!(part, "." | "..") || part.contains(':'))
+        {
+            return Err(fail());
+        }
+        Ok(Some(Self {
+            bundle: bundle.into(),
+            path,
+            fragment,
+        }))
+    }
+}
+
+pub fn is_logical_reference(raw: &str) -> bool {
+    raw.trim()
+        .get(..4)
+        .is_some_and(|s| s.eq_ignore_ascii_case("okf:"))
+}
+
 /// The syntactic class of a link target.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LinkKind {

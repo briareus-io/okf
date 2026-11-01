@@ -43,22 +43,30 @@ The complete files below form the starting workspace. Their filename headings ar
 executable workflow test. For real migrations, merge configuration into existing files and preserve
 uncommitted content; do not replace an existing workspace with this fixture.
 
-## `okf.toml`
-
-```toml
-catalog = "okf-catalog.yaml"
-default_bundle = { id = "acme.product" }
-```
-
 ## `okf-catalog.yaml`
 
 ```yaml
-catalog_version: 1
+catalog_version: 2
+default_bundle: acme.product
 bundles:
   acme.product:
     location: {type: directory, path: knowledge/product}
   acme.finance:
     location: {type: directory, path: knowledge/finance}
+```
+
+## `knowledge/product/okf-bundle.yaml`
+
+```yaml
+manifest_version: 1
+description: Migrated product procedures.
+```
+
+## `knowledge/finance/okf-bundle.yaml`
+
+```yaml
+manifest_version: 1
+description: Migrated finance policies.
 ```
 
 ## `knowledge/product/ontology.yaml`

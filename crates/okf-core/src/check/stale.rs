@@ -33,6 +33,8 @@ use crate::ports::net::Net;
 pub enum DriftKind {
     /// The recomputed fingerprint differs from the recorded one.
     Drifted,
+    /// Selected immutable identity changed while target file bytes remain identical.
+    RevisionChanged,
     /// A source opts into fingerprinting but has no recorded baseline.
     Unrecorded,
     /// The artifact could not be read / fingerprinted (missing file, git error, unknown kind).
@@ -49,6 +51,7 @@ impl DriftKind {
     pub fn as_str(self) -> &'static str {
         match self {
             DriftKind::Drifted => "drifted",
+            DriftKind::RevisionChanged => "revision-changed",
             DriftKind::Unrecorded => "unrecorded",
             DriftKind::Missing => "missing",
             DriftKind::Unsupported => "unsupported",
@@ -116,6 +119,8 @@ pub struct StaleChecker<'a> {
     git: &'a dyn Git,
     net: Option<&'a dyn Net>,
     clock: &'a dyn Clock,
+    bundle_context: Option<&'a crate::bundle::context::Context>,
+    scope_ids: Vec<String>,
 }
 
 type FingerprintCache = HashMap<(String, String), std::result::Result<Fingerprint, String>>;
@@ -135,12 +140,32 @@ impl<'a> StaleChecker<'a> {
             git,
             net,
             clock,
+            bundle_context: None,
+            scope_ids: Vec::new(),
+        }
+    }
+
+    pub fn with_bundle_context(
+        mut self,
+        context: &'a crate::bundle::context::Context,
+        scope_ids: &[String],
+    ) -> Self {
+        self.bundle_context = Some(context);
+        self.scope_ids = scope_ids.to_vec();
+        self
+    }
+
+    fn engine(&self) -> Engine<'_> {
+        let engine = Engine::new(self.root, self.fs, self.git, self.net);
+        match self.bundle_context {
+            Some(context) => engine.with_bundle_context(context, &self.scope_ids),
+            None => engine,
         }
     }
 
     /// Check a whole bundle, returning drift for every out-of-sync concept (bundle order).
     pub fn check_bundle(&self, bundle: &Bundle) -> StaleReport {
-        let engine = Engine::new(self.root, self.fs, self.git, self.net);
+        let engine = self.engine();
         let mut cache = FingerprintCache::new();
         prime_git_cache(bundle, &engine, &mut cache);
         let concepts = bundle
@@ -154,7 +179,7 @@ impl<'a> StaleChecker<'a> {
 
     /// Check one concept: recompute each source fingerprint and evaluate `stale_after`.
     pub fn check_concept(&self, concept: &Concept) -> ConceptDrift {
-        let engine = Engine::new(self.root, self.fs, self.git, self.net);
+        let engine = self.engine();
         let mut cache = FingerprintCache::new();
         self.check_concept_with(concept, &engine, &mut cache)
     }
@@ -243,6 +268,18 @@ impl<'a> StaleChecker<'a> {
                         current: Some(current.clone()),
                         ..base
                     })
+                } else if source.kind == SourceKind::BundleResource
+                    && source.fingerprint.get("sha256").is_some()
+                    && source.fingerprint.get("sha256") == current.get("sha256")
+                    && !fingerprints_match(&source.fingerprint, current)
+                {
+                    Some(SourceDrift {
+                        drift: DriftKind::RevisionChanged,
+                        message: "selected source identity changed; raw file bytes are unchanged"
+                            .into(),
+                        current: Some(current.clone()),
+                        ..base
+                    })
                 } else if fingerprints_match(&source.fingerprint, current) {
                     None
                 } else {
@@ -326,7 +363,15 @@ pub(crate) fn malformed_source_entry(entry: &Value, index: usize) -> Option<Stri
 fn cache_key(source: &Source) -> (String, String) {
     (
         source.kind.as_kind_str().to_string(),
-        source.resource.clone(),
+        if source.kind == SourceKind::BundleResource {
+            format!(
+                "{}\n{}",
+                source.resource,
+                serde_yaml::to_string(&source.extra).unwrap_or_default()
+            )
+        } else {
+            source.resource.clone()
+        },
     )
 }
 
@@ -395,6 +440,20 @@ pub fn check_stale(bundle: &Bundle) -> StaleReport {
     let clock = SystemClock;
     let checker = StaleChecker::new(&bundle.root, &fs, &git, None, &clock);
     checker.check_bundle(bundle)
+}
+
+/// Catalog-aware source health without implicitly expanding examination scope.
+pub fn check_stale_in_context(
+    bundle: &Bundle,
+    context: &crate::bundle::context::Context,
+    scope_ids: &[String],
+) -> StaleReport {
+    let fs = RealFs;
+    let git = RealGit;
+    let clock = SystemClock;
+    StaleChecker::new(&bundle.root, &fs, &git, None, &clock)
+        .with_bundle_context(context, scope_ids)
+        .check_bundle(bundle)
 }
 
 #[cfg(test)]

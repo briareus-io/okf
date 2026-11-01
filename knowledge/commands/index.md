@@ -4,6 +4,10 @@ Start with a task below. Each page owns its exact arguments and supported global
 
 ## Find, inspect and preview
 
+- [okf bundle context](bundle-context.md) — Read effective settings and applicable guidance before work.
+- [okf bundle resource list](bundle-resource-list.md) — Inventory support resources explicitly.
+- [okf bundle resource show](bundle-resource-show.md) — Inspect bounded support content without execution.
+
 - [okf artifact list](artifact-list.md) — Inventories concepts, reserved files, and opaque artifacts under a bundle directory such as references/.
 - [okf artifact resolve](artifact-resolve.md) — Resolves an OKF path-valued resource with declaring-concept context and containment checks.
 - [okf artifact show](artifact-show.md) — Retrieves a bounded local or explicitly authorized remote artifact without executing it.
@@ -23,6 +27,8 @@ Start with a task below. Each page owns its exact arguments and supported global
 - [okf show](show.md) — Shows a concept in full, as a heading outline with line numbers, or as a selected line range.
 
 ## Check quality, freshness and impact
+
+- [okf bundle validate](bundle-validate.md) — Validate manifest schema, rules, and workflows.
 
 - [okf affected](affected.md) — Impact query: given a set of changed links, computes the blast radius of concepts that may need review via a reverse walk, direct by default or --transitive.
 - [okf computation check](computation-check.md) — Inspects an Attested Computation contract and its artifacts without executing the computation.
@@ -64,3 +70,8 @@ Start with a task below. Each page owns its exact arguments and supported global
 - [okf catalog](catalog.md) — Inspects configured and effective catalog locations, availability and bundle settings.
 - [okf schema](schema.md) — Prints machine-readable CLI metadata as NDJSON: commands, mutation conditions, typed arguments, resolution, and output shapes.
 - [okf version](version.md) — Prints the CLI version and the OKF spec version(s) it supports.
+
+## Manage dependency snapshots
+
+- [okf catalog sync](catalog-sync.md) — Materialize an accepted lock or check local correspondence offline.
+- [okf catalog update](catalog-update.md) — Plan and explicitly apply a reviewed dependency update.

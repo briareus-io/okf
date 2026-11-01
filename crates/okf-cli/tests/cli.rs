@@ -14,7 +14,15 @@ fn fixture(name: &str) -> PathBuf {
 }
 
 fn okf() -> Command {
-    Command::cargo_bin("okf").unwrap()
+    // Standalone fixture assertions must not inherit the repository showcase catalog.
+    // Tests of discovery explicitly choose their own workspace below.
+    let mut command = Command::cargo_bin("okf").unwrap();
+    command
+        .current_dir(std::env::temp_dir())
+        .env_remove("OKF_BUNDLE")
+        .env_remove("OKF_CATALOG")
+        .env_remove("OKF_CATALOG_OVERRIDES");
+    command
 }
 
 /// Parse stdout as NDJSON (one JSON object per line).

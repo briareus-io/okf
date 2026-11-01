@@ -32,6 +32,9 @@ impl Bundle {
 /// Load one concept directly instead of walking and parsing the entire bundle.
 pub fn load_concept(root: &Path, id: &str) -> Result<Option<Concept>> {
     let id = ConceptId::parse(id)?;
+    if super::walk::is_support_path(Path::new(id.0.trim_start_matches('/'))) {
+        return Ok(None);
+    }
     let path = root.join(format!("{}.md", id.0.trim_start_matches('/')));
     match std::fs::symlink_metadata(&path) {
         Ok(metadata) if metadata.file_type().is_file() => {}
@@ -47,6 +50,9 @@ pub fn load_concept(root: &Path, id: &str) -> Result<Option<Concept>> {
 /// Whether an id maps to a regular, non-reserved concept document.
 pub fn concept_exists(root: &Path, id: &ConceptId) -> bool {
     let rel = id.0.trim_start_matches('/');
+    if super::walk::is_support_path(Path::new(rel)) {
+        return false;
+    }
     let Some(name) = Path::new(rel).file_name().and_then(|name| name.to_str()) else {
         return false;
     };

@@ -92,15 +92,16 @@ fn unsupported_globals_hidden_and_machine_capabilities_explicit() {
         .args(["show", "--help"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("--revision").not())
+        .stdout(predicate::str::contains("--revision"))
         .stdout(predicate::str::contains("--scope-bundle").not());
     okf()
         .args(["search", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("--revision"));
+    // Historical inspection is now supported; mutation commands still reject it.
     okf()
-        .args(["show", "x", "--revision", "HEAD"])
+        .args(["edit", "x", "--revision", "HEAD"])
         .assert()
         .code(2)
         .stderr(predicate::str::contains("--revision is supported only"));
@@ -113,7 +114,7 @@ fn unsupported_globals_hidden_and_machine_capabilities_explicit() {
         .clone();
     let records = rows(&output);
     let command = |name| records.iter().find(|r| r["name"] == name).unwrap();
-    assert_eq!(command("show")["supported_globals"]["revision"], false);
+    assert_eq!(command("show")["supported_globals"]["revision"], true);
     assert_eq!(command("search")["supported_globals"]["revision"], true);
     let arg = |name, flag| {
         command(name)["args"]

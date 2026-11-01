@@ -51,10 +51,24 @@ a present empty list can. Objects and incompatible operand types are diagnosed w
 is opt-in, one hop and outbound; selected relationship occurrences keep their attributes and
 qualified target identities. Explicit scope bounds available targets and result claims.
 
+## Filter expanded relationships
+
+Expansion-specific options such as `--expand-kind`, `--expand-edge-filter`, and
+`--expand-related-filter` select expanded occurrences. They do not remove primary concept hits.
+Apply these predicates before expansion limits and retain separate expansion completeness evidence.
+Primary query filters and presets remain separate from expansion filtering.
+
 ## Arguments
 
 | Argument | Type | Required | Description |
 |----------|------|----------|-------------|
+| `--preset <value>` | string | no | — |
+| `--clear-filter <value>` | list<string> | no | — |
+| `--expand-kind <value>` | list<string> | no | — |
+| `--expand-inverse-kind <value>` | list<string> | no | — |
+| `--expand-related-type <value>` | list<string> | no | — |
+| `--expand-edge-filter <value>` | list<string> | no | — |
+| `--expand-related-filter <value>` | list<string> | no | — |
 | `<bundle>` | positional | no | Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory) |
 | `--type <value>` | string | no | Filter by exact concept `type` |
 | `--tag <value>` | string | no | Filter by membership in the concept's `tags` |
@@ -84,6 +98,6 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `concept,concept-identity,scope,projection,query-summary,facet,facet-excluded,relationship,related-concept,expansion-summary,warning`.
 
-Supported global options: `--bundle-id`, `--catalog-scope`, `--json`, `--revision`, `--scope-bundle`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
 
 The positional argument is the bundle, never query text. Text requires `--text`; structured filters work without it. No filters means inventory. Text-search JSON adds `search.score` and bounded `search.matches` to metadata records, not full bodies. Structured-only search has no text-match evidence. `--in title,description` narrows the default fields; adding `frontmatter` broadens them. Empty results exit successfully and establish only that this query found no matches. Check query-summary and warning records: incomplete scans cannot establish absence, exact totals, or globally ordered pages. --limit does not reduce scan work; offset requests rescan without shared query caches. Separate nested filters may match different list records; inspect concrete occurrences before attributing their combined conditions to one relationship. Expansion completeness and facet truncation are independent of primary scan completeness.

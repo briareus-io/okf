@@ -5,8 +5,15 @@ description: Author and maintain optional local ontology rules, reusable nested 
 
 # Manage the tool-local ontology
 
+## Shared operating protocol
+
+Read and follow the [shared OKF protocol](../../references/bundle-context.md) before CLI-dependent
+work. It defines compatibility checks, bundle context, scope, output evidence, validation profiles,
+and authoring conventions. Use `references/cli.md` for exact command syntax as needed.
+
 `ontology.yaml` is a spec-external sidecar. It is neither required for an OKF bundle nor a type
-registry. Unknown types are conformant; ontology findings are advisory.
+registry. Unknown types can be core-conformant. Ontology findings are advisory unless an explicit
+bundle write policy enforces them; malformed ontology configuration is an error.
 
 Prefer `OKF_BUNDLE`; explicit forms are `okf ontology show <name> <bundle>` and `okf ontology add
 <name> <bundle>`. Use scalar or structured ontology commands for changes. Reusable nested definitions use
@@ -25,18 +32,6 @@ requirements from the reviewed model. To change rules, use `okf ontology update 
 "Service" <bundle>`. Quote type names containing spaces and rule values containing `|`. Ontology
 flags use colon-separated declarations; concept `--set`/`--ref` flags use `key=value` instead. Read
 the reference before choosing other types or cardinalities.
-
-
-## CLI compatibility preflight
-
-Before CLI-dependent work, run `sh <this-skill-directory>/../../scripts/check-cli.sh`,
-resolving the path from this installed SKILL.md, not the working directory. This read-only
-check uses the plugin's `cli-compatibility.txt` range and reports the executable on PATH.
-If missing, incompatible, or unable to run, stop CLI-dependent work and show its installation
-instructions. Never invoke the installer, download a CLI, or update it from this skill.
-An explicit user request to install should be handled separately from this workflow.
-Only after this check passes may command help resolve syntax differences; help cannot waive
-compatibility. Recheck if the executable or PATH changes during the task.
 
 ## Workflow
 
@@ -62,7 +57,7 @@ compatibility. Recheck if the executable or PATH changes during the task.
    replacements must retain. Use concept YAML/path/patch flags for nested values, preserving
    provenance and applying meaningful-change verification consequences.
    Do not mass-edit concepts merely to silence advisory findings.
-5. Run `okf validate <bundle>` for portable spec conformance and then `okf lint <bundle> --fail-on
+5. Run `okf validate <bundle> --profile bundle` for bundle-profile document conformance and then `okf lint <bundle> --fail-on
    never` for ontology/spec recommendations. Report results in separate groups.
 
 If custom fields point to supporting resources, `references/` is optional: Markdown targets are
@@ -72,22 +67,6 @@ needed. Reading a resource never authorizes execution.
 
 Report sidecar changes, portable versus custom fields, exact computation treatment, and advisory
 impact without implying that ontology controls OKF validity.
-
-## Bundle identity and examination scope
-
-Keep bundle paths and catalog IDs distinct. `OKF_BUNDLE` always selects a path; use the
-`--bundle-id <id>` for a registered identity. When a catalog is configured, use `okf catalog` to inspect effective local
-registrations, overrides, availability, and per-bundle settings. Catalog paths are relative to
-`okf.toml`, locations are relative to the catalog, and machine-local overrides change effective
-locations rather than accepting different snapshots. Inspect effective settings before relying on
-a per-bundle ontology or view. Equal or nested registered roots are configuration errors.
-
-Registration alone does not authorize catalog-wide traversal. Start with the selected bundle;
-request additional bundles explicitly with repeatable `--scope-bundle <id>` or deliberate
-`--catalog-scope` when the task requires them. Report requested and examined
-scope and unavailable members. Out-of-scope references remain unknown. Ordinary relative paths
-retain their meaning across registered boundaries; distributing one bundle alone can break them.
-Never infer another bundle from a matching filename or title.
 
 ## Recursive definitions and semantic relationships
 
@@ -102,7 +81,7 @@ applies only to `additional_properties: false` on a custom object. Required fiel
 null, blank strings, and empty lists. Unknown extension constraints remain preserved and must be
 reported as unenforced. Inspect incomplete-check diagnostics before reporting lint success.
 
-In CLI 0.5, an optional ontology write gate is independent of lint severity and
+An optional ontology write gate is independent of lint severity and
 display settings. An out-of-bundle typed reference that cannot be checked
 produces `write-gate-incomplete` and blocks the write; the CLI does not offer
 an override. Explicit dependent-bundle checks for a shared sidecar examine
@@ -118,17 +97,3 @@ Dynamic relationship kinds may narrow their reference rule's allowed target type
 `extends` declarations supply ancestry for those restrictions; check effective target ancestry
 without treating a local subtype as another standard Attested Computation type. Invalid widening
 or incompatible target declarations remain configuration or advisory reference findings.
-
-## Frontmatter order
-
-When authoring concept frontmatter, put `type` first. For the matching ontology concept type,
-follow `fields` declaration order recursively, including nested objects and objects in lists;
-reusable field types use their resolved field order. Put reference-only keys next in reference
-declaration order. Put undeclared/custom fields last at each level, preserving their relative
-order. Without a matching ontology type, keep the other fields in their authored order.
-This is an authoring convention, not an additional OKF conformance requirement.
-CLI writes normalize this order. `okf lint <bundle>` reports `frontmatter-order` at warning by
-default; `okf lint <bundle> --fix` normalizes the bundle and reports remaining findings. The
-bundle lint setting `frontmatter_order` accepts `info`, `warn`, `error`, or `off`; an off rule
-is not fixed. Normalization preserves values, list order, body text, and verification metadata;
-YAML comments and scalar presentation may normalize.

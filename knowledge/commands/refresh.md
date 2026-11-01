@@ -38,6 +38,6 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `change`.
 
-Supported global options: `--bundle-id`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--scope-bundle`.
 
 Refresh updates supported source fingerprints across the concept, not content or standard source modification dates. Review those sources against the final content first, whether or not the content needed rewriting. JSON reports `updated`/`unchanged` counts and `skipped` entries with reasons. Missing, unavailable, unsupported, or malformed required sources block the entire refresh before publication. `--fail-on skipped` rejects provenance-only skips before publication as well. Report unresolved sources instead of treating refresh as proof of complete synchronization.

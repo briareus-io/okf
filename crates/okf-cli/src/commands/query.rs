@@ -69,6 +69,16 @@ pub fn run_search_in_scope(
             "expansion bounds must be edges 1..100, targets 1..1000, bytes 1..1048576".into(),
         ));
     }
+    let has_expansion_filters = !args.expand_kind.is_empty()
+        || !args.expand_inverse_kind.is_empty()
+        || !args.expand_related_type.is_empty()
+        || !args.expand_edge_filter.is_empty()
+        || !args.expand_related_filter.is_empty();
+    if has_expansion_filters && (args.no_expand || args.expand.is_empty() && args.view.is_none()) {
+        return Err(OkfError::Usage(
+            "expansion filters require --expand or an expansion-enabled view".into(),
+        ));
+    }
     let filter = SearchFilter {
         type_: args.type_.clone(),
         tag: args.tag.clone(),
@@ -245,6 +255,11 @@ pub fn run_search_in_scope(
         && (!json_output || view.is_some_and(|v| v.extended_output))
     {
         expands = view.map(|v| v.expand.clone()).unwrap_or_default();
+    }
+    if has_expansion_filters && expands.is_empty() {
+        return Err(OkfError::Usage(
+            "expansion filters require effective expansion rules in this output mode".into(),
+        ));
     }
     let human_fields = if projection.is_empty() {
         &columns
@@ -550,7 +565,14 @@ fn parse_line_range(raw: &str) -> Result<(usize, usize)> {
 }
 
 /// `okf backlinks <concept> [bundle]` — concepts that link to the given concept.
-pub fn run_backlinks(args: &IdArgs, json: bool) -> Result<i32> {
+pub fn run_backlinks(args: &crate::cli::RelationshipArgs, json: bool) -> Result<i32> {
+    if super::filters::requested(&args.filters)
+        || args.limit.is_some()
+        || args.scan_limit.is_some()
+        || args.full_scan
+    {
+        return run_filtered_relationship(args, json, okf_core::graph::filter::Direction::Incoming);
+    }
     let root = resolve_bundle(args.bundle.as_deref())?;
     let bundle = load_bundle(&root)?;
     let (_, ontology) = okf_core::bundle::settings::load_for(&root)?;
@@ -618,7 +640,14 @@ pub fn run_backlinks(args: &IdArgs, json: bool) -> Result<i32> {
 }
 
 /// `okf links <concept> [bundle]` — direct normalized outbound concept links.
-pub fn run_links(args: &IdArgs, json: bool) -> Result<i32> {
+pub fn run_links(args: &crate::cli::RelationshipArgs, json: bool) -> Result<i32> {
+    if super::filters::requested(&args.filters)
+        || args.limit.is_some()
+        || args.scan_limit.is_some()
+        || args.full_scan
+    {
+        return run_filtered_relationship(args, json, okf_core::graph::filter::Direction::Outgoing);
+    }
     let root = resolve_bundle(args.bundle.as_deref())?;
     let (_, ontology) = okf_core::bundle::settings::load_for(&root)?;
     let concept = load_concept(&root, &args.concept)?
@@ -720,6 +749,113 @@ pub fn run_links(args: &IdArgs, json: bool) -> Result<i32> {
     Ok(0)
 }
 
+fn run_filtered_relationship(
+    args: &crate::cli::RelationshipArgs,
+    json_output: bool,
+    direction: okf_core::graph::filter::Direction,
+) -> Result<i32> {
+    use okf_core::graph::filter::{query_local, Direction, QueryOptions};
+    let root = resolve_bundle(args.bundle.as_deref())?;
+    let operation = if matches!(direction, Direction::Incoming) {
+        "backlinks"
+    } else {
+        "links"
+    };
+    let (filters, compiled, preset_details) =
+        super::filters::resolve(&root, operation, &args.filters)?;
+    if args.limit == Some(0) || args.scan_limit == Some(0) {
+        return Err(OkfError::Usage("query limits must be positive".into()));
+    }
+    super::filters::report(&filters, args.filters.preset.as_deref(), json_output)?;
+    let (settings, ontology) = okf_core::bundle::settings::load_for(&root)?;
+    let scan_limit = if args.full_scan {
+        None
+    } else {
+        Some(
+            args.scan_limit
+                .or(settings.settings.query.scan_limit)
+                .unwrap_or(1000),
+        )
+    };
+    let priority = matches!(direction, Direction::Outgoing).then_some(args.concept.as_str());
+    let (bundle, eligible_documents) =
+        okf_core::graph::filter::load_bundle_limited(&root, scan_limit, priority)?;
+    let details = args.details || preset_details;
+    let mut result = query_local(
+        &bundle,
+        ontology.as_ref(),
+        &args.concept,
+        direction,
+        &compiled,
+        &QueryOptions {
+            scan_limit: None, // The bounded loader already enforces document examination.
+            limit: args.limit,
+            offset: args.offset,
+            details,
+        },
+    )?;
+    result.evidence.examined_documents = bundle.concepts.len();
+    result.evidence.scan_complete = bundle.concepts.len() == eligible_documents;
+    if matches!(direction, Direction::Outgoing) {
+        for row in &mut result.occurrences {
+            row.exists = okf_core::bundle::loader::concept_exists(
+                &root,
+                &okf_core::model::concept::ConceptId(row.target.clone()),
+            );
+        }
+    }
+    if !result.evidence.scan_complete {
+        output::mark_partial("examination", "relationship-scan-limit")
+    }
+    if !result.evidence.delivery_complete {
+        output::mark_partial("delivery", "relationship-result-limit")
+    }
+    if result.evidence.unresolved_candidates > 0 {
+        output::mark_partial("matching", "unresolved-related-metadata")
+    }
+    for row in result.occurrences {
+        if json_output {
+            if details {
+                output::print_line(
+                    &json!({"kind":"relationship","direction":operation,"source":row.source,"target":row.target,"related":row.related,"exists":row.exists,"edge":row.relationship}),
+                )?
+            } else if matches!(direction, Direction::Incoming) {
+                if let Some(c) = bundle.get(&row.related) {
+                    output::print_concepts(&[c], true)?
+                }
+            } else {
+                output::print_line(
+                    &json!({"kind":"link","source":row.source,"target":row.target,"exists":row.exists}),
+                )?
+            }
+        } else {
+            output::print_text_line(format_args!(
+                "{} → {}{}",
+                row.source,
+                row.target,
+                row.relationship
+                    .as_ref()
+                    .and_then(|r| r.authored_kind.as_ref())
+                    .map(|k| format!(" [{k}]"))
+                    .unwrap_or_default()
+            ))?
+        }
+    }
+    if json_output {
+        output::print_line(
+            &json!({"kind":"relationship-query-summary","evidence":result.evidence,"eligible_documents":eligible_documents,"total_matches":if result.evidence.scan_complete{Some(result.evidence.matched_concepts)}else{None}}),
+        )?
+    } else {
+        eprintln!(
+            "matched {} concepts, {} occurrences; scan complete: {}",
+            result.evidence.matched_concepts,
+            result.evidence.matched_occurrences,
+            result.evidence.scan_complete
+        )
+    }
+    Ok(0)
+}
+
 /// `okf graph [bundle] [--root concept] [--direction ...] [--depth N] --format`.
 pub fn run_graph(args: &GraphArgs, json_output: bool) -> Result<i32> {
     let root = resolve_bundle(args.bundle.as_deref())?;
@@ -736,7 +872,47 @@ pub fn run_graph(args: &GraphArgs, json_output: bool) -> Result<i32> {
         .as_deref()
         .and_then(GraphDirection::parse)
         .unwrap_or(GraphDirection::Outgoing);
-    let graph = build_graph(&bundle, ontology.as_ref());
+    let graph = if super::filters::requested(&args.filters) {
+        use okf_core::graph::filter::{Direction, TraversalDirection};
+        let (filters, compiled, _) = super::filters::resolve(&root, "graph", &args.filters)?;
+        super::filters::report(&filters, args.filters.preset.as_deref(), json_output)?;
+        let (graph, evidence) = if let Some(anchor) = &args.concept {
+            okf_core::graph::filter::rooted_filtered_graph(
+                &bundle,
+                ontology.as_ref(),
+                &compiled,
+                anchor,
+                match direction {
+                    GraphDirection::Incoming => TraversalDirection::Incoming,
+                    GraphDirection::Both => TraversalDirection::Both,
+                    _ => TraversalDirection::Outgoing,
+                },
+                args.depth,
+            )?
+        } else {
+            if matches!(direction, GraphDirection::Both) && filters.needs_related() {
+                return Err(OkfError::Usage(
+                    "graph --direction both with related metadata filters requires --root".into(),
+                ));
+            }
+            okf_core::graph::filter::filtered_graph(
+                &bundle,
+                ontology.as_ref(),
+                &compiled,
+                if matches!(direction, GraphDirection::Incoming) {
+                    Direction::Incoming
+                } else {
+                    Direction::Outgoing
+                },
+            )?
+        };
+        if evidence.unresolved_candidates > 0 {
+            output::mark_partial("matching", "unresolved-related-metadata")
+        }
+        graph
+    } else {
+        build_graph(&bundle, ontology.as_ref())
+    };
     let out = render_neighborhood(
         &graph,
         format,
@@ -826,7 +1002,19 @@ fn emit_expansion(
         Option<okf_core::ontology::schema::Ontology>,
     )],
 ) -> Result<()> {
+    use okf_core::graph::filter::{EdgeFilters, MatchOutcome};
     use std::collections::BTreeSet;
+    let filters = EdgeFilters {
+        kind: args.expand_kind.clone(),
+        inverse_kind: args.expand_inverse_kind.clone(),
+        related_type: args.expand_related_type.clone(),
+        edge: args.expand_edge_filter.clone(),
+        related: args.expand_related_filter.clone(),
+        ..Default::default()
+    };
+    let compiled_filters = filters.compile()?;
+    let mut examined_edges = 0usize;
+    let mut unresolved_matches = 0usize;
     let context = okf_core::bundle::context::current_context(args.bundle.as_deref(), None)?;
     let fields = if args.target_field.is_empty() {
         vec!["title".into(), "type".into(), "description".into()]
@@ -875,20 +1063,30 @@ fn emit_expansion(
             .into_iter()
             .filter(|e| selected.contains(&e.rule))
             .collect::<Vec<_>>();
-        total_edges += edges.len();
-        if edges.len() > args.expansion_edges {
-            reasons.insert("edge-limit");
-        }
-        for mut edge in edges.into_iter().take(args.expansion_edges) {
+        examined_edges += edges.len();
+        let mut hit_matches = 0usize;
+        for mut edge in edges {
             let raw = &edge.raw_reference;
             let source_root = std::fs::canonicalize(&bundles[*i].root)
                 .unwrap_or_else(|_| bundles[*i].root.clone());
-            let path =
-                okf_core::graph::catalog::ordinary_path(&source_root, &hit.concept.id.0, raw);
+            let logical = okf_core::model::link::LogicalReference::parse(raw)?;
+            let path = if let Some(reference) = &logical {
+                context
+                    .catalog
+                    .as_ref()
+                    .and_then(|c| c.entries.get(&reference.bundle))
+                    .map(|entry| entry.root.join(&reference.path))
+            } else {
+                okf_core::graph::catalog::ordinary_path(&source_root, &hit.concept.id.0, raw)
+            };
             let target_entry = context.catalog.as_ref().and_then(|catalog| {
-                path.as_ref().and_then(|path| {
-                    okf_core::graph::catalog::entry_for_path(&catalog.entries, path)
-                })
+                if let Some(reference) = &logical {
+                    catalog.entries.get(&reference.bundle)
+                } else {
+                    path.as_ref().and_then(|path| {
+                        okf_core::graph::catalog::entry_for_path(&catalog.entries, path)
+                    })
+                }
             });
             let target_root = target_entry.map(|e| e.root.clone()).unwrap_or(source_root);
             let rel = path
@@ -955,7 +1153,22 @@ fn emit_expansion(
                     })
                     .map(|c| (n, c))
             });
-            if edge.status != "unknown-kind" && edge.status != "external" {
+            match compiled_filters.matches(Some(&edge), target.map(|(_, concept)| concept))? {
+                MatchOutcome::Excluded => continue,
+                MatchOutcome::Unresolved => {
+                    unresolved_matches += 1;
+                    reasons.insert("filter-unresolved");
+                    continue;
+                }
+                MatchOutcome::Matched => {}
+            }
+            total_edges += 1;
+            hit_matches += 1;
+            if hit_matches > args.expansion_edges {
+                reasons.insert("edge-limit");
+                continue;
+            }
+            if edge.status != "unknown-kind" && (edge.status != "external" || logical.is_some()) {
                 edge.status = if target.is_some() {
                     "resolved"
                 } else if target_entry.is_some_and(|e| !e.available) {
@@ -1096,7 +1309,7 @@ fn emit_expansion(
             }
         }
     }
-    let summary = json!({"kind":"expansion-summary","schema_version":1,"emitted_edges":emitted_edges,"emitted_targets":emitted_targets,"emitted_bytes":bytes,"bounds":{"edges_per_hit":args.expansion_edges,"targets":args.expansion_targets,"bytes":args.expansion_bytes},"truncated":!reasons.is_empty(),"reasons":reasons,"total_edges":if reasons.contains("byte-limit"){None}else{Some(total_edges)}});
+    let summary = json!({"kind":"expansion-summary","schema_version":1,"emitted_edges":emitted_edges,"emitted_targets":emitted_targets,"emitted_bytes":bytes,"bounds":{"edges_per_hit":args.expansion_edges,"targets":args.expansion_targets,"bytes":args.expansion_bytes},"truncated":!reasons.is_empty(),"reasons":reasons,"total_edges":if reasons.contains("byte-limit"){None}else{Some(total_edges)},"examined_edges":examined_edges,"unresolved_filter_matches":unresolved_matches,"filters":filters});
     if json_output {
         output::print_line(&summary)?;
     } else if !reasons.is_empty() {
@@ -1108,7 +1321,16 @@ fn emit_expansion(
             "target-limit" => args.expansion_targets,
             _ => args.expansion_bytes,
         };
-        query_warning(json_output, reason, Some(bound), None)?;
+        query_warning(
+            json_output,
+            reason,
+            if reason == "filter-unresolved" {
+                None
+            } else {
+                Some(bound)
+            },
+            None,
+        )?;
     }
     Ok(())
 }

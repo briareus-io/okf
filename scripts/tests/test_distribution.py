@@ -43,9 +43,9 @@ class DistributionTests(unittest.TestCase):
                               env=self.env, capture_output=True, text=True)
 
     def test_compatibility_boundaries(self):
-        for version, accepted in [('0.4.4', False), ('0.5.0', True), ('0.5.10', True),
-                                  ('0.6.0', False), ('1.0.0', False),
-                                  ('0.5.1-beta.1', False), ('garbage', False)]:
+        for version, accepted in [('0.5.2', False), ('0.6.0', True), ('0.6.10', True),
+                                  ('0.7.0', False), ('1.0.0', False),
+                                  ('0.6.1-beta.1', False), ('garbage', False)]:
             with self.subTest(version=version):
                 self.assertEqual(self.check(version).returncode == 0, accepted)
 
@@ -99,6 +99,13 @@ cp "$FIXTURES/${url##*/}" "$output"
         self.assertIn('BREAKING CHANGE', result.stderr)
         self.assertIn('0.5.0', binary.read_text())
 
+    def test_manifest_release_notice_precedes_install(self):
+        result, binary = self.installer(version='0.6.0')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('CLI/plugin 0.6', result.stderr)
+        self.assertIn('migrations/0.6.0.md', result.stderr)
+        self.assertIn('0.6.0', binary.read_text())
+
     def test_checksum_failure_preserves_existing(self):
         result, binary = self.installer(corrupt=True)
         self.assertNotEqual(result.returncode, 0)
@@ -131,6 +138,21 @@ cp "$FIXTURES/${url##*/}" "$output"
     def test_metadata(self):
         self.assertRegex(release.metadata(), r'^\d+\.\d+\.\d+$')
 
+
+    def test_metadata_requires_shared_preflight(self):
+        for name in ('Cargo.toml', 'Cargo.lock', 'plugins/okf/.codex-plugin/plugin.json',
+                     'plugins/okf/.claude-plugin/plugin.json', 'plugins/okf/cli-compatibility.txt',
+                     'plugins/okf/scripts/check-cli.sh', 'plugins/okf/references/bundle-context.md',
+                     'plugins/okf/skills/init/SKILL.md', 'releases/0.6.0.md'):
+            target = self.root / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / name, target)
+        with patch.object(release, 'ROOT', self.root):
+            self.assertEqual(release.metadata(), '0.6.0')
+            skill = self.root / 'plugins/okf/skills/init/SKILL.md'
+            skill.write_text(skill.read_text().replace('../../references/bundle-context.md', 'missing.md'))
+            with self.assertRaisesRegex(AssertionError, 'Missing shared preflight'):
+                release.metadata()
 
     def test_incomplete_release_never_creates_tag(self):
         (self.root / 'dist').mkdir()

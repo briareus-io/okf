@@ -16,8 +16,22 @@ use okf_core::graph::catalog::{
 use serde_json::json;
 use std::path::PathBuf;
 
+thread_local! { static EXAMINATION_SCOPE: std::cell::RefCell<Vec<String>> = const {std::cell::RefCell::new(Vec::new())}; }
+pub fn examination_scope() -> Vec<String> {
+    EXAMINATION_SCOPE.with(|v| v.borrow().clone())
+}
 pub fn bundle_slot(command: &mut Command) -> Option<&mut Option<String>> {
     Some(match command {
+        Command::Bundle(sub) => match sub {
+            crate::cli::BundleCmd::Context(a) => &mut a.bundle,
+            crate::cli::BundleCmd::Validate(a) => &mut a.bundle,
+            crate::cli::BundleCmd::Resource(crate::cli::BundleResourceCmd::List(a)) => {
+                &mut a.bundle
+            }
+            crate::cli::BundleCmd::Resource(crate::cli::BundleResourceCmd::Show(a)) => {
+                &mut a.bundle
+            }
+        },
         Command::List(a) => &mut a.bundle,
         Command::Validate(a) => &mut a.bundle,
         Command::Search(a) => &mut a.bundle,
@@ -144,70 +158,178 @@ fn scope_text(graph: &CatalogGraph) -> String {
         graph.scope.unavailable.join(",")
     )
 }
-pub fn run_catalog(json_output: bool) -> Result<i32> {
+pub fn catalog_path() -> Result<PathBuf> {
     let cwd = std::env::current_dir()?;
-    let path = find_config(&cwd)
-        .ok_or_else(|| OkfError::Usage("catalog requires okf.toml with a catalog path".into()))?;
-    let config = load_config(&path)?;
-    let base = path.parent().unwrap();
-    let catalog_path = config
-        .catalog
-        .ok_or_else(|| OkfError::Usage("no catalog configured".into()))?;
-    let overrides = std::env::var("OKF_CATALOG_OVERRIDES")
-        .ok()
-        .filter(|s| !s.is_empty())
+    if let Some(path) = std::env::var_os("OKF_CATALOG") {
+        return Ok(cwd.join(path));
+    }
+    if let Some(path) = okf_core::bundle::catalog::discover(&cwd) {
+        return Ok(path);
+    }
+    if let Some(path) = find_config(&cwd) {
+        let config = load_config(&path)?;
+        if let Some(catalog) = config.catalog {
+            return Ok(path.parent().unwrap_or(&cwd).join(catalog));
+        }
+    }
+    Err(OkfError::Usage(
+        "no catalog found; use --catalog or create okf-catalog.yaml".into(),
+    ))
+}
+pub fn run_catalog(json_output: bool) -> Result<i32> {
+    let path = catalog_path()?;
+    let overrides = std::env::var_os("OKF_CATALOG_OVERRIDES")
         .map(PathBuf::from)
-        .or_else(|| config.catalog_overrides.map(|s| base.join(s)));
-    let catalog = load_catalog(&base.join(catalog_path), overrides.as_deref())?;
+        .or_else(|| {
+            let config_path = find_config(&std::env::current_dir().ok()?)?;
+            let config = load_config(&config_path).ok()?;
+            config.catalog_overrides.map(|p| {
+                config_path
+                    .parent()
+                    .unwrap_or(std::path::Path::new("."))
+                    .join(p)
+            })
+        });
+    let catalog = load_catalog(&path, overrides.as_deref())?;
     for entry in catalog.entries.values() {
         if json_output {
-            output::print_line(
-                &json!({"kind":"bundle-registration","id":entry.id,"configured_root":entry.configured_root,"root":entry.root,"overridden":entry.overridden,"available":entry.available}),
-            )?;
+            let mut value =
+                serde_json::to_value(entry).map_err(|e| OkfError::Internal(e.to_string()))?;
+            value["kind"] = json!("bundle-registration");
+            output::print_line(&value)?
         } else {
             output::print_text_line(format_args!(
-                "{}\t{}\t{}\t{}",
+                "{}\t{}\t{}",
                 entry.id,
                 entry.root.display(),
                 if entry.available {
                     "available"
                 } else {
                     "unavailable"
-                },
-                if entry.overridden {
-                    "overridden"
-                } else {
-                    "catalog"
                 }
-            ))?;
+            ))?
         }
-        let context = Context {
-            primary: okf_core::bundle::context::SelectedBundle {
-                id: Some(entry.id.clone()),
-                root: entry.root.clone(),
-            },
-            catalog: Some(catalog.clone()),
-            config: load_config(&path)?,
-            config_path: Some(path.clone()),
-        };
-        let effective = okf_core::bundle::settings::for_context(&context, &entry.root)?;
-        if json_output {
-            output::print_line(
-                &json!({"kind":"effective-settings","bundle":entry.id,"settings":effective}),
-            )?;
-        } else {
-            output::print_text_line(format_args!(
-                "  ontology={} digest={}",
-                effective
-                    .ontology_path
-                    .as_ref()
-                    .map(|p| p.display().to_string())
-                    .unwrap_or_else(|| "none".into()),
-                effective.ontology_digest.as_deref().unwrap_or("none")
-            ))?;
+        if entry.available {
+            let effective = okf_core::bundle::settings::load_for(&entry.root)?.0;
+            if json_output {
+                output::print_line(
+                    &json!({"kind":"effective-settings","bundle":entry.id,"settings":effective}),
+                )?
+            }
         }
     }
     Ok(0)
+}
+pub fn run_catalog_command(args: &crate::cli::CatalogArgs, cli: &Cli) -> Result<i32> {
+    use crate::cli::CatalogCmd;
+    let Some(command) = &args.command else {
+        return run_catalog(cli.json);
+    };
+    if cli.revision.is_some() || cli.workspace_revision.is_some() || !cli.bundle_revision.is_empty()
+    {
+        return Err(OkfError::Usage(
+            "catalog lifecycle commands do not accept historical selectors".into(),
+        ));
+    }
+    let path = catalog_path()?;
+    match command {
+        CatalogCmd::Sync(a) => {
+            if !cli.scope_bundle.is_empty() || cli.catalog_scope {
+                return Err(OkfError::Usage(
+                    "sync scope uses --bundle-id; consumer scope applies only to update plans"
+                        .into(),
+                ));
+            }
+            if a.rebuild {
+                let report =
+                    okf_core::bundle::remote::recover_cache(&path, cli.bundle_id.as_deref())?;
+                output_report("catalog-cache-recovery", &report, cli.json)?;
+                return Ok(0);
+            }
+            let report = okf_core::bundle::remote::sync(&path, cli.bundle_id.as_deref(), a.check)?;
+            output_report("catalog-sync", &report, cli.json)?;
+        }
+        CatalogCmd::Update(a) => {
+            if let Some(plan_path) = &a.apply {
+                if cli.bundle_id.is_some() || !cli.scope_bundle.is_empty() || cli.catalog_scope {
+                    return Err(OkfError::Usage(
+                        "apply uses the saved plan selection; do not supply new selectors".into(),
+                    ));
+                }
+                let plan = okf_core::bundle::remote::load_plan(std::path::Path::new(plan_path))?;
+                let report =
+                    okf_core::bundle::remote::apply_plan(&path, &plan, a.allow_incomplete_impact)?;
+                output::mark_committed();
+                output_report("catalog-update-applied", &report, cli.json)?;
+            } else {
+                let mut roots = Vec::new();
+                if !cli.scope_bundle.is_empty() || cli.catalog_scope {
+                    let file: okf_core::bundle::catalog::CatalogFile =
+                        serde_yaml::from_slice(&std::fs::read(&path)?)
+                            .map_err(|e| OkfError::Usage(format!("invalid catalog: {e}")))?;
+                    let ids = if cli.catalog_scope {
+                        file.bundles
+                            .iter()
+                            .filter(|(_, r)| r.location.type_ == "directory")
+                            .map(|(id, _)| id.clone())
+                            .collect::<Vec<_>>()
+                    } else {
+                        cli.scope_bundle.clone()
+                    };
+                    let directory_entries =
+                        okf_core::bundle::catalog::declared_directory_entries(&path)?;
+                    for id in ids {
+                        let registration = file.bundles.get(&id).ok_or_else(|| {
+                            OkfError::Usage(format!("unknown consumer bundle {id}"))
+                        })?;
+                        let root = if registration.location.type_ == "directory" {
+                            directory_entries
+                                .get(&id)
+                                .ok_or_else(|| {
+                                    OkfError::Usage(format!("unknown consumer bundle {id}"))
+                                })?
+                                .root
+                                .clone()
+                        } else {
+                            okf_core::bundle::remote::resolve_registration(&path, &id)?.root
+                        };
+                        roots.push(root);
+                    }
+                }
+                let plan =
+                    okf_core::bundle::remote::plan_update(&path, cli.bundle_id.as_deref(), &roots)?;
+                let dest = a
+                    .plan
+                    .as_ref()
+                    .map(PathBuf::from)
+                    .map(Ok)
+                    .unwrap_or_else(|| okf_core::bundle::remote::default_plan_path(&plan))?;
+                okf_core::bundle::remote::save_plan(&dest, &plan)?;
+                output_report("catalog-update-plan", &plan, cli.json)?;
+                if cli.json {
+                    output::print_line(&json!({"kind":"plan-file","path":dest}))?
+                } else {
+                    output::print_text_line(format_args!("Plan saved: {}", dest.display()))?
+                }
+            }
+        }
+    }
+    Ok(0)
+}
+fn output_report<T: serde::Serialize>(kind: &str, value: &T, json_output: bool) -> Result<()> {
+    if json_output {
+        let mut row = serde_json::to_value(value).map_err(|e| OkfError::Internal(e.to_string()))?;
+        if let Some(plan_kind) = row.get("kind").cloned() {
+            row["plan_kind"] = plan_kind;
+        }
+        row["kind"] = json!(kind);
+        output::print_line(&row)
+    } else {
+        output::print_text_line(format_args!(
+            "{}",
+            serde_yaml::to_string(value).map_err(|e| OkfError::Internal(e.to_string()))?
+        ))
+    }
 }
 pub fn writes_command(command: &Command) -> bool {
     match command {
@@ -220,7 +342,10 @@ pub fn writes_command(command: &Command) -> bool {
         Command::Lint(a) => a.fix,
         Command::Add(a) => !a.dry_run,
         Command::Edit(a) => !a.dry_run,
-        Command::Doctor(a) => a.fix_safe && a.yes && !a.dry_run,
+        Command::Doctor(a) => a.migration_apply.is_some() || a.fix_safe && a.yes && !a.dry_run,
+        Command::Catalog(a) => {
+            matches!(&a.command,Some(crate::cli::CatalogCmd::Update(u)) if u.apply.is_some())
+        }
         Command::Docs(a) => a.format == "index",
         Command::Ontology(OntologyCmd::Add(a) | OntologyCmd::Update(a)) => !a.dry_run,
         Command::Ontology(OntologyCmd::Remove(a)) => !a.dry_run,
@@ -236,17 +361,18 @@ pub fn writes_command(command: &Command) -> bool {
 /// Returns Some when a catalog-aware query handled the command; otherwise rewrites only
 /// the selected root so existing authoring/query handlers retain their established contracts.
 pub fn prepare(cli: &mut Cli) -> Result<Option<i32>> {
-    if matches!(cli.command, Command::Catalog) {
-        if cli.bundle_id.is_some()
-            || !cli.scope_bundle.is_empty()
-            || cli.catalog_scope
-            || cli.revision.is_some()
+    if let Command::Catalog(args) = &cli.command {
+        if args.command.is_none()
+            && (cli.bundle_id.is_some()
+                || !cli.scope_bundle.is_empty()
+                || cli.catalog_scope
+                || cli.revision.is_some())
         {
             return Err(OkfError::Usage(
                 "catalog inspection does not take selectors or scope/revision flags".into(),
             ));
         }
-        return run_catalog(cli.json).map(Some);
+        return run_catalog_command(args, cli).map(Some);
     }
     let scoped = !cli.scope_bundle.is_empty() || cli.catalog_scope;
     if scoped && matches!(&cli.command, Command::Lint(a) if a.fix) {
@@ -255,24 +381,22 @@ pub fn prepare(cli: &mut Cli) -> Result<Option<i32>> {
         ));
     }
     let revision = cli.revision.is_some();
-    let scope_command = match cli.command {
-        Command::Graph(_) => "graph",
-        Command::Backlinks(_) => "backlinks",
-        Command::Links(_) => "links",
-        Command::Resolve(_) => "resolve",
-        Command::Affected(_) => "affected",
-        Command::Lint(_) => "lint",
-        Command::Search(_) => "search",
-        Command::List(_) => "list",
-        _ => "",
-    };
-    let supports_scope = crate::cli::supports_scope(scope_command);
+    let scope_command = crate::exit::command_name(&cli.command);
+    let supports_scope = crate::cli::supports_scope(&scope_command);
     if scoped && !supports_scope {
         return Err(OkfError::Usage("scope flags are supported only by graph, backlinks, links, resolve, affected, lint, search, and list".into()));
     }
-    if revision && !crate::cli::supports_revision(scope_command) {
+    if revision && !crate::cli::supports_revision(&scope_command) {
         return Err(OkfError::Usage("--revision is supported only by graph, backlinks, links, resolve, affected, search, and list; this command reads the working tree".into()));
     }
+    let command_name = crate::exit::command_name(&cli.command);
+    let diagnostic = matches!(
+        &cli.command,
+        Command::Doctor(_)
+            | Command::Validate(_)
+            | Command::Bundle(crate::cli::BundleCmd::Validate(_))
+            | Command::Bundle(crate::cli::BundleCmd::Resource(_))
+    );
     let writes = writes_command(&cli.command);
     let Some(slot) = bundle_slot(&mut cli.command) else {
         if cli.bundle_id.is_some() {
@@ -289,6 +413,19 @@ pub fn prepare(cli: &mut Cli) -> Result<Option<i32>> {
         ));
     }
     let context = current_context(explicit.as_deref(), cli.bundle_id.as_deref())?;
+    let mut ids = cli.scope_bundle.clone();
+    if cli.catalog_scope {
+        if let Some(c) = &context.catalog {
+            ids.extend(c.entries.keys().cloned())
+        }
+    }
+    if let Some(id) = &context.primary.id {
+        ids.push(id.clone())
+    }
+    ids.sort();
+    ids.dedup();
+    EXAMINATION_SCOPE.with(|v| *v.borrow_mut() = ids);
+
     if writes {
         okf_core::mutate::transaction::ensure_idle(&context.primary.root)?;
     }
@@ -316,11 +453,88 @@ pub fn prepare(cli: &mut Cli) -> Result<Option<i32>> {
             "explicit bundle scope requires a valid catalog".into(),
         ));
     }
+    if !diagnostic && command_name != "bundle context" {
+        let guidance_scope = resolve_scope(&context, &cli.scope_bundle, cli.catalog_scope)?;
+        if !guidance_scope.unavailable.is_empty() {
+            output::mark_partial("examination", "guidance-scope-unavailable");
+            if cli.json {
+                output::print_line(
+                    &json!({"kind":"guidance-scope","requested":guidance_scope.requested,"unavailable":guidance_scope.unavailable,"complete":false}),
+                )?;
+            } else {
+                eprintln!(
+                    "guidance unavailable for requested bundles: {}",
+                    guidance_scope.unavailable.join(", ")
+                );
+            }
+        }
+        for member in &guidance_scope.examined {
+            super::bundle::incidental(
+                &member.root,
+                &command_name,
+                cli.json,
+                cli.guidance.as_deref(),
+            )?;
+        }
+    }
     if cli.bundle_id.is_some() || context.catalog.is_some() {
         *slot = Some(context.primary.root.to_string_lossy().into_owned());
     }
+    match &mut cli.command {
+        Command::Search(a) => {
+            super::filters::apply_primary(&context.primary.root, "search", a, cli.json)?
+        }
+        Command::List(a) => {
+            super::filters::apply_primary(&context.primary.root, "list", a, cli.json)?
+        }
+        _ => {}
+    }
+    if matches!(&cli.command, Command::Mv(_) | Command::Rm(_)) && context.catalog.is_some() {
+        let graph = build_catalog_graph(&context, &cli.scope_bundle, cli.catalog_scope, None)?;
+        if !graph.scope.unavailable.is_empty() {
+            return Err(OkfError::Policy(format!(
+                "cannot establish mutation safety: unavailable requested bundles: {}",
+                graph.scope.unavailable.join(", ")
+            )));
+        }
+        let concept = match &cli.command {
+            Command::Mv(a) => &a.old,
+            Command::Rm(a) => &a.concept,
+            _ => unreachable!(),
+        };
+        let target = graph.target(&context, concept);
+        let consumers = graph
+            .edges
+            .iter()
+            .filter(|e| e.target.as_ref() == Some(&target) && e.source.bundle != target.bundle)
+            .map(|e| e.source.key())
+            .collect::<std::collections::BTreeSet<_>>();
+        if !consumers.is_empty() {
+            return Err(OkfError::Policy(format!(
+                "cross-bundle references require explicit reconciliation before this mutation: {}",
+                consumers.into_iter().collect::<Vec<_>>().join(", ")
+            )));
+        }
+        if cli.json {
+            output::print_line(
+                &json!({"kind":"mutation-scope","examined":graph.scope.requested,"out_of_scope":"unknown"}),
+            )?
+        } else {
+            eprintln!(
+                "mutation scope: {}; out-of-scope consumers remain unknown",
+                graph.scope.requested.join(", ")
+            )
+        }
+        return Ok(None);
+    }
     // Catalog-aware graph queries use selected-only scope even without an explicit scope flag.
-    if supports_scope && (context.catalog.is_some() || scoped || revision) {
+    if supports_scope
+        && !matches!(
+            &cli.command,
+            Command::Artifact(_) | Command::Stale(_) | Command::Refresh(_) | Command::Bundle(_)
+        )
+        && (context.catalog.is_some() || scoped || revision)
+    {
         if let Command::Search(args) | Command::List(args) = &cli.command {
             let scope = resolve_scope_at(
                 &context,
@@ -341,22 +555,238 @@ pub fn prepare(cli: &mut Cli) -> Result<Option<i32>> {
                 .collect::<Vec<_>>();
             return super::query::run_search_in_scope(args, cli.json, &roots).map(Some);
         }
-        let graph = build_catalog_graph(
-            &context,
-            &cli.scope_bundle,
-            cli.catalog_scope,
-            cli.revision.as_deref(),
-        )?;
+        let graph = if let Command::Links(a) | Command::Backlinks(a) = &cli.command {
+            let bounded = super::filters::requested(&a.filters)
+                || a.limit.is_some()
+                || a.scan_limit.is_some()
+                || a.full_scan;
+            if a.limit == Some(0) || a.scan_limit == Some(0) {
+                return Err(OkfError::Usage("query limits must be positive".into()));
+            }
+            if bounded {
+                let limit = if a.full_scan {
+                    None
+                } else {
+                    Some(
+                        a.scan_limit
+                            .or(okf_core::bundle::settings::for_context(
+                                &context,
+                                &context.primary.root,
+                            )?
+                            .settings
+                            .query
+                            .scan_limit)
+                            .unwrap_or(1000),
+                    )
+                };
+                let source = matches!(cli.command, Command::Links(_)).then_some(a.concept.as_str());
+                okf_core::graph::catalog::build_catalog_graph_limited(
+                    &context,
+                    &cli.scope_bundle,
+                    cli.catalog_scope,
+                    cli.revision.as_deref(),
+                    limit,
+                    source,
+                )?
+            } else {
+                build_catalog_graph(
+                    &context,
+                    &cli.scope_bundle,
+                    cli.catalog_scope,
+                    cli.revision.as_deref(),
+                )?
+            }
+        } else {
+            build_catalog_graph(
+                &context,
+                &cli.scope_bundle,
+                cli.catalog_scope,
+                cli.revision.as_deref(),
+            )?
+        };
         if matches!(cli.command, Command::Graph(_)) && !cli.json {
             use std::io::Write;
             writeln!(std::io::stderr().lock(), "{}", scope_text(&graph))?;
         } else {
             print_scope(&graph, cli.json)?;
         }
+        let graph = filter_scoped(cli, &context, &graph)?;
         return run_scoped(cli, &context, &graph).map(Some);
     }
     Ok(None)
 }
+fn filter_scoped(cli: &mut Cli, context: &Context, graph: &CatalogGraph) -> Result<CatalogGraph> {
+    use okf_core::graph::filter::{CompiledFilters, MatchOutcome};
+    use std::collections::{BTreeMap, BTreeSet, VecDeque};
+    let (args, operation) = match &cli.command {
+        Command::Links(a) => (&a.filters, "links"),
+        Command::Backlinks(a) => (&a.filters, "backlinks"),
+        Command::Graph(a) => (&a.filters, "graph"),
+        _ => return Ok(graph.clone()),
+    };
+    let pagination = matches!(&cli.command,Command::Links(a)|Command::Backlinks(a) if a.limit.is_some()||a.scan_limit.is_some()||a.full_scan);
+    if !super::filters::requested(args) && !pagination {
+        return Ok(graph.clone());
+    }
+    let (filters, compiled, preset_details) =
+        super::filters::resolve(&context.primary.root, operation, args)?;
+    super::filters::report(&filters, args.preset.as_deref(), cli.json)?;
+    let mut concepts = BTreeMap::new();
+    if filters.needs_related() {
+        for node in &graph.nodes {
+            if let Some(bundle) = graph.scope.examined.iter().find(|b| b.id == node.bundle) {
+                let concept = if let Some(rev) = node.version.strip_prefix("git:") {
+                    okf_core::graph::catalog::read_concept_at(&bundle.root, &node.id, rev)?
+                } else {
+                    okf_core::bundle::loader::load_concept(&bundle.root, &node.id)?
+                };
+                if let Some(c) = concept {
+                    concepts.insert(node.clone(), c);
+                }
+            }
+        }
+    }
+    let mut unknown = 0usize;
+    let mut evaluate = |edge: &Edge, incoming: bool| -> Result<bool> {
+        let other = if incoming {
+            Some(&edge.source)
+        } else {
+            edge.target.as_ref()
+        };
+        match compiled.matches(
+            edge.relationship.as_ref(),
+            other.and_then(|n| concepts.get(n)),
+        )? {
+            MatchOutcome::Matched => Ok(true),
+            MatchOutcome::Excluded => Ok(false),
+            MatchOutcome::Unresolved => {
+                unknown += 1;
+                Ok(false)
+            }
+        }
+    };
+    let mut result = graph.clone();
+    let mut matched = Vec::new();
+    let scan_complete = graph.examination.as_ref().is_none_or(|e| e.scan_complete);
+    let mut delivery_complete = true;
+    let mut examined = 0usize;
+    let mut matched_occurrences = 0usize;
+    let mut observed_matches = 0usize;
+    match &mut cli.command {
+        Command::Links(a) | Command::Backlinks(a) => {
+            a.details |= preset_details;
+            if a.limit == Some(0) || a.scan_limit == Some(0) {
+                return Err(OkfError::Usage("query limits must be positive".into()));
+            }
+            let incoming = operation == "backlinks";
+            let target = graph.target(context, &a.concept);
+            for edge in graph.edges.iter().filter(|e| {
+                if incoming {
+                    e.target.as_ref() == Some(&target)
+                } else {
+                    e.source == target
+                }
+            }) {
+                examined += 1;
+                if evaluate(edge, incoming)? {
+                    matched.push(edge.clone());
+                }
+            }
+            matched_occurrences = matched.len();
+            if !a.details {
+                let mut seen = BTreeSet::new();
+                matched.retain(|e| {
+                    seen.insert(if incoming {
+                        Some(e.source.clone())
+                    } else {
+                        e.target.clone()
+                    })
+                });
+            }
+            let count = matched.len();
+            observed_matches = count;
+            let limit = a.limit.unwrap_or(usize::MAX);
+            matched = matched.into_iter().skip(a.offset).take(limit).collect();
+            delivery_complete = a.offset == 0 && matched.len() == count;
+        }
+        Command::Graph(a) => {
+            let direction = a.direction.as_deref().unwrap_or("outgoing");
+            if let Some(anchor) = &a.concept {
+                let start = graph.target(context, anchor);
+                let mut seen = BTreeSet::from([start.clone()]);
+                let mut queue = VecDeque::from([(start, 0usize)]);
+                let mut accepted = BTreeSet::new();
+                while let Some((node, depth)) = queue.pop_front() {
+                    if a.depth.is_some_and(|max| depth >= max) {
+                        continue;
+                    }
+                    for (i, edge) in graph.edges.iter().enumerate() {
+                        let incoming =
+                            edge.target.as_ref() == Some(&node) && direction != "outgoing";
+                        let outgoing = edge.source == node && direction != "incoming";
+                        if !incoming && !outgoing {
+                            continue;
+                        }
+                        examined += 1;
+                        let pass = (outgoing && evaluate(edge, false)?)
+                            || (incoming && evaluate(edge, true)?);
+                        if pass {
+                            accepted.insert(i);
+                            let other = if outgoing {
+                                edge.target.clone()
+                            } else {
+                                Some(edge.source.clone())
+                            };
+                            if let Some(other) = other {
+                                if seen.insert(other.clone()) {
+                                    queue.push_back((other, depth + 1));
+                                }
+                            }
+                        }
+                    }
+                }
+                result.nodes = seen;
+                matched = accepted
+                    .into_iter()
+                    .map(|i| graph.edges[i].clone())
+                    .collect();
+            } else {
+                if direction == "both" && filters.needs_related() {
+                    return Err(OkfError::Usage(
+                        "graph --direction both with related metadata filters requires --root"
+                            .into(),
+                    ));
+                }
+                for edge in &graph.edges {
+                    examined += 1;
+                    if evaluate(edge, direction == "incoming")? {
+                        matched.push(edge.clone());
+                    }
+                }
+            }
+            matched_occurrences = matched.len();
+            observed_matches = matched_occurrences;
+        }
+        _ => {}
+    }
+    result.edges = matched;
+    if !scan_complete {
+        output::mark_partial("examination", "relationship-scan-limit")
+    }
+    if !delivery_complete {
+        output::mark_partial("delivery", "relationship-result-limit")
+    }
+    if unknown > 0 {
+        output::mark_partial("matching", "unresolved-related-metadata")
+    }
+    if cli.json {
+        output::print_line(
+            &json!({"kind":"relationship-query-summary","examined_occurrences":examined,"matched_occurrences":matched_occurrences,"unresolved_candidates":unknown,"scan_complete":scan_complete,"delivery_complete":delivery_complete,"examined_documents":graph.examination.as_ref().map(|e|e.examined_documents),"eligible_documents":graph.examination.as_ref().map(|e|e.eligible_documents),"total_matches":if scan_complete{Some(observed_matches)}else{None}}),
+        )?
+    }
+    Ok(result)
+}
+
 fn run_scoped(cli: &Cli, context: &Context, graph: &CatalogGraph) -> Result<i32> {
     match &cli.command {
         Command::Search(a) | Command::List(a) => {
@@ -593,7 +1023,8 @@ fn run_lint_scoped(
     let mut target_types = std::collections::BTreeMap::new();
     let mut target_ontologies = std::collections::BTreeMap::new();
     // Only the qualified graph can distinguish cross-bundle targets from local IDs.
-    // Keep broken concept edges, but exclude self-links and opaque artifact resources.
+    // Keep broken concept edges and structural navigation, but exclude self-links
+    // and opaque artifact resources.
     let mut connected = std::collections::BTreeSet::new();
     for edge in &graph.edges {
         if let Some(target) = &edge.target {
@@ -601,9 +1032,14 @@ fn run_lint_scoped(
                 connected.insert(edge.source.clone());
                 connected.insert(target.clone());
             }
+        } else if edge.resource_kind.as_deref() == Some("reserved") {
+            // Index/log navigation is a supported outgoing document reference,
+            // without treating the structural document as a concept graph node.
+            connected.insert(edge.source.clone());
         }
     }
     for examined in &graph.scope.examined {
+        okf_core::check::lint::validate_configuration(&examined.root)?;
         if let Some(ontology) = okf_core::bundle::settings::load_for(&examined.root)?.1 {
             target_ontologies.insert(examined.id.clone(), ontology);
         }
@@ -922,10 +1358,11 @@ fn run_lint_scoped(
         };
         if let Some(issue) = issue {
             let local_missing = edge.status == "missing-target"
-                && edge
+                && (edge
                     .target
                     .as_ref()
-                    .is_some_and(|target| target.bundle == edge.source.bundle);
+                    .is_some_and(|target| target.bundle == edge.source.bundle)
+                    || edge.resource_bundle.as_deref() == Some(edge.source.bundle.as_str()));
             let (rule, code, severity) = if local_missing && edge.reference_rule.is_some() {
                 let Some(Some(configured)) = ontology_severities.get(&edge.source.bundle) else {
                     continue;

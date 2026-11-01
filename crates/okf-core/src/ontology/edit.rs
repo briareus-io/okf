@@ -344,6 +344,7 @@ pub fn render_ontology(path: &Path, ontology: &Ontology) -> Result<String> {
 /// Bundle-aware applications must use the guarded transaction and gate APIs (as the CLI
 /// does), rather than infer a bundle root from an external sidecar's parent directory.
 pub fn save_ontology(path: &Path, ontology: &Ontology) -> Result<()> {
+    crate::bundle::remote::ensure_writable(path)?;
     let text = render_ontology(path, ontology)?;
     use std::io::Write;
     // Stage alongside the destination so publishing uses one atomic rename.

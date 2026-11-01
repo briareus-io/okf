@@ -6,3 +6,5 @@ pub mod render;
 
 pub mod catalog;
 pub mod relationships;
+
+pub mod filter;

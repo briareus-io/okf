@@ -100,6 +100,31 @@ pub fn doctor(root: &Path, target: &str, fix_safe: bool, apply: bool) -> Result<
     let mut changes = Vec::new();
     let paths = walk_markdown(root)?;
     let mut findings = Vec::new();
+    if let Err(error) = crate::bundle::manifest::validate_resources(root) {
+        push(
+            &mut findings,
+            "manifest-invalid",
+            Some(Path::new("okf-bundle.yaml")),
+            DoctorSeverity::Blocker,
+            RepairClass::Review,
+            &error.to_string(),
+            None,
+            Some("repair the manifest before manifest-dependent work"),
+            None,
+            false,
+        );
+    }
+    if root.join(".okf-bundle").is_dir() {
+        push(&mut findings, "bundle-profile-support", Some(Path::new(".okf-bundle")),
+             DoctorSeverity::Info, RepairClass::Manual,
+             "support files are excluded by the bundle tooling profile; core-only readers may treat support Markdown as concepts",
+             None, None, Some("use validate --profile bundle for the tooling boundary"), false);
+    }
+    if let Some(config) = crate::bundle::config::find_config(root) {
+        push(&mut findings, "legacy-configuration", Some(&config), DoctorSeverity::Info,
+             RepairClass::Review, "legacy TOML configuration can be migrated through an explicit plan",
+             None, None, Some("plan configuration migration; ordinary doctor safe fixes do not migrate configuration"), false);
+    }
     let mut documents: HashMap<PathBuf, Option<String>> = HashMap::new();
     for path in &paths {
         let bytes = std::fs::read(root.join(path))
@@ -501,4 +526,43 @@ fn push(
         proposed_action: action.map(str::to_string),
         applied,
     });
+}
+
+#[cfg(test)]
+mod manifest_tests {
+    use super::*;
+    #[test]
+    fn malformed_manifest_remains_diagnosable_and_is_not_fixed() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(
+            root.path().join("note.md"),
+            "---\ntype: Note\n---\n# Note\n",
+        )
+        .unwrap();
+        let invalid = "manifest_version: unsupported\n";
+        std::fs::write(root.path().join("okf-bundle.yaml"), invalid).unwrap();
+        let report = doctor(root.path(), "0.2", false, false).unwrap();
+        assert!(report
+            .findings
+            .iter()
+            .any(|f| f.rule == "manifest-invalid" && f.severity == DoctorSeverity::Blocker));
+        assert!(!report.ready());
+        assert_eq!(
+            std::fs::read_to_string(root.path().join("okf-bundle.yaml")).unwrap(),
+            invalid
+        );
+    }
+    #[test]
+    fn support_instructions_are_not_doctor_concepts() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir(root.path().join(".okf-bundle")).unwrap();
+        std::fs::write(root.path().join(".okf-bundle/guide.md"), "Plain guidance").unwrap();
+        let report = doctor(root.path(), "0.2", false, false).unwrap();
+        assert_eq!(report.concepts_inspected, 0);
+        assert!(report
+            .findings
+            .iter()
+            .any(|f| f.rule == "bundle-profile-support"));
+        assert!(!report.findings.iter().any(|f| f.rule == "missing-type"));
+    }
 }

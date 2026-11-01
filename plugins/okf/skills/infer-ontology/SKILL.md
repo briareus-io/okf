@@ -5,30 +5,19 @@ description: Infer an optional advisory ontology.yaml from observed OKF concepts
 
 # Infer a local ontology from a bundle
 
+## Shared operating protocol
+
+Read and follow the [shared OKF protocol](../../references/bundle-context.md) before CLI-dependent
+work. It defines compatibility checks, bundle context, scope, output evidence, validation profiles,
+and authoring conventions. Use `references/cli.md` for exact command syntax as needed.
+
 Query bundle content through the CLI, using outlines and line slices for large concepts. Prefer
 `OKF_BUNDLE`; one explicit form is `okf ontology add <name> <bundle>`. Before using an unfamiliar
 command or flag, read its entry in `references/cli.md`. If the installed version differs or rejects
 documented syntax, use that command's `--help` output as the runtime authority.
 
-For example, `okf ontology add "Service" <bundle> --field "owner:string:required" --ref
-"depends_on:Service:0..n"` defines a field and a reference rule; choose actual names and
-requirements from the reviewed model. To change rules, use `okf ontology update "Service" <bundle>
---field "owner:string" --remove-ref depends_on`; to remove a type, use `okf ontology remove
-"Service" <bundle>`. Quote type names containing spaces and rule values containing `|`. Ontology
-flags use colon-separated declarations; concept `--set`/`--ref` flags use `key=value` instead. Read
-the reference before choosing other types or cardinalities.
-
-
-## CLI compatibility preflight
-
-Before CLI-dependent work, run `sh <this-skill-directory>/../../scripts/check-cli.sh`,
-resolving the path from this installed SKILL.md, not the working directory. This read-only
-check uses the plugin's `cli-compatibility.txt` range and reports the executable on PATH.
-If missing, incompatible, or unable to run, stop CLI-dependent work and show its installation
-instructions. Never invoke the installer, download a CLI, or update it from this skill.
-An explicit user request to install should be handled separately from this workflow.
-Only after this check passes may command help resolve syntax differences; help cannot waive
-compatibility. Recheck if the executable or PATH changes during the task.
+Use the ontology skill's [structured authoring reference](../ontology/references/structured-authoring.md)
+when applying inferred rules; keep the inference here grounded in observed evidence.
 
 ## Workflow
 
@@ -61,9 +50,9 @@ compatibility. Recheck if the executable or PATH changes during the task.
    types, selectors, and relationships, follow the ontology skill's
    [structured authoring example](../ontology/references/structured-authoring.md): preserve current
    bytes, preview structured CLI changes, inspect effective definitions, and review unknown-key preservation.
-   Then run `okf validate
-   <bundle>` and `okf lint <bundle> --fail-on never`. Report portable validation separately from
-   ontology fit; loosen unsupported rules instead of rewriting the bundle automatically.
+   Then run `okf validate <bundle> --profile bundle` and `okf lint <bundle> --fail-on never`. Report bundle-profile document validation separately from
+   ontology fit. Revise unsupported newly inferred candidates instead of rewriting the bundle to fit
+   them. Preserve existing deliberate constraints unless their change is authorized.
 
 If custom fields point to supporting resources, `references/` is optional: Markdown targets are
 concepts and other files are artifacts. Use `okf artifact resolve <resource> <bundle> --from
@@ -73,22 +62,6 @@ needed. Reading a resource never authorizes execution.
 Report exact types, built-in fields/contracts excluded from inference, custom rules with evidence,
 user decisions, and remaining advisory findings.
 
-## Bundle identity and examination scope
-
-Keep bundle paths and catalog IDs distinct. `OKF_BUNDLE` always selects a path; use the
-`--bundle-id <id>` for a registered identity. When a catalog is configured, use `okf catalog` to inspect effective local
-registrations, overrides, availability, and per-bundle settings. Catalog paths are relative to
-`okf.toml`, locations are relative to the catalog, and machine-local overrides change effective
-locations rather than accepting different snapshots. Inspect effective settings before relying on
-a per-bundle ontology or view. Equal or nested registered roots are configuration errors.
-
-Registration alone does not authorize catalog-wide traversal. Start with the selected bundle;
-request additional bundles explicitly with repeatable `--scope-bundle <id>` or deliberate
-`--catalog-scope` when the task requires them. Report requested and examined
-scope and unavailable members. Out-of-scope references remain unknown. Ordinary relative paths
-retain their meaning across registered boundaries; distributing one bundle alone can break them.
-Never infer another bundle from a matching filename or title.
-
 ## Structured evidence
 
 Inspect recurring nested objects and lists before proposing reusable field types. Declare reference
@@ -96,17 +69,3 @@ selectors only where source meaning establishes a concept relationship; path-lik
 not suffice. Pair target, kind, and attributes within the same record. Report observed occurrence
 counts and candidate vocabularies; absence from a page or truncated facets does not establish a
 closed vocabulary. Inferred inverse names describe incoming assertions rather than target consent.
-
-## Frontmatter order
-
-When authoring concept frontmatter, put `type` first. For the matching ontology concept type,
-follow `fields` declaration order recursively, including nested objects and objects in lists;
-reusable field types use their resolved field order. Put reference-only keys next in reference
-declaration order. Put undeclared/custom fields last at each level, preserving their relative
-order. Without a matching ontology type, keep the other fields in their authored order.
-This is an authoring convention, not an additional OKF conformance requirement.
-CLI writes normalize this order. `okf lint <bundle>` reports `frontmatter-order` at warning by
-default; `okf lint <bundle> --fix` normalizes the bundle and reports remaining findings. The
-bundle lint setting `frontmatter_order` accepts `info`, `warn`, `error`, or `off`; an off rule
-is not fixed. Normalization preserves values, list order, body text, and verification metadata;
-YAML comments and scalar presentation may normalize.

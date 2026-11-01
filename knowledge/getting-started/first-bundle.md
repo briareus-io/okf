@@ -32,5 +32,6 @@ adds local modeling and advisory checks. The initial index predates the new note
 can synthesize a directory index where one is absent.
 
 Next, [find and read knowledge](../guides/find-and-read-knowledge.md),
-[model your knowledge](../guides/model-your-knowledge.md), or
+[model your knowledge](../guides/model-your-knowledge.md),
+[customize its settings and guidance](../guides/customize-a-bundle.md), or
 [tour this repository's live bundle](../guides/tour-the-bundle.md).

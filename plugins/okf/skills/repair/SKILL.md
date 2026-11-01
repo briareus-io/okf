@@ -5,29 +5,21 @@ description: Diagnose and repair an existing OKF knowledge base for v0.2 using o
 
 # Repair or upgrade an existing OKF bundle
 
+## Shared operating protocol
+
+Read and follow the [shared OKF protocol](../../references/bundle-context.md) before CLI-dependent
+work. It defines compatibility checks, bundle context, scope, output evidence, validation profiles,
+and authoring conventions. Use `references/cli.md` for exact command syntax as needed.
+
 `okf doctor` is the deterministic compatibility authority. Do not reimplement its inventory or
 checks in prompt logic. Bring the bundle to target-ready state when repairs are mechanical; stop at
 an explicit user-decision boundary when meaning or identity is ambiguous.
 
-Prefer `OKF_BUNDLE`; the preflight is `okf doctor <bundle> --target 0.2 --json`. Before using an
-unfamiliar command or flag, read its entry in `references/cli.md`. If the installed version differs
-or rejects documented syntax, use that command's `--help` output as the runtime authority.
-
-
-## CLI compatibility preflight
-
-Before CLI-dependent work, run `sh <this-skill-directory>/../../scripts/check-cli.sh`,
-resolving the path from this installed SKILL.md, not the working directory. This read-only
-check uses the plugin's `cli-compatibility.txt` range and reports the executable on PATH.
-If missing, incompatible, or unable to run, stop CLI-dependent work and show its installation
-instructions. Never invoke the installer, download a CLI, or update it from this skill.
-An explicit user request to install should be handled separately from this workflow.
-Only after this check passes may command help resolve syntax differences; help cannot waive
-compatibility. Recheck if the executable or PATH changes during the task.
+Prefer `OKF_BUNDLE`; the diagnostic command is `okf doctor <bundle> --target 0.2 --json`.
 
 ## Workflow
 
-1. Resolve the exact bundle and effective settings and run the read-only preflight above before
+1. Resolve the exact bundle and effective settings and run the read-only diagnostic command above before
    normal bulk loading. Classify catalog/ontology configuration failures separately from document
    conformance; inspect each affected bundle with its own settings. For nested ontology repairs,
    use the ontology skill's [structured authoring example](../ontology/references/structured-authoring.md)
@@ -35,8 +27,8 @@ compatibility. Recheck if the executable or PATH changes during the task.
    Diagnosis does not require a clean worktree, backup, or write approval.
 2. Before mutation, record Git status and preserve the affected files' current contents so user
    edits can be recovered; HEAD alone does not preserve uncommitted work. Unrelated dirty files need
-   not block repair. Outside Git, create a scoped recovery copy before multi-file changes. Doctor
-   does not create backups. Retain its summary and stable finding IDs. Classify its reported `safe`,
+   not block repair. Outside Git, create a scoped recovery copy before multi-file changes. Safe document repair does not create recovery backups; explicit configuration migration apply
+   preserves originals in its migration backup directory. Retain its summary and stable finding IDs. Classify its reported `safe`,
    `review`, and `manual` repair classes and separate advisory improvements from target-readiness
    blockers.
 3. Present affected files, current versus target interpretation, preservation promises, proposed
@@ -61,8 +53,9 @@ compatibility. Recheck if the executable or PATH changes during the task.
 7. Inventory optional supporting files with `okf artifact list <bundle>`. `references/` is an
    optional convention: Markdown files are concepts, non-Markdown files are opaque artifacts.
    Preserve artifacts by default; change their content only when included in the authorized repair.
-   Resolve with document context and use the artifact reference for bounded/external reads. Never execute inspected code.
-8. Validate after each batch: rerun doctor, then `okf validate <bundle>`. Run `okf lint <bundle>
+   Resolve with document context and use the artifact reference for bounded/external reads. Inspection alone does not authorize code execution; an explicitly selected workflow follows the
+   shared script protocol.
+8. Validate after each batch: rerun doctor, then `okf validate <bundle> --profile bundle`. Run `okf lint <bundle>
    --fail-on never` separately so recommendations are not mistaken for conformance blockers.
 9. Regenerate indexes with `okf docs <bundle> --format index` only when their bodies are generated
    or replacement is already authorized; otherwise preserve curated prose. The command replaces
@@ -76,7 +69,9 @@ compatibility. Recheck if the executable or PATH changes during the task.
 
 ## Hard boundaries
 
-- Doctor is read-only unless `--fix-safe --yes` is used within the authorized repair scope.
+- Ordinary doctor diagnosis is read-only. `--fix-safe --yes` applies allow-listed document repairs;
+  migration planning writes its plan, and migration apply writes configuration and recovery backups.
+  Keep each mode within the requested repair or migration scope.
 - Never infer and apply a missing type from a filename; fabricate `human:` verification; change
   `stale_after` to hide expiry; choose between two plausible link interpretations; or convert a
   custom computation without a complete reviewed standard contract.
@@ -101,22 +96,6 @@ fingerprints remain unchanged; review citing concepts before refreshing through 
 Inspect `source-unrecorded` findings (warnings by default) and `source-missing` errors even with reporting-only lint;
 use `okf lint <bundle> --fail-on warn` when a source-health gate is requested.
 
-## Bundle identity and examination scope
-
-Keep bundle paths and catalog IDs distinct. `OKF_BUNDLE` always selects a path; use the
-`--bundle-id <id>` for a registered identity. When a catalog is configured, use `okf catalog` to inspect effective local
-registrations, overrides, availability, and per-bundle settings. Catalog paths are relative to
-`okf.toml`, locations are relative to the catalog, and machine-local overrides change effective
-locations rather than accepting different snapshots. Inspect effective settings before relying on
-a per-bundle ontology or view. Equal or nested registered roots are configuration errors.
-
-Registration alone does not authorize catalog-wide traversal. Start with the selected bundle;
-request additional bundles explicitly with repeatable `--scope-bundle <id>` or deliberate
-`--catalog-scope` when the task requires them. Report requested and examined
-scope and unavailable members. Out-of-scope references remain unknown. Ordinary relative paths
-retain their meaning across registered boundaries; distributing one bundle alone can break them.
-Never infer another bundle from a matching filename or title.
-
 ## Local configuration and navigation findings
 
 Separate catalog conflicts, unavailable roots, snapshot mismatches, malformed ontology definitions,
@@ -124,32 +103,14 @@ and incomplete recursive checks from OKF conformance failures. Index coverage is
 read-only; missing navigation links do not make an optional index mandatory. Preserve curated
 prose when repairing indexes, and do not refresh source baselines to clear unresolved snapshots.
 
-When a read fails to parse concept YAML, use the file paths in its error to locate the failing documents. Full bundle reads report all malformed files they examined; bounded queries report only examined files. Use `okf validate <bundle> --json` for separate per-file conformance findings.
+When a read fails to parse concept YAML, use the file paths in its error to locate the failing documents. Full bundle reads report all malformed files they examined; bounded queries report only examined files. Use `okf validate <bundle> --profile bundle --json` for separate per-file conformance findings.
 
-## Source baseline lint configuration
+## Configuration migration
 
-`source-unrecorded` defaults to `warn`. If the user wants a different policy, configure
-`source_unrecorded = "off"`, `"info"`, `"warn"`, or `"error"` under
-`[bundle_settings.default.lint]` in `okf.toml` (or `[bundle_settings."<id>".lint]`
-for a named bundle). `off` suppresses this lint finding only; missing-source errors
-(default `error`, independently configurable via `source_missing`) and `stale` findings remain active. Do not suppress findings merely to pass a gate.
-
-All lint rule settings accept `off`, `info`, `warn`, or `error` in the same table.
-Defaults: `broken_link` and `source_missing` are `error`; `missing_title`, `spec_v02`
-(finding rule `okf-v02`), `ontology_violation`, `source_unrecorded`, and `index_coverage`
-are `warn`; `missing_description` and `orphan` are `info`. Omitted settings keep these
-severities. Turning a lint rule off does not change conformance validation or stale checks.
-
-## Frontmatter order
-
-When authoring concept frontmatter, put `type` first. For the matching ontology concept type,
-follow `fields` declaration order recursively, including nested objects and objects in lists;
-reusable field types use their resolved field order. Put reference-only keys next in reference
-declaration order. Put undeclared/custom fields last at each level, preserving their relative
-order. Without a matching ontology type, keep the other fields in their authored order.
-This is an authoring convention, not an additional OKF conformance requirement.
-CLI writes normalize this order. `okf lint <bundle>` reports `frontmatter-order` at warning by
-default; `okf lint <bundle> --fix` normalizes the bundle and reports remaining findings. The
-bundle lint setting `frontmatter_order` accepts `info`, `warn`, `error`, or `off`; an off rule
-is not fixed. Normalization preserves values, list order, body text, and verification metadata;
-YAML comments and scalar presentation may normalize.
+Treat repository configuration migration as an explicit requested operation. Inspect the plan with
+`okf doctor --migrate-config <okf.toml> --migration-plan <plan.yaml>`; use
+`--default-bundle-id <id>` when converting a path-only default requires an author-supplied identity.
+Review affected files, effective-value conflicts, ontology path rebases, and retained legacy data.
+Apply the reviewed plan with `okf doctor --migration-apply <plan.yaml>`. Ordinary doctor inspection,
+`--fix-safe`, and lint fixes do not authorize workspace-wide migration. A changed plan baseline
+requires a new review; never discard unknown settings or overwrite unrelated files to make migration pass.
