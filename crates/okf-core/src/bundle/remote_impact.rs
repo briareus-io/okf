@@ -429,19 +429,27 @@ fn lint(
         .map(|p| crate::ontology::load::load_ontology(p))
         .transpose()?;
     let bundle = load_bundle(root)?;
-    let mut config = LintConfig::default();
-    config.broken_link = None; // Replaced by exact scoped graph evidence below, avoiding local-only false positives.
-    config.missing_title = severity(s.missing_title.as_deref(), Severity::Warn);
-    config.frontmatter_order = severity(s.frontmatter_order.as_deref(), Severity::Warn);
-    config.missing_description = severity(s.missing_description.as_deref(), Severity::Info);
-    config.orphan = None; // Replaced with scoped inbound evidence below.
-    config.ontology_violation = None; // Resolve target types across the exact comparison context.
-    config.spec_v02 = severity(s.spec_v02.as_deref(), Severity::Warn);
-    config.source_missing = severity(s.source_missing.as_deref(), Severity::Error);
-    config.source_unrecorded = severity(s.source_unrecorded.as_deref(), Severity::Warn);
-    config.finding_budget = usize::MAX; // Impact analysis is complete, not a display-budget-limited query.
+    let config = LintConfig {
+        broken_link: None, // Replaced by exact scoped graph evidence below, avoiding local-only false positives.
+        missing_title: severity(s.missing_title.as_deref(), Severity::Warn),
+        frontmatter_order: severity(s.frontmatter_order.as_deref(), Severity::Warn),
+        missing_description: severity(s.missing_description.as_deref(), Severity::Info),
+        orphan: None,             // Replaced with scoped inbound evidence below.
+        ontology_violation: None, // Resolve target types across the exact comparison context.
+        spec_v02: severity(s.spec_v02.as_deref(), Severity::Warn),
+        source_missing: severity(s.source_missing.as_deref(), Severity::Error),
+        source_unrecorded: severity(s.source_unrecorded.as_deref(), Severity::Warn),
+        invalid_reference: severity(s.invalid_reference.as_deref(), Severity::Warn),
+        finding_budget: usize::MAX, // Impact analysis is complete, not a display-budget-limited query.
+    };
     let mut result: Vec<_> = lint_bundle(&bundle, ontology.as_ref(), &config)
         .into_iter()
+        .chain(crate::check::lint::rules::invalid_reference::run(
+            &bundle,
+            ontology.as_ref(),
+            context.catalog.as_ref(),
+            config.invalid_reference,
+        ))
         .map(|f| LintEvidence {
             rule: f.rule,
             severity: f.severity.as_str().into(),

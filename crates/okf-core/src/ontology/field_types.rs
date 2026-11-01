@@ -17,6 +17,9 @@ use super::schema::{Cardinality, ConceptType, Field, FieldType, Ontology, Refere
 /// merged with the most-derived definition winning on conflict.
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ResolvedType {
+    /// Documentation inherited from the type, overridden by a field declaration.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     /// The primitive base kind.
     pub base: FieldType,
     /// Enum values (empty unless `base == Enum`).
@@ -57,6 +60,7 @@ pub fn resolve_type_name(
 ) -> Result<ResolvedType> {
     if let Some(base) = FieldType::from_keyword(name) {
         return Ok(ResolvedType {
+            description: None,
             base,
             values: Vec::new(),
             item: None,
@@ -111,6 +115,9 @@ pub fn resolve_type_name(
         def.item.is_some(),
         def.fields.is_some(),
     )?;
+    if let Some(description) = &def.description {
+        resolved.description = Some(description.clone());
+    }
     // Merge constraints: most-derived (this def) wins.
     for (k, v) in &def.constraints {
         resolved.constraints.insert(k.clone(), v.clone());
@@ -139,6 +146,9 @@ fn overlay_field(ontology: &Ontology, field: &Field, ty: &mut ResolvedType) -> R
         field.item.is_some(),
         field.fields.is_some(),
     )?;
+    if let Some(description) = &field.description {
+        ty.description = Some(description.clone());
+    }
     for (k, v) in &field.constraints {
         ty.constraints.insert(k.clone(), v.clone());
     }
@@ -172,6 +182,9 @@ fn resolve_subfields(
             f.item.is_some(),
             f.fields.is_some(),
         )?;
+        if let Some(description) = &f.description {
+            ty.description = Some(description.clone());
+        }
         // Overlay inline structure using the shared chain so nesting cycles are caught.
         for (k, v) in &f.constraints {
             ty.constraints.insert(k.clone(), v.clone());

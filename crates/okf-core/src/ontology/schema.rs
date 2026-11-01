@@ -89,6 +89,9 @@ pub struct TrustExpectation {
 /// ([`FieldType`]) name or a `field_types` name.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Field {
+    /// Human-readable documentation; never an enforcing constraint.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     /// The declared type name: a primitive keyword or a `field_types` entry name.
     #[serde(rename = "type")]
     pub type_name: String,
@@ -117,6 +120,9 @@ pub struct Field {
 /// A reusable, composable field-type definition (an entry under `field_types:`).
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct FieldTypeDef {
+    /// Human-readable documentation; never an enforcing constraint.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     /// The primitive base kind name (`string`, `object`, …). Mutually informative with
     /// `extends` — a definition may inherit its base from a parent.
     #[serde(default, skip_serializing_if = "Option::is_none")]

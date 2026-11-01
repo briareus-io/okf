@@ -1263,12 +1263,12 @@ pub fn apply_plan(
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
         Err(e) => return Err(e.into()),
     };
-    let expected_kind = if accepted.is_none() {
-        "initial"
-    } else if accepted.as_ref().unwrap().declaration_digest != plan.declaration_digest {
-        "registration-change"
-    } else {
-        "update"
+    let expected_kind = match &accepted {
+        None => "initial",
+        Some(accepted) if accepted.declaration_digest != plan.declaration_digest => {
+            "registration-change"
+        }
+        Some(_) => "update",
     };
     if plan.kind != expected_kind {
         return Err(usage("plan kind does not match accepted baseline"));
@@ -1287,13 +1287,12 @@ pub fn apply_plan(
     }
     if let Some(old) = &accepted {
         for (id, bundle) in &plan.candidate.bundles {
-            if !selected_ids.contains(id) {
-                if old.bundles.get(id) != Some(bundle)
+            if !selected_ids.contains(id)
+                && (old.bundles.get(id) != Some(bundle)
                     || old.repositories.get(&bundle.repository)
-                        != plan.candidate.repositories.get(&bundle.repository)
-                {
-                    return Err(usage("plan changes an unselected dependency"));
-                }
+                        != plan.candidate.repositories.get(&bundle.repository))
+            {
+                return Err(usage("plan changes an unselected dependency"));
             }
         }
     }
@@ -1405,14 +1404,15 @@ pub fn ensure_writable(path: &Path) -> Result<()> {
     }
     for ancestor in abs.ancestors() {
         let marker = ancestor.join(META);
-        if marker.is_file() && ancestor.join("tree").is_dir() {
-            if abs.starts_with(ancestor.join("tree")) {
-                let snap: Snapshot = yaml(&std::fs::read(&marker)?, "snapshot origin")?;
-                return Err(OkfError::Policy(format!(
-                    "managed remote snapshot is read-only: {} at {}",
-                    snap.url, snap.commit
-                )));
-            }
+        if marker.is_file()
+            && ancestor.join("tree").is_dir()
+            && abs.starts_with(ancestor.join("tree"))
+        {
+            let snap: Snapshot = yaml(&std::fs::read(&marker)?, "snapshot origin")?;
+            return Err(OkfError::Policy(format!(
+                "managed remote snapshot is read-only: {} at {}",
+                snap.url, snap.commit
+            )));
         }
     }
     let cwd = std::env::current_dir()?;
@@ -1863,7 +1863,7 @@ mod tests {
         let consumer = dir.path().join("consumer");
         std::fs::create_dir(&consumer).unwrap();
         std::fs::write(consumer.join("a.md"), "---\ntype: Note\n---\n").unwrap();
-        let plan = plan_update(&catalog, None, &[consumer.clone()]).unwrap();
+        let plan = plan_update(&catalog, None, std::slice::from_ref(&consumer)).unwrap();
         std::fs::write(consumer.join("a.md"), "changed").unwrap();
         assert!(apply_plan(&catalog, &plan, true).is_err());
         std::fs::write(
@@ -1889,7 +1889,7 @@ mod tests {
             "---\ntype: Note\n---\nSee [A](okf://test.docs/a.md).\n",
         )
         .unwrap();
-        let plan = plan_update(&catalog, None, &[consumer.clone()]).unwrap();
+        let plan = plan_update(&catalog, None, std::slice::from_ref(&consumer)).unwrap();
         assert!(plan.impact_complete, "{:?}", plan.impact_reasons);
         apply_plan(&catalog, &plan, false).unwrap();
         let bad = std::fs::read_to_string(&catalog)

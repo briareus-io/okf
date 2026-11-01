@@ -14,7 +14,7 @@ use crate::error::{OkfError, Result};
 use crate::model::concept::ConceptId;
 use crate::model::link::{classify, raw_links, resolve_link, LinkKind};
 use crate::parse::{markdown::split_frontmatter, parse_concept};
-use crate::query::artifact::{ArtifactKind, ArtifactResolver};
+use crate::query::artifact::{ArtifactKind, ResolvedArtifact};
 use serde_yaml::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,6 +87,27 @@ impl DoctorReport {
 }
 
 pub fn doctor(root: &Path, target: &str, fix_safe: bool, apply: bool) -> Result<DoctorReport> {
+    let context = crate::bundle::context::Context {
+        primary: crate::bundle::context::SelectedBundle {
+            id: None,
+            root: root.canonicalize()?,
+        },
+        catalog: None,
+        config: Default::default(),
+        config_path: None,
+    };
+    doctor_in_context(&context, &[], target, fix_safe, apply)
+}
+
+/// Diagnose the primary bundle while resolving resources only within explicit scope.
+pub fn doctor_in_context(
+    context: &crate::bundle::context::Context,
+    scope_ids: &[String],
+    target: &str,
+    fix_safe: bool,
+    apply: bool,
+) -> Result<DoctorReport> {
+    let root = &context.primary.root;
     if target != "0.2" {
         return Err(OkfError::Usage(format!(
             "doctor: unsupported target {target:?}; expected 0.2"
@@ -289,11 +310,10 @@ pub fn doctor(root: &Path, target: &str, fix_safe: bool, apply: bool) -> Result<
         );
     }
 
-    let artifact_resolver = ArtifactResolver::new(root);
     for concept in &bundle.concepts {
-        let mut resources: Vec<(String, String)> = Vec::new();
+        let mut resources: Vec<(String, String, Option<&Value>)> = Vec::new();
         if let Some(resource) = concept.frontmatter.get_str("resource") {
-            resources.push(("resource".to_string(), resource.to_string()));
+            resources.push(("resource".to_string(), resource.to_string(), None));
         }
         if let Some(Value::Sequence(sources)) = concept.frontmatter.get("sources") {
             for (index, source) in sources.iter().enumerate() {
@@ -303,12 +323,16 @@ pub fn doctor(root: &Path, target: &str, fix_safe: bool, apply: bool) -> Result<
                     continue;
                 }
                 if let Some(resource) = source.get("resource").and_then(Value::as_str) {
-                    resources.push((format!("sources[{index}].resource"), resource.to_string()));
+                    resources.push((
+                        format!("sources[{index}].resource"),
+                        resource.to_string(),
+                        Some(source),
+                    ));
                 }
             }
         }
         if let Some(resource) = concept.frontmatter.get_str("computation") {
-            resources.push(("computation".to_string(), resource.to_string()));
+            resources.push(("computation".to_string(), resource.to_string(), None));
         }
         for family in ["executor", "attester"] {
             if let Some(resource) = concept
@@ -317,11 +341,36 @@ pub fn doctor(root: &Path, target: &str, fix_safe: bool, apply: bool) -> Result<
                 .and_then(|v| v.get("resource"))
                 .and_then(Value::as_str)
             {
-                resources.push((format!("{family}.resource"), resource.to_string()));
+                resources.push((format!("{family}.resource"), resource.to_string(), None));
             }
         }
-        for (field, resource) in resources {
-            let resolved = artifact_resolver.resolve(Some(&concept.id.0), &resource);
+        for (field, resource, source) in resources {
+            let resolution = if let Some(source) = source {
+                crate::query::artifact::resolve_source_in_context(
+                    context,
+                    scope_ids,
+                    &concept.id.0,
+                    source,
+                )
+            } else {
+                crate::query::artifact::resolve_artifact_in_context(
+                    context,
+                    scope_ids,
+                    Some(&concept.id.0),
+                    &resource,
+                )
+            };
+            let resolved = match resolution {
+                Ok((_, resolved)) => resolved,
+                Err(error) => ResolvedArtifact {
+                    resource: resource.clone(),
+                    kind: ArtifactKind::Blocked,
+                    path: None,
+                    exists: false,
+                    size: None,
+                    message: Some(error.to_string()),
+                },
+            };
             if matches!(resolved.kind, ArtifactKind::Missing | ArtifactKind::Blocked) {
                 push(
                     &mut findings,
@@ -345,7 +394,12 @@ pub fn doctor(root: &Path, target: &str, fix_safe: bool, apply: bool) -> Result<
                 );
             }
         }
-        for raw in raw_links(concept, None) {
+        // Typed sources have their own namespace, not legacy Markdown link semantics.
+        let mut markdown_links = concept.clone();
+        if let Some(Value::Sequence(sources)) = markdown_links.frontmatter.map.get_mut("sources") {
+            sources.retain(|source| source.get("kind").is_none());
+        }
+        for raw in raw_links(&markdown_links, None) {
             if classify(&raw) != LinkKind::Bare {
                 continue;
             }

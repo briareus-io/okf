@@ -483,6 +483,7 @@ fn read_definition(reader: &mut InputReader, input: &str) -> Result<Value> {
     parse_yaml(&reader.read(&normalized)?)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn finish(
     root: &std::path::Path,
     ontology: &Ontology,

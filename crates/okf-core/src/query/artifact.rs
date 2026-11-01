@@ -166,7 +166,7 @@ impl ArtifactResolver {
     }
 
     pub fn resolve(&self, from: Option<&str>, resource: &str) -> ResolvedArtifact {
-        resolve_artifact_with_root(&self.root, &self.canonical_root, from, resource)
+        resolve_artifact_with_root(&self.root, &self.canonical_root, from, resource, false)
     }
 }
 
@@ -237,9 +237,15 @@ fn resolve_artifact_with_root(
     canonical_root: &std::result::Result<PathBuf, String>,
     from: Option<&str>,
     resource: &str,
+    literal_path: bool,
 ) -> ResolvedArtifact {
-    let trimmed = resource.trim();
-    if trimmed.len() >= 3
+    let trimmed = if literal_path {
+        resource
+    } else {
+        resource.trim()
+    };
+    if !literal_path
+        && trimmed.len() >= 3
         && trimmed.as_bytes()[0].is_ascii_alphabetic()
         && trimmed.as_bytes()[1] == b':'
         && matches!(trimmed.as_bytes()[2], b'/' | b'\\')
@@ -253,7 +259,7 @@ fn resolve_artifact_with_root(
             message: Some("filesystem-prefixed artifact paths are not bundle-relative".to_string()),
         };
     }
-    if crate::model::link::is_logical_reference(trimmed) {
+    if !literal_path && crate::model::link::is_logical_reference(trimmed) {
         return ResolvedArtifact {
             resource: resource.into(),
             kind: ArtifactKind::Blocked,
@@ -265,7 +271,7 @@ fn resolve_artifact_with_root(
             ),
         };
     }
-    if is_uri(trimmed) {
+    if !literal_path && is_uri(trimmed) {
         return ResolvedArtifact {
             resource: resource.to_string(),
             kind: ArtifactKind::External,
@@ -275,7 +281,7 @@ fn resolve_artifact_with_root(
             message: None,
         };
     }
-    if looks_like_scope(trimmed) {
+    if !literal_path && looks_like_scope(trimmed) {
         return ResolvedArtifact {
             resource: resource.to_string(),
             kind: ArtifactKind::Scope,
@@ -285,7 +291,7 @@ fn resolve_artifact_with_root(
             message: Some("resource is a scope descriptor, not a retrievable path".to_string()),
         };
     }
-    let rel = match normalize_local(trimmed, from) {
+    let rel = match normalize_local_impl(trimmed, from, literal_path) {
         Ok(path) => path,
         Err(e) => {
             return ResolvedArtifact {
@@ -345,10 +351,18 @@ pub fn resolve_artifact_in_context(
     resource: &str,
 ) -> Result<(PathBuf, ResolvedArtifact)> {
     let Some(reference) = crate::model::link::LogicalReference::parse(resource)? else {
-        return Ok((
-            context.primary.root.clone(),
-            resolve_artifact(&context.primary.root, from, resource),
-        ));
+        let local = resolve_artifact(&context.primary.root, from, resource);
+        if local.kind == ArtifactKind::Blocked
+            && local.message.as_deref() == Some("usage error: artifact path escapes bundle")
+        {
+            let base = from
+                .and_then(|id| Path::new(id.trim_start_matches('/')).parent())
+                .map(|parent| context.primary.root.join(parent))
+                .unwrap_or_else(|| context.primary.root.clone());
+            let clean = resource.split(['#', '?']).next().unwrap_or(resource);
+            return resolve_registered_path(context, scope_ids, &base.join(clean), resource);
+        }
+        return Ok((context.primary.root.clone(), local));
     };
     let catalog = context
         .catalog
@@ -369,9 +383,177 @@ pub fn resolve_artifact_in_context(
             reference.bundle
         )));
     }
-    let mut resolved = resolve_artifact(&entry.root, None, &reference.path);
+    let mut resolved = resolve_literal_path(&entry.root, &reference.path);
     resolved.resource = resource.into();
     Ok((entry.root.clone(), resolved))
+}
+
+fn resolve_literal_path(root: &Path, path: &str) -> ResolvedArtifact {
+    resolve_artifact_with_root(
+        root,
+        &root.canonicalize().map_err(|e| e.to_string()),
+        None,
+        path,
+        true,
+    )
+}
+
+/// Resolve a lexical filesystem path only inside the primary or an explicitly scoped
+/// registered root. The per-root resolver still rejects symlinks escaping that root.
+fn resolve_registered_path(
+    context: &crate::bundle::context::Context,
+    scope_ids: &[String],
+    path: &Path,
+    resource: &str,
+) -> Result<(PathBuf, ResolvedArtifact)> {
+    let path = crate::bundle::catalog::normalize(path);
+    let primary = context.primary.root.canonicalize()?;
+    let (root, relative) = if let Ok(relative) = path.strip_prefix(&primary) {
+        (primary.clone(), relative.to_path_buf())
+    } else {
+        let entry = context
+            .catalog
+            .as_ref()
+            .and_then(|catalog| crate::graph::catalog::entry_for_path(&catalog.entries, &path))
+            .ok_or_else(|| OkfError::Usage("artifact path escapes registered bundles".into()))?;
+        if !scope_ids.contains(&entry.id) {
+            return Err(OkfError::Usage(format!(
+                "out-of-scope artifact reference: {}",
+                entry.id
+            )));
+        }
+        if !entry.available {
+            return Err(OkfError::Environment(format!(
+                "unavailable bundle {} (no implicit acquisition)",
+                entry.id
+            )));
+        }
+        (
+            entry.root.clone(),
+            path.strip_prefix(&entry.root).unwrap().to_path_buf(),
+        )
+    };
+    let mut resolved = resolve_literal_path(&root, &relative.to_string_lossy());
+    resolved.resource = resource.into();
+    Ok((root, resolved))
+}
+
+/// Source resources retain their source-kind namespace; ordinary provenance follows
+/// document-relative Markdown rules. A declared mapping constrains, rather than
+/// overrides, a local or logical resource, and snapshots are never silently ignored.
+pub fn resolve_source_in_context(
+    context: &crate::bundle::context::Context,
+    scope_ids: &[String],
+    from: &str,
+    source: &serde_yaml::Value,
+) -> Result<(PathBuf, ResolvedArtifact)> {
+    let resource = source
+        .get("resource")
+        .and_then(serde_yaml::Value::as_str)
+        .ok_or_else(|| OkfError::Usage("source requires resource".into()))?;
+    let kind = source.get("kind").and_then(serde_yaml::Value::as_str);
+    let logical = crate::model::link::LogicalReference::parse(resource)?;
+    let typed_local =
+        matches!(kind, Some("file" | "line-range" | "markdown-heading")) && logical.is_none();
+    let result = if typed_local {
+        let clean = resource.split('#').next().unwrap_or(resource);
+        resolve_registered_path(
+            context,
+            scope_ids,
+            &context.primary.root.join(clean),
+            resource,
+        )
+    } else {
+        resolve_artifact_in_context(context, scope_ids, Some(from), resource)
+    }?;
+    // A mapping is an assertion about the resource, never permission to bypass a
+    // failed containment check (including a symlink escaping its declaring root).
+    if result.1.kind == ArtifactKind::Blocked {
+        return Ok(result);
+    }
+    let Some(mapping) = source.get("bundle_ref") else {
+        return Ok(result);
+    };
+    let declared: crate::graph::catalog::BundleRef = serde_yaml::from_value(mapping.clone())
+        .map_err(|e| OkfError::Usage(format!("invalid bundle_ref: {e}")))?;
+    if Path::new(&declared.path).is_absolute()
+        || Path::new(&declared.path)
+            .components()
+            .any(|c| matches!(c, Component::ParentDir))
+    {
+        return Err(OkfError::Usage(
+            "bundle_ref.path must stay relative to target bundle root".into(),
+        ));
+    }
+    if let Some(reference) = logical {
+        if reference.bundle != declared.id || reference.path != declared.path {
+            return Err(OkfError::Usage(
+                "reference-mismatch: logical URI and bundle_ref disagree".into(),
+            ));
+        }
+    }
+    let catalog = context
+        .catalog
+        .as_ref()
+        .ok_or_else(|| OkfError::Usage("bundle_ref requires a selected catalog".into()))?;
+    let entry = catalog.entry(&declared.id)?;
+    if context.primary.id.as_deref() != Some(&declared.id) && !scope_ids.contains(&declared.id) {
+        return Err(OkfError::Usage(format!(
+            "out-of-scope bundle_ref: {}",
+            declared.id
+        )));
+    }
+    if !entry.available {
+        return Err(OkfError::Environment(format!(
+            "unavailable bundle {} (no implicit acquisition)",
+            declared.id
+        )));
+    }
+    let mut mapped = resolve_literal_path(&entry.root, &declared.path);
+    mapped.resource = resource.into();
+    let mapped_path = entry.root.join(&declared.path);
+    if let Some(path) = &result.1.path {
+        let actual = result.0.join(path);
+        if actual.canonicalize().unwrap_or(actual)
+            != mapped_path.canonicalize().unwrap_or(mapped_path.clone())
+        {
+            return Err(OkfError::Usage(
+                "reference-mismatch: resource and bundle_ref address different local paths".into(),
+            ));
+        }
+    }
+    if mapped.exists {
+        if let Some(snapshot) = &declared.snapshot {
+            let checked = crate::graph::catalog::resolve_snapshot(
+                snapshot,
+                &entry.root,
+                &mapped_path,
+                None,
+                true,
+            );
+            if matches!(checked.status.as_str(), "mismatched" | "unavailable") {
+                return Err(OkfError::Usage(format!(
+                    "source snapshot {}: {}",
+                    checked.status, checked.evidence
+                )));
+            }
+            if let (Some(expected), Some(origin)) = (
+                &snapshot.commit,
+                crate::bundle::remote::origin(&entry.root)?,
+            ) {
+                if origin
+                    .commit
+                    .as_ref()
+                    .is_some_and(|selected| selected != expected)
+                {
+                    return Err(OkfError::Usage(
+                        "source snapshot mismatched: selected catalog commit differs".into(),
+                    ));
+                }
+            }
+        }
+    }
+    Ok((entry.root.clone(), mapped))
 }
 
 pub fn show_artifact_in_context(
@@ -549,11 +731,16 @@ fn fetch_impl(_resource: &str, _max_bytes: usize) -> Result<ArtifactContent> {
 }
 
 fn normalize_local(resource: &str, from: Option<&str>) -> Result<PathBuf> {
-    let core = resource
-        .split(['#', '?'])
-        .next()
-        .unwrap_or(resource)
-        .replace('\\', "/");
+    normalize_local_impl(resource, from, false)
+}
+
+fn normalize_local_impl(resource: &str, from: Option<&str>, literal_path: bool) -> Result<PathBuf> {
+    let core = if literal_path {
+        resource
+    } else {
+        resource.split(['#', '?']).next().unwrap_or(resource)
+    }
+    .replace('\\', "/");
     let mut joined = PathBuf::new();
     if !core.starts_with('/') {
         if let Some(from) = from {

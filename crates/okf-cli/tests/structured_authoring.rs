@@ -30,6 +30,120 @@ fn setup() -> tempfile::TempDir {
 }
 
 #[test]
+fn verification_currency_requires_both_content_and_review_timestamps() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("note.md");
+    for (generated, expected) in [
+        ("", serde_json::Value::Null),
+        (
+            "generated: {by: process:test, at: 2020-01-01T00:00:00Z}\n",
+            serde_json::json!(true),
+        ),
+        (
+            "generated: {by: process:test, at: 2027-01-01T00:00:00Z}\n",
+            serde_json::json!(false),
+        ),
+    ] {
+        std::fs::write(&path, format!("---\ntype: Note\n{generated}verified:\n- by: process:test\n  at: 2026-01-01T00:00:00Z\n---\nBody\n")).unwrap();
+        let output = cli(dir.path(), &["show", "note", "--json"]);
+        success(&output);
+        let records: Vec<serde_json::Value> = std::str::from_utf8(&output.stdout)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        let concept = records
+            .iter()
+            .find(|record| record["id"] == "/note")
+            .unwrap();
+        assert_eq!(concept["verification_current"], expected);
+        assert_eq!(concept["trust_tier"], "machine-confirmed");
+    }
+}
+
+#[test]
+fn edit_reports_verification_invalidation_but_preserves_it_for_noops_and_previews() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("note.md");
+    let before = "---\ntype: Note\ntitle: Original\nverified:\n- by: process:test\n  at: 2026-01-01T00:00:00Z\n---\nBody\n";
+    std::fs::write(&path, before).unwrap();
+    let output = cli(dir.path(), &["edit", "note", "--set", "title=Original"]);
+    success(&output);
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("verification:"));
+    assert!(read_fm(dir.path(), "note.md")["verified"].is_sequence());
+
+    let preview_before = std::fs::read(&path).unwrap();
+    let output = cli(
+        dir.path(),
+        &["edit", "note", "--set", "title=Changed", "--dry-run"],
+    );
+    success(&output);
+    assert!(String::from_utf8_lossy(&output.stdout)
+        .contains("verification: would remove 1 prior verification record(s)"));
+    assert_eq!(std::fs::read(&path).unwrap(), preview_before);
+
+    let output = cli(dir.path(), &["edit", "note", "--set", "title=Changed"]);
+    success(&output);
+    assert!(String::from_utf8_lossy(&output.stdout)
+        .contains("verification: removed 1 prior verification record(s)"));
+    assert!(read_fm(dir.path(), "note.md")["verified"].is_null());
+
+    std::fs::write(&path, before).unwrap();
+    let output = cli(
+        dir.path(),
+        &["edit", "note", "--set", "title=Changed", "--json"],
+    );
+    success(&output);
+    let records: Vec<serde_json::Value> = std::str::from_utf8(&output.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    let change = records
+        .iter()
+        .find(|record| record["kind"] == "change")
+        .unwrap();
+    assert!(change["changes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|change| change["op"] == "invalidate-verification" && change["removed"] == 1));
+}
+
+#[test]
+fn source_replacement_rejects_overlap_and_accepts_guarded_patch() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("note.md");
+    let before = "---\ntype: Note\nsources:\n- resource: old.py\n  kind: file\n  id: stable\n  custom: preserve-me\n---\nBody\n";
+    std::fs::write(&path, before).unwrap();
+    for flag in ["--add-source", "--add-source-json"] {
+        let value = if flag == "--add-source" {
+            "resource=old.py,kind=file,id=new"
+        } else {
+            "{resource: old.py, kind: file, id: new}"
+        };
+        let output = cli(
+            dir.path(),
+            &["edit", "note", "--remove-source", "old.py", flag, value],
+        );
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("both added"));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), before);
+    }
+    success(&cli(dir.path(), &["edit", "note", "--patch",
+        "[{op: test, path: /sources/0/resource, value: old.py}, {op: replace, path: /sources/0/resource, value: new.py}]"]));
+    let fm = read_fm(dir.path(), "note.md");
+    assert_eq!(fm["sources"][0]["resource"].as_str(), Some("new.py"));
+    assert_eq!(fm["sources"][0]["id"].as_str(), Some("stable"));
+    assert_eq!(fm["sources"][0]["custom"].as_str(), Some("preserve-me"));
+    let changed = std::fs::read(&path).unwrap();
+    let output = cli(dir.path(), &["edit", "note", "--patch",
+        "[{op: test, path: /sources/0/resource, value: old.py}, {op: replace, path: /sources/0/resource, value: wrong.py}]"]);
+    assert!(!output.status.success());
+    assert_eq!(std::fs::read(&path).unwrap(), changed);
+}
+
+#[test]
 fn add_typed_values_from_file_paths_and_legacy_literal_dots() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(

@@ -36,6 +36,41 @@ records by kind. Do not treat every NDJSON line as a primary concept. Join relat
 qualified bundle/concept/version identity, not an unqualified ID. Projection adds records; it does
 not promise to remove all legacy metadata from the stream or reduce scan cost.
 
+## Authored IDs and machine consumers
+
+Unprojected concept records reserve `id` for the computed concept path. An authored frontmatter
+`id` is retained under `frontmatter_conflicts.id`; other computed-field collisions are retained in
+the same object. This is the existing output contract, not evidence that authored identity was
+discarded. Keep loaders compatible with that layout until deliberately migrating them.
+
+Use `--project '$id' --project id` to select the computed path and authored ID separately in
+projection records. For example, `/tasks/T1` can move while its authored `T1` remains the application
+record identity. Include each other field the consumer needs and interpret the separate record
+kinds correctly. `$id` is a selector, not the key of an unprojected concept row. See the
+[operational-bundle recipe](../../init/references/operational-bundle.md) for a complete example.
+
+Machine wrappers can pass `--guidance off` centrally:
+
+```sh
+okf list planning --full-scan --json --guidance off
+```
+
+Alternatively configure incidental JSON guidance in the bundle manifest:
+
+```yaml
+manifest_version: 1
+guidance:
+  display:
+    json: off
+```
+
+Merge this setting with existing guidance; do not replace its instructions. Suppression affects
+incidental display only. Agents still load the applicable `bundle context` before acting.
+Consumers must require a supported `operation-start` and terminal `operation-complete` as well as
+the actual successful process exit. Validate completeness when the trailer exists, and reject an
+absent trailer too. Reject payload after completion; classify known informational records instead
+of treating every object as a concept. Empty or truncated output is not a complete empty inventory.
+
 ## Complete the scan only when the answer needs it
 
 The default budget examines 1,000 eligible documents across the selected scope. The primary bundle
@@ -106,6 +141,21 @@ Separate `tags[]="security"` and `tags[]="production"` conditions require both t
 `tags[] in ["security","production"]` condition accepts either. `not in` checks the entire list;
 missing/null fields do not satisfy it, while a present empty list can. Typed operands do not coerce
 strings to numbers or booleans.
+
+Use explicit presence predicates when missing values matter:
+
+```sh
+okf search knowledge/product --facet-filter 'impl_status not in ["implemented"] OR impl_status absent' --full-scan --json
+```
+
+`exists` means the selector has at least one occurrence or selected empty list, including a null
+or empty container; `absent` means it has neither. `is null` and `is not null` are existential over
+selected values, so a mixed list can satisfy both through different elements. A selected empty
+list also satisfies `is not null`. `!=` and `not in`
+still exclude absent/null values. Top-level uppercase `OR` combines alternatives within one filter;
+repeated filters remain AND. Quoted strings and JSON arrays can contain the text `OR` without
+becoming operators. An empty `tags` list and its `tags[]` traversal both count as present, although
+the latter has no selected element. Missing nested branches do not become selected empty lists.
 
 ## Relationship filtering and snapshots
 

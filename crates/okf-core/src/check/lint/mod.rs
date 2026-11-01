@@ -116,6 +116,7 @@ pub fn meets_threshold(findings: &[Finding], fail_on: FailOn) -> bool {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LintConfig {
     pub broken_link: Option<Severity>,
+    pub invalid_reference: Option<Severity>,
     pub missing_title: Option<Severity>,
     pub frontmatter_order: Option<Severity>,
     pub missing_description: Option<Severity>,
@@ -131,6 +132,7 @@ impl Default for LintConfig {
     fn default() -> Self {
         Self {
             broken_link: Some(Severity::Error),
+            invalid_reference: Some(Severity::Warn),
             missing_title: Some(Severity::Warn),
             frontmatter_order: Some(Severity::Warn),
             missing_description: Some(Severity::Info),

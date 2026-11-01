@@ -815,7 +815,9 @@ fn build_catalog_graph_impl(
                 let declared = value
                     .get("bundle_ref")
                     .map(|v| serde_yaml::from_value::<BundleRef>(v.clone()));
-                let path_source = if git_kind {
+                let bundle_file_kind =
+                    matches!(kind, Some("file" | "line-range" | "markdown-heading"));
+                let path_source = if git_kind || bundle_file_kind {
                     Node {
                         id: "/context".into(),
                         ..source.clone()
@@ -830,7 +832,11 @@ fn build_catalog_graph_impl(
                         bundles: &bundles,
                     },
                     &path_source,
-                    git_root.unwrap_or(&bundle.root),
+                    if bundle_file_kind && Path::new(resource).is_absolute() {
+                        Path::new("/")
+                    } else {
+                        git_root.unwrap_or(&bundle.root)
+                    },
                     resource,
                     &format!("sources[{index}].resource"),
                     declared.as_ref().and_then(|r| r.as_ref().ok()),
@@ -856,7 +862,6 @@ fn build_catalog_graph_impl(
                             edge.fingerprint_status = fingerprint_status(
                                 &source_value,
                                 &bundle.root,
-                                &concept.id,
                                 context,
                                 &requested,
                             );
@@ -1106,19 +1111,14 @@ fn source_dependency_path_with_git_root(
 fn fingerprint_status(
     source: &Source,
     root: &Path,
-    id: &ConceptId,
     context: &Context,
     scope: &BTreeSet<String>,
 ) -> Option<String> {
     if source.fingerprint.is_empty() {
         return None;
     }
-    let parent = root
-        .join(format!("{}.md", id.0.trim_start_matches('/')))
-        .parent()?
-        .to_path_buf();
     let engine = crate::fingerprint::Engine::new(
-        &parent,
+        root,
         &crate::ports::fs::RealFs,
         &crate::ports::git::RealGit,
         None,
@@ -1439,7 +1439,7 @@ fn resolve_edge(
     }
     edge
 }
-fn resolve_snapshot(
+pub(crate) fn resolve_snapshot(
     request: &SnapshotRequest,
     root: &Path,
     path: &Path,
@@ -1672,7 +1672,7 @@ mod tests {
         crate::bundle::context::resolve_context(None, None, None, dir.path()).unwrap()
     }
     fn write_source(dir: &tempfile::TempDir, snapshot: &str, body: &str) {
-        std::fs::write(dir.path().join("a/metrics/revenue.md"),format!("---\ntype: Metric\nsources:\n- resource: ../../b/policies/margin.md\n  kind: file\n  bundle_ref:\n    id: acme.b\n    path: policies/margin.md\n{snapshot}---\n{body}\n")).unwrap();
+        std::fs::write(dir.path().join("a/metrics/revenue.md"),format!("---\ntype: Metric\nsources:\n- resource: ../b/policies/margin.md\n  kind: file\n  bundle_ref:\n    id: acme.b\n    path: policies/margin.md\n{snapshot}---\n{body}\n")).unwrap();
     }
     fn git_ok(dir: &Path, args: &[&str]) -> String {
         let out = Command::new("git")
@@ -1696,7 +1696,7 @@ mod tests {
         let path = dir.path().join("a/metrics/revenue.md");
         let text = std::fs::read_to_string(&path)
             .unwrap()
-            .replace("../../b/policies/margin.md", "b/policies/margin.md")
+            .replace("../b/policies/margin.md", "b/policies/margin.md")
             .replace("kind: file", "kind: git-path");
         std::fs::write(&path, text).unwrap();
         let graph = build_catalog_graph(&context(&dir), &[], true, None).unwrap();
@@ -1725,7 +1725,7 @@ mod tests {
         let path = dir.path().join("a/metrics/revenue.md");
         let text = std::fs::read_to_string(&path)
             .unwrap()
-            .replace("../../b/policies/margin.md", "\"#section\"");
+            .replace("../b/policies/margin.md", "\"#section\"");
         std::fs::write(&path, text).unwrap();
         let graph = build_catalog_graph(&context(&dir), &[], true, None).unwrap();
         assert_eq!(graph.edges[0].status, "reference-mismatch");

@@ -5,6 +5,9 @@ description: Plan and move OKF concepts while rebasing portable body links and s
 
 # Reorganize an OKF bundle
 
+The [operational-bundle example](../init/references/operational-bundle.md) shows ordered batch
+edits and moves for temporary records while keeping authored record IDs separate from paths.
+
 ## Shared operating protocol
 
 Read and follow the [shared OKF protocol](../../references/bundle-context.md) before CLI-dependent

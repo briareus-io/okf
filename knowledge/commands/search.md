@@ -78,7 +78,7 @@ Primary query filters and presets remain separate from expansion filtering.
 | `--sort <value>` | string | no | Result order: deterministic relevance (default) or concept id (default: `relevance`) |
 | `--limit <value>` | int | no | Return at most this many results after all filters and sorting |
 | `--field <value>` | list<string> | no | Filter by a frontmatter field, `key=value` (repeatable; AND) |
-| `--facet-filter <value>` | list<string> | no | Typed nested selector condition (repeatable; AND) |
+| `--facet-filter <value>` | list<string> | no | Typed selector condition: =, !=, [not] in, exists, absent, is [not] null; join with OR (repeatable; AND) |
 | `--facets` | bool | no | Emit JSON facets over all matches, before pagination (default: `false`) |
 | `--facet <value>` | list<string> | no | Facet selector (repeatable); does not bypass high cardinality guard |
 | `--offset <value>` | int | no | Start page at this nonnegative offset; requires a positive limit |

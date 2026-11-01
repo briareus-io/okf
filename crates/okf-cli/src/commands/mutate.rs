@@ -284,6 +284,20 @@ pub fn run_edit(args: &EditArgs, json: bool) -> Result<i32> {
     } else {
         println!("edited {} ({} change(s))", r.id.0, r.changes.len());
     }
+    if !json {
+        for change in &r.changes {
+            if let EditChange::InvalidateVerification { removed } = change {
+                let action = if args.dry_run {
+                    "would remove"
+                } else {
+                    "removed"
+                };
+                println!(
+                    "verification: {action} {removed} prior verification record(s); review the edited concept again"
+                );
+            }
+        }
+    }
     Ok(0)
 }
 

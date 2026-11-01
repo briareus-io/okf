@@ -32,6 +32,62 @@ fn digest_matches_plan_and_rejects_pending_journal() {
 }
 
 #[test]
+fn final_reference_validation_reloads_changed_document_bytes() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("target.md.md"), note("target\n")).unwrap();
+    fs::write(
+        root.path().join("ref.md"),
+        note("[target](/target.md.md)\n"),
+    )
+    .unwrap();
+    let plan = changeset::prepare(
+        root.path(),
+        &set(vec![Operation::Edit {
+            concept: "/ref".into(),
+            patch: vec![],
+            body: Some("[missing](/absent.md)\n".into()),
+        }]),
+    );
+    assert!(plan.err().unwrap().to_string().contains("dangling/blocked"));
+}
+
+#[test]
+fn final_snapshot_checks_unchanged_nonconformant_documents() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("invalid.md"), "---\ntitle: No type\n---\n").unwrap();
+    let error = changeset::prepare(
+        root.path(),
+        &set(vec![Operation::Create {
+            path: "valid".into(),
+            content: note("valid\n"),
+        }]),
+    )
+    .err()
+    .unwrap();
+    assert!(error.to_string().contains("invalid.md"), "{error}");
+    assert!(!root.path().join("valid.md").exists());
+}
+
+#[test]
+fn unchanged_binary_artifacts_stay_covered_by_apply_baseline() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("opaque.bin"), [0, 255, 0, 128]).unwrap();
+    let plan = changeset::prepare(
+        root.path(),
+        &set(vec![Operation::Create {
+            path: "valid".into(),
+            content: note("valid\n"),
+        }]),
+    )
+    .unwrap();
+    assert_eq!(plan.changes.len(), 1);
+    fs::write(root.path().join("opaque.bin"), [0, 254, 0, 128]).unwrap();
+    let error = changeset::apply(root.path(), plan, None).unwrap_err();
+    assert!(error.to_string().contains("baseline-conflict"), "{error}");
+    assert!(!root.path().join("valid.md").exists());
+}
+
+#[test]
 fn structured_create_preserves_unknown_values_and_rejects_verified() {
     let root = tempfile::tempdir().unwrap();
     let input = "version: 1\noperations:\n- op: create\n  path: new\n  frontmatter:\n    type: Note\n    custom: {count: 7, active: true}\n  body: '# New'\n";

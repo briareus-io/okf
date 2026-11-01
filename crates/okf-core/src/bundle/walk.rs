@@ -191,7 +191,7 @@ mod unreadable_support_test {
         let support = dir.path().join(".okf-bundle");
         std::fs::create_dir(&support).unwrap();
         std::fs::write(dir.path().join("note.md"), "note").unwrap();
-        std::fs::set_permissions(&support, std::fs::Permissions::from_mode(0)).unwrap();
+        std::fs::set_permissions(&support, std::fs::Permissions::from_mode(0o0)).unwrap();
         let result = walk_markdown(dir.path());
         std::fs::set_permissions(&support, std::fs::Permissions::from_mode(0o700)).unwrap();
         assert_eq!(result.unwrap(), vec![PathBuf::from("note.md")]);

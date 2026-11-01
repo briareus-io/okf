@@ -22,6 +22,7 @@ pub struct LintSettings {
     pub index_coverage: Option<String>,
     pub source_unrecorded: Option<String>,
     pub broken_link: Option<String>,
+    pub invalid_reference: Option<String>,
     pub missing_title: Option<String>,
     pub frontmatter_order: Option<String>,
     pub missing_description: Option<String>,
@@ -406,6 +407,7 @@ pub fn validate_settings(settings: &BundleSettings) -> Result<()> {
     }
     for (rule, severity) in [
         ("broken_link", &settings.lint.broken_link),
+        ("invalid_reference", &settings.lint.invalid_reference),
         ("missing_title", &settings.lint.missing_title),
         ("frontmatter_order", &settings.lint.frontmatter_order),
         ("missing_description", &settings.lint.missing_description),

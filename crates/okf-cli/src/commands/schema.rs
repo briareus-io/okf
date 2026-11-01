@@ -90,6 +90,7 @@ fn output_record_contracts() -> Value {
         "validation-profile": {"profile":"bundle","conformant":"boolean"},
         "migration-plan": {"plan":"object","saved":"path|null"},
         "migration-applied": {"report":"object"},
+        "doctor-normalization": {"path":"path","diff":"string","applied":"boolean","links":"array<{from:string,to:string}>"},
         "workflow": {"id":"string","selected":"boolean","content":"full|summary","inputs_complete":"boolean (selected only)"},
         "bundle-resource": {"path":"path","content":"string|null","sha256":"string|null","truncated":"boolean"},
         "query-filters": {"filters":"object","preset":"string|null","origin":"string"},
@@ -108,6 +109,14 @@ fn output_record_contracts() -> Value {
         "interpretation-settings": {"bundle": "string|null", "ontology_path": "path|null", "ontology_digest": "string|null", "settings": "object"},
         "effective-settings": {"bundle": "string", "settings": "interpretation-settings"},
         "concept-identity": {"schema_version": 1, "id": "string", "bundle": "string", "version": "string"},
+        "concept": {
+            "discriminator": "no kind field is added; unprojected concept metadata",
+            "id": "computed suffix-free bundle-relative concept path",
+            "frontmatter_conflicts": "optional object preserving authored values whose names collide with computed fields, including authored id",
+            "trust_tier": "unverified|machine-confirmed|human-reviewed",
+            "verification_current": "boolean|null; latest valid verification compared with generated.at (legacy timestamp fallback); null when either timestamp is unavailable",
+            "identity_projection": "--project '$id' selects computed identity; --project id selects authored frontmatter id"
+        },
         "query-summary": {
             "schema_version": 1, "total_matches": "integer|null", "observed_matches": "integer", "returned": "integer",
             "offset": "integer", "limit": "integer|null", "has_more": "boolean", "next_offset": "integer|null",
@@ -169,7 +178,7 @@ fn command_record(full_name: &str, cmd: &ClapCommand) -> Value {
     let mutates_when = match full_name {
         "lint" => json!({"fix": true}),
         "doctor" => {
-            json!({"any_of":[{"fix-safe": true, "yes": true, "dry-run": false},{"migration-apply":"present"}]})
+            json!({"any_of":[{"fix-safe": true, "yes": true, "dry-run": false},{"normalize-relative-links":true,"yes":true,"dry-run":false},{"migration-apply":"present"}]})
         }
         "catalog update" => json!({"apply":"present"}),
         "catalog sync" => json!({"check":false}),
@@ -213,7 +222,7 @@ fn effects(name: &str) -> Value {
         match name {
             "lint" => json!({"when":{"fix":true}}),
             "doctor" => {
-                json!({"any_of":[{"fix-safe":true,"yes":true,"dry-run":false},{"migration-apply":"present"}]})
+                json!({"any_of":[{"fix-safe":true,"yes":true,"dry-run":false},{"normalize-relative-links":true,"yes":true,"dry-run":false},{"migration-apply":"present"}]})
             }
             "docs" => json!({"when":{"format":"index"}}),
             "changeset apply" => json!({"when":{"dry-run":false}}),
@@ -222,14 +231,45 @@ fn effects(name: &str) -> Value {
     } else {
         json!(false)
     };
-    let coordination = matches!(
+    let mutation_coordination = matches!(
         name,
         "changeset plan" | "changeset digest" | "changeset apply" | "changeset recover"
     ) || mutates;
+    // Working-tree reads may create the stable coordination inode before taking a
+    // shared publication lock. They do not stage or publish authored content.
+    let read_coordination = matches!(
+        name,
+        "list"
+            | "search"
+            | "show"
+            | "browse"
+            | "backlinks"
+            | "links"
+            | "graph"
+            | "resolve"
+            | "computation check"
+            | "scan"
+            | "validate"
+            | "stale"
+            | "affected"
+            | "diff"
+            | "stats"
+            | "bundle context"
+            | "bundle validate"
+            | "bundle resource list"
+            | "bundle resource show"
+            | "artifact list"
+            | "artifact resolve"
+            | "artifact show"
+            | "ontology list"
+            | "ontology show"
+            | "ontology field-type list"
+            | "ontology field-type show"
+    );
     json!({
         "authored_bundle_writes":authored,
-        "coordination_metadata_writes":coordination,
-        "temporary_staging_writes":if name == "changeset digest" {json!(false)} else {json!(coordination)},
+        "coordination_metadata_writes":mutation_coordination || read_coordination,
+        "temporary_staging_writes":if name == "changeset digest" {json!(false)} else {json!(mutation_coordination)},
         "external_output_file_writes":match name {
             "doctor" => json!({"when":{"migration-plan":"present"}}),
             "catalog update" => json!({"when":"candidate plan or acceptance report publication"}),
@@ -366,7 +406,6 @@ fn arg_record(command: &str, arg: &clap::Arg) -> Value {
     let requires: &[&str] = match (command, id) {
         ("search" | "list", "offset") => &["limit"],
         ("graph", "depth") => &["root"],
-        ("doctor", "yes") => &["fix-safe"],
         ("edit", "all") => &["replace"],
         _ => &[],
     };
@@ -403,6 +442,7 @@ fn arg_record(command: &str, arg: &clap::Arg) -> Value {
         "resolution": resolution,
         "stdin": stdin,
         "requires": requires,
+        "requires_any": if command == "doctor" && id == "yes" {json!(["fix-safe", "normalize-relative-links"])} else {json!([])},
         "aliases": arg.get_all_aliases().unwrap_or_default(),
         "value_delimiter": arg.get_value_delimiter().map(|c| c.to_string()),
         "arity": arg.get_num_args().map(|n| json!({"min":n.min_values(),"max":n.max_values()})),
@@ -449,7 +489,7 @@ fn meta(name: &str) -> (&'static str, bool, &'static str) {
         "affected" => ("check", false, "affected,scope,bundle-affected"),
         "diff" => ("check", false, "diff"),
         "stats" => ("check", false, "stats"),
-        "doctor" => ("check", true, "doctor-finding,doctor-summary,migration-plan,migration-applied"),
+        "doctor" => ("check", true, "doctor-finding,doctor-summary,doctor-normalization,migration-plan,migration-applied"),
 
         "init" => ("mutate", true, "change"),
         "add" => ("mutate", true, "change"),

@@ -148,6 +148,97 @@ impl Drop for WriterGuard {
     }
 }
 
+/// A cooperative read barrier. Readers share the writer's stable lock inode and
+/// hold this guard for the whole read, not merely while checking journal state.
+/// Arbitrary filesystem writers do not participate in this protocol.
+#[derive(Debug)]
+pub struct ReaderGuard {
+    file: std::fs::File,
+    root: PathBuf,
+}
+impl Drop for ReaderGuard {
+    fn drop(&mut self) {
+        let _ = self.file.unlock();
+    }
+}
+
+/// Acquire all working-tree read barriers in canonical path order. A failed
+/// acquisition drops earlier guards, so callers never retain a partial scope.
+pub fn reader_locks(roots: &[PathBuf]) -> Result<Vec<ReaderGuard>> {
+    let roots = roots
+        .iter()
+        .map(|root| root.canonicalize().map_err(OkfError::from))
+        .collect::<Result<std::collections::BTreeSet<_>>>()?;
+    let mut guards = Vec::new();
+    for root in roots {
+        // Managed snapshots and protected remote checkouts cannot be published
+        // by OKF. Never create coordination state inside those read-only trees.
+        match crate::bundle::remote::ensure_writable(&root) {
+            Err(OkfError::Policy(_)) => {
+                ensure_read_idle(&root)?;
+                continue;
+            }
+            Err(error) => return Err(error),
+            Ok(()) => {}
+        }
+        let path = root.join(LOCK);
+        let file = match std::fs::symlink_metadata(&path) {
+            Ok(meta) => {
+                if !meta.is_file() || meta.file_type().is_symlink() {
+                    return Err(usage("transaction lock must be a regular file"));
+                }
+                std::fs::File::open(&path)?
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                if std::fs::metadata(&root)?.permissions().readonly() {
+                    // A read-only directory cannot acquire a new writer lock.
+                    // Changing permissions is an external filesystem mutation,
+                    // outside the cooperative publication guarantee.
+                    ensure_read_idle(&root)?;
+                    continue;
+                }
+                match std::fs::OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .create_new(true)
+                    .open(&path)
+                {
+                    Ok(file) => file,
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                        let meta = std::fs::symlink_metadata(&path)?;
+                        if !meta.is_file() || meta.file_type().is_symlink() {
+                            return Err(usage("transaction lock must be a regular file"));
+                        }
+                        std::fs::File::open(&path)?
+                    }
+                    Err(error) => return Err(error.into()),
+                }
+            }
+            Err(error) => return Err(error.into()),
+        };
+        file.try_lock_shared().map_err(|error| {
+            usage(format!(
+                "transaction is still active; read refused for {}: {error}",
+                root.display()
+            ))
+        })?;
+        let guard = ReaderGuard { file, root };
+        ensure_read_idle(&guard.root)?;
+        guards.push(guard);
+    }
+    Ok(guards)
+}
+
+fn ensure_read_idle(root: &Path) -> Result<()> {
+    if std::fs::symlink_metadata(root.join(JOURNAL)).is_ok() {
+        return Err(usage(format!(
+            "pending transaction; read refused for {}; run `okf changeset recover` before reading",
+            root.display()
+        )));
+    }
+    Ok(())
+}
+
 fn acquire_lock(root: &Path) -> Result<WriterGuard> {
     crate::bundle::remote::ensure_writable(root)?;
     let path = root.join(LOCK);
@@ -964,6 +1055,79 @@ mod tests {
         let absent = root.path().join("absent");
         assert!(writer_lock(&absent).is_err());
         assert!(!absent.exists());
+    }
+
+    #[test]
+    fn readers_share_barrier_and_exclude_writers_until_all_release() {
+        let root = tempfile::tempdir().unwrap();
+        let roots = [root.path().to_path_buf()];
+        let first = reader_locks(&roots).unwrap();
+        let second = reader_locks(&roots).unwrap();
+        assert!(writer_lock(root.path()).is_err());
+        drop(first);
+        assert!(writer_lock(root.path()).is_err());
+        drop(second);
+        assert!(writer_lock(root.path()).is_ok());
+    }
+
+    #[test]
+    fn readers_refuse_active_publication_and_pending_recovery() {
+        let root = tempfile::tempdir().unwrap();
+        let roots = [root.path().to_path_buf()];
+        commit_with_hook(
+            root.path(),
+            vec![
+                change("a.txt", None, Some("a")),
+                change("b.txt", None, Some("b")),
+            ],
+            &mut |_| {
+                assert!(reader_locks(&roots)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("transaction is still active"));
+                Ok(())
+            },
+        )
+        .unwrap();
+        fs::create_dir(root.path().join(JOURNAL)).unwrap();
+        assert!(reader_locks(&roots)
+            .unwrap_err()
+            .to_string()
+            .contains("pending transaction"));
+        recover(root.path()).unwrap();
+        assert!(reader_locks(&roots).is_ok());
+    }
+
+    #[test]
+    fn readers_sort_deduplicate_and_release_partial_scope_on_failure() {
+        let parent = tempfile::tempdir().unwrap();
+        let a = parent.path().join("a");
+        let b = parent.path().join("b");
+        fs::create_dir(&a).unwrap();
+        fs::create_dir(&b).unwrap();
+        let roots = [b.clone(), a.clone(), a.join(".")];
+        let guards = reader_locks(&roots).unwrap();
+        assert_eq!(
+            guards.iter().map(|g| g.root.clone()).collect::<Vec<_>>(),
+            vec![a.canonicalize().unwrap(), b.canonicalize().unwrap()]
+        );
+        drop(guards);
+        let writer = writer_lock(&b).unwrap();
+        assert!(reader_locks(&roots).is_err());
+        assert!(writer_lock(&a).is_ok());
+        drop(writer);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn read_only_directory_needs_no_new_coordination_file() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = tempfile::tempdir().unwrap();
+        fs::set_permissions(root.path(), fs::Permissions::from_mode(0o555)).unwrap();
+        let guards = reader_locks(&[root.path().to_path_buf()]).unwrap();
+        assert!(guards.is_empty());
+        assert!(!root.path().join(LOCK).exists());
+        fs::set_permissions(root.path(), fs::Permissions::from_mode(0o755)).unwrap();
     }
 
     #[test]

@@ -9,7 +9,7 @@ use crate::output;
 use okf_core::bundle::loader::{load_bundle, load_bundle_metadata};
 use okf_core::bundle::resolve::resolve_bundle;
 use okf_core::bundle::walk::{walk_files, walk_markdown};
-use okf_core::check::doctor::doctor;
+use okf_core::check::doctor::doctor_in_context;
 use okf_core::check::lint::{lint_bundle, meets_threshold, FailOn, LintConfig};
 use okf_core::check::stale::check_stale;
 use okf_core::check::validate::validate_bundle;
@@ -141,7 +141,14 @@ pub fn run_lint(args: &LintArgs, json: bool) -> Result<i32> {
     } else {
         bundle
     };
-    let findings = lint_bundle(&bundle, ontology.as_ref(), &config);
+    let mut findings = lint_bundle(&bundle, ontology.as_ref(), &config);
+    let context = okf_core::bundle::context::current_context(Some(&root.to_string_lossy()), None)?;
+    findings.extend(okf_core::check::lint::rules::invalid_reference::run(
+        &bundle,
+        ontology.as_ref(),
+        context.catalog.as_ref(),
+        config.invalid_reference,
+    ));
     let index_severity = lint_severity(
         effective.settings.lint.index_coverage.as_deref(),
         okf_core::check::lint::Severity::Warn,
@@ -579,8 +586,59 @@ pub fn run_doctor(args: &DoctorArgs, json_output: bool) -> Result<i32> {
         return Ok(0);
     }
     let root = resolve_bundle(args.bundle.as_deref())?;
+    let context = okf_core::bundle::context::current_context(Some(&root.to_string_lossy()), None)?;
+    let scope = super::catalog::examination_scope();
+    let mut diagnostic_roots = vec![context.primary.root.clone()];
+    if let Some(catalog) = &context.catalog {
+        for id in &scope {
+            let entry = catalog.entry(id)?;
+            if entry.available {
+                diagnostic_roots.push(entry.root.clone());
+            }
+        }
+    }
     let apply = args.fix_safe && args.yes && !args.dry_run;
-    let report = doctor(&root, &args.target, args.fix_safe, apply)?;
+    let normalize_apply = args.normalize_relative_links && args.yes && !args.dry_run;
+    if args.normalize_relative_links {
+        let normalization =
+            okf_core::mutate::normalize_links::normalize_relative_links(&root, normalize_apply)?;
+        if normalization.applied {
+            output::mark_committed();
+        }
+        for change in &normalization.changes {
+            let before = std::str::from_utf8(change.before.as_deref().unwrap_or_default())
+                .map_err(|e| OkfError::Internal(e.to_string()))?;
+            let after = std::str::from_utf8(change.after.as_deref().unwrap_or_default())
+                .map_err(|e| OkfError::Internal(e.to_string()))?;
+            let diff = crate::structured::preview_diff(&change.path, before, after);
+            let links = normalization
+                .links
+                .iter()
+                .filter(|link| link.path == change.path)
+                .map(|link| json!({"from": link.from, "to": link.to}))
+                .collect::<Vec<_>>();
+            if json_output {
+                output::print_line(&json!({"kind":"doctor-normalization", "path":change.path,
+                    "diff":diff, "applied":normalization.applied, "links":links}))?;
+            } else {
+                output::print_text_line(format_args!("{diff}"))?;
+            }
+        }
+        if !normalize_apply && !json_output {
+            eprintln!("relative-link normalization was dry-run only; pass --normalize-relative-links --yes to apply");
+        }
+    }
+    // Normalization releases its writer lock before this independent diagnostic pass.
+    // Safe repair owns the primary writer lock; scoped dependencies remain readers.
+    let _diagnostic_guards = if args.normalize_relative_links || args.fix_safe {
+        if args.fix_safe {
+            diagnostic_roots.retain(|path| path != &context.primary.root);
+        }
+        okf_core::mutate::transaction::reader_locks(&diagnostic_roots)?
+    } else {
+        Vec::new() // ordinary doctor already has whole-command reader guards
+    };
+    let report = doctor_in_context(&context, &scope, &args.target, args.fix_safe, apply)?;
     if json_output {
         for finding in &report.findings {
             output::print_line(&json!({
@@ -604,7 +662,7 @@ pub fn run_doctor(args: &DoctorArgs, json_output: bool) -> Result<i32> {
             "files_inspected": report.files_inspected,
             "concepts_inspected": report.concepts_inspected,
             "findings": report.findings.len(),
-            "applied": apply,
+            "applied": apply || normalize_apply,
         }))?;
     } else {
         for finding in &report.findings {
@@ -646,43 +704,48 @@ pub fn lint_severity(
     }
 }
 pub fn lint_config(settings: &okf_core::bundle::settings::BundleSettings) -> Result<LintConfig> {
-    let mut config = LintConfig::default();
-    config.broken_link = lint_severity(
-        settings.lint.broken_link.as_deref(),
-        okf_core::check::lint::Severity::Error,
-    )?;
-    config.frontmatter_order = lint_severity(
-        settings.lint.frontmatter_order.as_deref(),
-        okf_core::check::lint::Severity::Warn,
-    )?;
-    config.missing_title = lint_severity(
-        settings.lint.missing_title.as_deref(),
-        okf_core::check::lint::Severity::Warn,
-    )?;
-    config.missing_description = lint_severity(
-        settings.lint.missing_description.as_deref(),
-        okf_core::check::lint::Severity::Info,
-    )?;
-    config.orphan = lint_severity(
-        settings.lint.orphan.as_deref(),
-        okf_core::check::lint::Severity::Info,
-    )?;
-    config.ontology_violation = lint_severity(
-        settings.lint.ontology_violation.as_deref(),
-        okf_core::check::lint::Severity::Warn,
-    )?;
-    config.spec_v02 = lint_severity(
-        settings.lint.spec_v02.as_deref(),
-        okf_core::check::lint::Severity::Warn,
-    )?;
-    config.source_missing = lint_severity(
-        settings.lint.source_missing.as_deref(),
-        okf_core::check::lint::Severity::Error,
-    )?;
-    config.source_unrecorded = lint_severity(
-        settings.lint.source_unrecorded.as_deref(),
-        okf_core::check::lint::Severity::Warn,
-    )?;
-    config.finding_budget = settings.lint.finding_budget.unwrap_or(1000);
+    let config = LintConfig {
+        invalid_reference: lint_severity(
+            settings.lint.invalid_reference.as_deref(),
+            okf_core::check::lint::Severity::Warn,
+        )?,
+        broken_link: lint_severity(
+            settings.lint.broken_link.as_deref(),
+            okf_core::check::lint::Severity::Error,
+        )?,
+        frontmatter_order: lint_severity(
+            settings.lint.frontmatter_order.as_deref(),
+            okf_core::check::lint::Severity::Warn,
+        )?,
+        missing_title: lint_severity(
+            settings.lint.missing_title.as_deref(),
+            okf_core::check::lint::Severity::Warn,
+        )?,
+        missing_description: lint_severity(
+            settings.lint.missing_description.as_deref(),
+            okf_core::check::lint::Severity::Info,
+        )?,
+        orphan: lint_severity(
+            settings.lint.orphan.as_deref(),
+            okf_core::check::lint::Severity::Info,
+        )?,
+        ontology_violation: lint_severity(
+            settings.lint.ontology_violation.as_deref(),
+            okf_core::check::lint::Severity::Warn,
+        )?,
+        spec_v02: lint_severity(
+            settings.lint.spec_v02.as_deref(),
+            okf_core::check::lint::Severity::Warn,
+        )?,
+        source_missing: lint_severity(
+            settings.lint.source_missing.as_deref(),
+            okf_core::check::lint::Severity::Error,
+        )?,
+        source_unrecorded: lint_severity(
+            settings.lint.source_unrecorded.as_deref(),
+            okf_core::check::lint::Severity::Warn,
+        )?,
+        finding_budget: settings.lint.finding_budget.unwrap_or(1000),
+    };
     Ok(config)
 }

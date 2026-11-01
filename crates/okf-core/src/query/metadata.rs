@@ -10,6 +10,11 @@ use std::collections::BTreeMap;
 #[derive(Debug, Clone)]
 pub enum Operator {
     Eq(Value),
+    Ne(Value),
+    Exists,
+    Absent,
+    IsNull,
+    IsNotNull,
     In(Vec<Value>),
     NotIn(Vec<Value>),
 }
@@ -18,12 +23,74 @@ pub struct Condition {
     pub selector: Selector,
     pub operator: Operator,
     pub source: String,
+    alternatives: Vec<Condition>,
 }
 fn scalar(v: &Value) -> bool {
     matches!(v, Value::String(_) | Value::Bool(_) | Value::Number(_))
 }
+/// Split only top-level OR: quoted selectors and JSON operands are opaque.
+/// No parentheses or implicit precedence; repeated CLI filters supply conjunction.
+fn split_disjunction(raw: &str) -> Result<Vec<&str>> {
+    let mut quoted = false;
+    let mut escaped = false;
+    let mut depth = 0usize;
+    let mut start = 0;
+    let mut clauses = Vec::new();
+    for (i, c) in raw.char_indices() {
+        if quoted {
+            if c == '"' && !escaped {
+                quoted = false;
+            }
+            escaped = c == '\\' && !escaped;
+            continue;
+        }
+        match c {
+            '"' => quoted = true,
+            '[' | '{' => depth += 1,
+            ']' | '}' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+        if i >= start && depth == 0 && raw[i..].starts_with(" OR ") {
+            clauses.push(raw[start..i].trim());
+            start = i + 4;
+        }
+    }
+    clauses.push(raw[start..].trim());
+    if clauses.len() > 64 || clauses.iter().any(|clause| clause.is_empty()) {
+        return Err(OkfError::Usage(
+            "facet filter requires 1..64 nonempty OR predicates".into(),
+        ));
+    }
+    Ok(clauses)
+}
 impl Condition {
     pub fn parse(raw: &str) -> Result<Self> {
+        let clauses = split_disjunction(raw)?;
+        let mut condition = Self::parse_predicate(clauses[0])?;
+        condition.alternatives = clauses[1..]
+            .iter()
+            .map(|clause| Self::parse_predicate(clause))
+            .collect::<Result<_>>()?;
+        condition.source = raw.into();
+        Ok(condition)
+    }
+    fn parse_predicate(raw: &str) -> Result<Self> {
+        let raw = raw.trim();
+        for (suffix, operator) in [
+            (" is not null", Operator::IsNotNull),
+            (" is null", Operator::IsNull),
+            (" exists", Operator::Exists),
+            (" absent", Operator::Absent),
+        ] {
+            if let Some(selector) = raw.strip_suffix(suffix) {
+                return Ok(Self {
+                    selector: Selector::parse(selector.trim())?,
+                    operator,
+                    source: raw.into(),
+                    alternatives: Vec::new(),
+                });
+            }
+        }
         // Operators occur after a complete selector; bracket strings may contain operator text.
         let mut quoted = false;
         let mut escaped = false;
@@ -41,6 +108,10 @@ impl Condition {
                     split = Some((i, 4, "in"));
                     break;
                 }
+                if raw[i..].starts_with("!=") {
+                    split = Some((i, 2, "!="));
+                    break;
+                }
                 if c == '=' {
                     split = Some((i, 1, "="));
                     break;
@@ -52,17 +123,21 @@ impl Condition {
                 escaped = false
             }
         }
-        let (at,n,op)=split.ok_or_else(||OkfError::Usage(format!("invalid facet filter {raw:?}: expected selector=JSON-scalar or selector [not] in [scalars]")))?;
+        let (at,n,op)=split.ok_or_else(||OkfError::Usage(format!("invalid facet filter {raw:?}: expected selector =/!= JSON-scalar, selector [not] in [scalars], selector exists/absent, or selector is [not] null")))?;
         let selector = Selector::parse(raw[..at].trim())?;
         let operand: Value = serde_json::from_str(raw[at + n..].trim())
             .map_err(|e| OkfError::Usage(format!("invalid filter operand: {e}")))?;
-        let operator = if op == "=" {
+        let operator = if op == "=" || op == "!=" {
             if !scalar(&operand) {
                 return Err(OkfError::Usage(
                     "equality requires nonnull JSON scalar".into(),
                 ));
             }
-            Operator::Eq(operand)
+            if op == "=" {
+                Operator::Eq(operand)
+            } else {
+                Operator::Ne(operand)
+            }
         } else {
             let values = operand
                 .as_array()
@@ -83,11 +158,32 @@ impl Condition {
             selector,
             operator,
             source: raw.into(),
+            alternatives: Vec::new(),
         })
     }
     pub fn matches(&self, concept: &Concept) -> Result<bool> {
+        // Evaluate all branches so OR does not conceal incompatible typed operands.
+        let mut matched = self.matches_predicate(concept)?;
+        for alternative in &self.alternatives {
+            matched |= alternative.matches_predicate(concept)?;
+        }
+        Ok(matched)
+    }
+    fn matches_predicate(&self, concept: &Concept) -> Result<bool> {
         let root = serde_yaml::to_value(&concept.frontmatter.map).unwrap_or_default();
         let selected = self.selector.select(&root);
+        let present = !selected.leaves.is_empty() || selected.empty_lists > 0;
+        match self.operator {
+            Operator::Exists => return Ok(present),
+            Operator::Absent => return Ok(!present),
+            Operator::IsNull => return Ok(selected.leaves.iter().any(|o| o.value.is_null())),
+            Operator::IsNotNull => {
+                return Ok(
+                    selected.leaves.iter().any(|o| !o.value.is_null()) || selected.empty_lists > 0
+                )
+            }
+            _ => {}
+        }
         let mut values = Vec::new();
         let mut empty = selected.empty_lists > 0;
         for occurrence in selected.leaves {
@@ -127,8 +223,9 @@ impl Condition {
             }
         }
         let operands = match &self.operator {
-            Operator::Eq(v) => std::slice::from_ref(v),
+            Operator::Eq(v) | Operator::Ne(v) => std::slice::from_ref(v),
             Operator::In(v) | Operator::NotIn(v) => v.as_slice(),
+            _ => unreachable!("presence predicates returned above"),
         };
         // Typed comparisons never coerce strings/numbers/booleans. Heterogeneous membership operands are permitted.
         if values.iter().any(|v| {
@@ -147,7 +244,8 @@ impl Condition {
         let found = values.iter().any(|v| operands.contains(v));
         Ok(match self.operator {
             Operator::Eq(_) | Operator::In(_) => found,
-            Operator::NotIn(_) => !found,
+            Operator::NotIn(_) | Operator::Ne(_) => !found,
+            _ => unreachable!("presence predicates returned above"),
         })
     }
 }

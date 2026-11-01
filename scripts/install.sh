@@ -2,11 +2,11 @@
 # Standalone installer: no Rust, Python, GitHub CLI, or existing okf required.
 set -eu
 fail() { echo "okf installer: $*" >&2; exit 1; }
-usage() { echo 'Usage: sh install.sh VERSION [INSTALL_DIRECTORY]'; echo 'Example: sh install.sh 0.6.0 "$HOME/.local/bin"'; }
+usage() { echo 'Usage: sh install.sh VERSION [INSTALL_DIRECTORY]'; echo 'Example: sh install.sh 0.6.1 "$HOME/.local/bin"'; }
 [ "${1:-}" != '--help' ] || { usage; exit 0; }
 [ "$#" -ge 1 ] && [ "$#" -le 2 ] || { usage >&2; exit 2; }
 version=${1#v}
-printf '%s\n' "$version" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' || fail 'Use a stable version such as 0.6.0.'
+printf '%s\n' "$version" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' || fail 'Use a stable version such as 0.6.1.'
 case "$version" in
   0.6.*)
     echo 'BREAKING CHANGE: OKF CLI/plugin 0.6 adds portable manifests, bundle profiles, guidance records, and managed Git dependencies. Install matching CLI/plugin versions and review https://github.com/briareus-io/okf/blob/v0.6.0/knowledge/reference/migrations/0.6.0.md before installing.' >&2

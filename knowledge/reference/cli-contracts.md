@@ -11,7 +11,7 @@ sources:
 ---
 # CLI globals and record contracts
 
-> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.6.0, OKF spec 0.2). Do not hand-edit; regenerate instead.
+> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.6.1, OKF spec 0.2). Do not hand-edit; regenerate instead.
 
 See the [command index](../commands/index.md) for individual arguments and [command contracts](command-contracts.md) for shared behavior. Skills carry focused generated references with their workflows.
 
@@ -117,6 +117,14 @@ Authored concept metadata remains open. These computed records describe scope, i
     "files": "integer",
     "publication": "journaled-per-file"
   },
+  "concept": {
+    "discriminator": "no kind field is added; unprojected concept metadata",
+    "frontmatter_conflicts": "optional object preserving authored values whose names collide with computed fields, including authored id",
+    "id": "computed suffix-free bundle-relative concept path",
+    "identity_projection": "--project '$id' selects computed identity; --project id selects authored frontmatter id",
+    "trust_tier": "unverified|machine-confirmed|human-reviewed",
+    "verification_current": "boolean|null; latest valid verification compared with generated.at (legacy timestamp fallback); null when either timestamp is unavailable"
+  },
   "concept-identity": {
     "bundle": "string",
     "id": "string",
@@ -134,6 +142,12 @@ Authored concept metadata remains open. These computed records describe scope, i
     "examined": "integer",
     "omitted": "integer",
     "schema_version": 1
+  },
+  "doctor-normalization": {
+    "applied": "boolean",
+    "diff": "string",
+    "links": "array<{from:string,to:string}>",
+    "path": "path"
   },
   "drift": {
     "concept": "string",

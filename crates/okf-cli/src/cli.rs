@@ -349,7 +349,7 @@ pub struct SearchArgs {
     /// Filter by a frontmatter field, `key=value` (repeatable; AND).
     #[arg(long = "field")]
     pub field: Vec<String>,
-    /// Typed nested selector condition (repeatable; AND).
+    /// Typed selector condition: =, !=, [not] in, exists, absent, is [not] null; join with OR (repeatable; AND).
     #[arg(long)]
     pub facet_filter: Vec<String>,
     /// Emit JSON facets over all matches, before pagination.
@@ -677,17 +677,18 @@ pub struct DiffArgs {
 }
 
 #[derive(Debug, Args)]
+#[command(group(clap::ArgGroup::new("doctor_repairs").args(["fix_safe", "normalize_relative_links"]).multiple(true)))]
 pub struct DoctorArgs {
     #[arg(long, requires = "migrate_config")]
     pub default_bundle_id: Option<String>,
     /// Plan legacy TOML migration from this exact configuration file.
-    #[arg(long, conflicts_with_all=["migration_apply", "fix_safe"])]
+    #[arg(long, conflicts_with_all=["migration_apply", "fix_safe", "normalize_relative_links"])]
     pub migrate_config: Option<String>,
     /// Save a migration plan to this path.
     #[arg(long, requires = "migrate_config")]
     pub migration_plan: Option<String>,
     /// Explicitly apply a saved configuration migration plan.
-    #[arg(long, conflicts_with_all=["migrate_config", "fix_safe"])]
+    #[arg(long, conflicts_with_all=["migrate_config", "fix_safe", "normalize_relative_links"])]
     pub migration_apply: Option<String>,
     /// Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory).
     pub bundle: Option<String>,
@@ -697,11 +698,14 @@ pub struct DoctorArgs {
     /// Enable the allow-listed safe repair set.
     #[arg(long = "fix-safe")]
     pub fix_safe: bool,
-    /// Show safe repairs without writing (the default without --yes).
+    /// Explicitly normalize bare body links to their current document-relative targets; preview unless --yes.
+    #[arg(long)]
+    pub normalize_relative_links: bool,
+    /// Show requested repairs without writing (the default without --yes).
     #[arg(long)]
     pub dry_run: bool,
-    /// Confirm applying --fix-safe changes non-interactively.
-    #[arg(long, requires = "fix_safe")]
+    /// Confirm applying --fix-safe or --normalize-relative-links changes non-interactively.
+    #[arg(long, requires = "doctor_repairs")]
     pub yes: bool,
 }
 
@@ -1097,6 +1101,7 @@ pub fn supports_scope(name: &str) -> bool {
             | "resolve"
             | "affected"
             | "lint"
+            | "doctor"
             | "search"
             | "list"
             | "artifact resolve"

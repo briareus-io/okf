@@ -85,6 +85,18 @@ fn schema_advertises_profile_and_migration_payloads_and_effects() {
         command("catalog sync")["effects"]["network_access"]["when"]["check"],
         false
     );
+    assert_eq!(command("doctor")["capabilities"]["scope"], true);
+    assert_eq!(command("list")["effects"]["authored_bundle_writes"], false);
+    assert_eq!(
+        command("list")["effects"]["coordination_metadata_writes"],
+        true
+    );
+    assert_eq!(
+        command("list")["effects"]["temporary_staging_writes"],
+        false
+    );
+    assert!(schema[0]["output_records"]["concept"]["frontmatter_conflicts"].is_string());
+    assert!(schema[0]["output_records"]["concept"]["verification_current"].is_string());
 }
 
 #[test]

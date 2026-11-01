@@ -48,7 +48,7 @@ Primary query filters and presets remain separate from expansion filtering.
 | `--sort <value>` | string | no | Result order: deterministic relevance (default) or concept id (default: `relevance`) |
 | `--limit <value>` | int | no | Return at most this many results after all filters and sorting |
 | `--field <value>` | list<string> | no | Filter by a frontmatter field, `key=value` (repeatable; AND) |
-| `--facet-filter <value>` | list<string> | no | Typed nested selector condition (repeatable; AND) |
+| `--facet-filter <value>` | list<string> | no | Typed selector condition: =, !=, [not] in, exists, absent, is [not] null; join with OR (repeatable; AND) |
 | `--facets` | bool | no | Emit JSON facets over all matches, before pagination (default: `false`) |
 | `--facet <value>` | list<string> | no | Facet selector (repeatable); does not bypass high cardinality guard |
 | `--offset <value>` | int | no | Start page at this nonnegative offset; requires a positive limit |
@@ -70,4 +70,4 @@ Output stream: `concept,concept-identity,scope,projection,query-summary,facet,fa
 
 Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
 
-JSON records contain frontmatter and computed lifecycle/trust metadata, not bodies. Aggregate field occurrence counts only after checking scan completeness and output warnings. The default scan budget is 1,000 eligible documents across scope; --limit bounds output, not scan work. For exhaustive inventory use a sufficient --scan-limit or deliberate --full-scan, and aggregate metadata locally rather than loading all records into context. Each offset invocation rescans; an incomplete scan has no authoritative continuation.
+JSON records contain frontmatter and computed lifecycle/trust metadata, not bodies. Aggregate field occurrence counts only after checking scan completeness and output warnings. The default scan budget is 1,000 eligible documents across scope; --limit bounds output, not scan work. For exhaustive inventory use a sufficient --scan-limit or deliberate --full-scan, and aggregate metadata locally rather than loading all records into context. Each offset invocation rescans; an incomplete scan has no authoritative continuation. Unprojected `id` is the computed path and `frontmatter_conflicts.id` preserves an authored ID; `--project '$id' --project id` selects these separately in projection records. Machine consumers can pass `--guidance off` or configure `guidance.display.json: off`; require both supported operation envelopes and successful process exit, not just a valid trailer when present.

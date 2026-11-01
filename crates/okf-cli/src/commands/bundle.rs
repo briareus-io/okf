@@ -176,7 +176,7 @@ fn context_one(
                     serde_json::from_value::<okf_core::bundle::settings::PrimaryQueryPreset>(raw)
                         .map_err(|e| OkfError::Usage(format!("invalid primary query: {e}")))?;
                 let resolved = super::filters::resolve_primary(
-                    &root,
+                    root,
                     operation,
                     preset.as_deref(),
                     &explicit,
@@ -191,12 +191,12 @@ fn context_one(
                     )));
                 }
                 let filters = super::filters::from_json(query)?;
-                let (resolved, _, details) = super::filters::resolve(&root, operation, &filters)?;
+                let (resolved, _, details) = super::filters::resolve(root, operation, &filters)?;
                 effective_queries.push(json!({"kind":"effective-query","operation":operation,"filters":resolved,"details":details}));
             }
         }
     }
-    let mut context = manifest::context(&root, request, &command_names())?;
+    let mut context = manifest::context(root, request, &command_names())?;
     context.records.extend(effective_queries);
     let bundle = context.effective_settings.bundle.clone();
     for record in &mut context.records {

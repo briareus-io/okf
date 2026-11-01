@@ -277,6 +277,85 @@ fn edit_unset_add_remove_manage_fields_and_lists() {
 }
 
 #[test]
+fn edit_rejects_overlapping_source_additions_and_removals_without_writing() {
+    let tmp = temp_bundle();
+    let root = tmp.path();
+    let before = "---\ntype: Note\nsources:\n- resource: shared\n  kind: file\n  id: original\nverified:\n- by: process:test\n  at: 2026-01-01T00:00:00Z\n---\nBody\n";
+    write_file(root, "note.md", before);
+    for dry_run in [false, true] {
+        for kind in [None, Some(SourceKind::File)] {
+            // Both exact duplicates and replacement mappings must be rejected.
+            for id in ["original", "replacement"] {
+                let source = Source::from_value(
+                    &serde_yaml::from_str(&format!("resource: shared\nkind: file\nid: {id}\n"))
+                        .unwrap(),
+                )
+                .unwrap();
+                let result = edit::edit(
+                    root,
+                    "note",
+                    &edit::EditSpec {
+                        sets: vec![("title".into(), "must not be written".into())],
+                        add_sources: vec![source],
+                        remove_sources: vec![edit::SourceSelector {
+                            resource: "shared".into(),
+                            kind: kind.clone(),
+                        }],
+                        dry_run,
+                        ..Default::default()
+                    },
+                );
+                assert!(result.unwrap_err().to_string().contains("both added"));
+                assert_eq!(read_file(root, "note.md"), before);
+            }
+        }
+    }
+}
+
+#[test]
+fn edit_allows_source_addition_and_removal_with_different_kinds() {
+    let tmp = temp_bundle();
+    let root = tmp.path();
+    write_file(
+        root,
+        "note.md",
+        "---\ntype: Note\nsources:\n- resource: shared\n  kind: file\n---\nBody\n",
+    );
+    edit::edit(
+        root,
+        "note",
+        &edit::EditSpec {
+            add_sources: vec![Source::from_value(
+                &serde_yaml::from_str("resource: shared\nkind: url\n").unwrap(),
+            )
+            .unwrap()],
+            remove_sources: vec![edit::SourceSelector {
+                resource: "shared".into(),
+                kind: Some(SourceKind::File),
+            }],
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let concept = parse_concept(
+        ConceptId::parse("note").unwrap(),
+        &read_file(root, "note.md"),
+    )
+    .unwrap();
+    let sources = concept
+        .frontmatter
+        .get("sources")
+        .unwrap()
+        .as_sequence()
+        .unwrap();
+    assert_eq!(sources.len(), 1);
+    assert_eq!(
+        Source::from_value(&sources[0]).unwrap().kind,
+        SourceKind::Url
+    );
+}
+
+#[test]
 fn edit_removes_sources_by_resource_and_optional_kind() {
     let tmp = temp_bundle();
     let root = tmp.path();

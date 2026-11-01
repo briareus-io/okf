@@ -66,6 +66,21 @@ shared source-health definitions.
    or `okf edit <concept-id> <bundle> --patch @/tmp/changes.yaml --dry-run`. Follow the ontology
    skill's [structured authoring example](../ontology/references/structured-authoring.md); review
    replacement versus nested-edit semantics and preserve provenance.
+
+   To replace a source path or metadata, prefer one guarded `--patch` over separate remove/add
+   edits. For example, after inspecting source index 0, use
+   `[{"op":"test","path":"/sources/0/resource","value":"old.py"},{"op":"replace","path":"/sources/0/resource","value":"new.py"}]`.
+   Test the full source mapping when other metadata must also match the reviewed baseline. This
+   preserves unrelated source fields and refuses a changed target; overlapping `--add-source`
+   or `--add-source-json` and `--remove-source` selectors are rejected. Preview with `--dry-run`.
+
+   Meaningful edits remove active verification; no-op edits preserve it. Inspect `trust_tier`
+   and valid verification events before bulk curation, preserve needed history separately, and
+   report the resulting review work. Applied JSON edits include an `invalidate-verification`
+   change when records are removed. `verification_current` compares the latest valid verification
+   timestamp with `generated.at` (or the legacy `timestamp` when `generated` is absent): `null`
+   means that comparison is unavailable, including when either timestamp is missing or invalid.
+   It is not a verification-presence flag; a reviewed `trust_tier` alone does not establish currency.
 3. After checking changed sources against the final content, run `okf refresh <concept-id> <bundle>
    --fail-on skipped` if local fingerprints are in use. This applies after a substantive rewrite as
    well as after confirming unchanged content. Never refresh an unreviewed source merely to clear

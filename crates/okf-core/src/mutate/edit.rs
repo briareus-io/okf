@@ -12,6 +12,7 @@
 //! `remove_sources` removes them by resource and, optionally, kind; structured `verified`
 //! entries still belong to the dedicated `verify` writer. Every meaningful content edit invalidates
 //! prior verification by removing `verified`; the document must be reviewed again.
+//! An added source that also matches a removal selector is rejected before applying edits.
 //!
 //! **Body ops.** `--set-body`/`--append-body`/`--clear-body` rewrite the whole body;
 //! `--replace` changes matching text; section-aware set/append/remove/rename operations target
@@ -276,6 +277,13 @@ pub struct SourceSelector {
     pub kind: Option<SourceKind>,
 }
 
+impl SourceSelector {
+    fn matches(&self, source: &Source) -> bool {
+        source.resource == self.resource
+            && self.kind.as_ref().is_none_or(|kind| &source.kind == kind)
+    }
+}
+
 /// One applied change, for reporting (text summary + `--json` detail).
 #[derive(Debug, Clone, PartialEq)]
 pub enum EditChange {
@@ -415,11 +423,7 @@ fn apply_remove_source(fm: &mut Frontmatter, selector: &SourceSelector) -> Resul
                 let Some(source) = Source::from_value(value) else {
                     return true;
                 };
-                source.resource != selector.resource
-                    || selector
-                        .kind
-                        .as_ref()
-                        .is_some_and(|kind| &source.kind != kind)
+                !selector.matches(&source)
             });
             Ok(before - seq.len())
         }
@@ -438,6 +442,18 @@ pub fn edit(root: &Path, id: &str, spec: &EditSpec) -> Result<EditResult> {
     let guard = super::transaction::writer_lock(root)?;
     if spec.is_empty() {
         return Err(OkfError::Usage("edit: no operations specified".to_string()));
+    }
+    for source in &spec.add_sources {
+        if spec
+            .remove_sources
+            .iter()
+            .any(|selector| selector.matches(source))
+        {
+            return Err(OkfError::Usage(format!(
+                "edit: source {:?} is both added and selected for removal; use --patch with a test guard to replace an existing source",
+                source.resource
+            )));
+        }
     }
     let mut legacy_keys: Vec<String> = spec
         .sets

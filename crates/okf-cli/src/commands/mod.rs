@@ -12,6 +12,7 @@ pub mod filters;
 pub mod mutate;
 pub mod ontology;
 pub mod query;
+pub mod read_guard;
 pub mod render;
 pub mod schema;
 
@@ -155,6 +156,7 @@ pub fn run(mut cli: Cli) -> Result<i32> {
     } else {
         None
     };
+    let _read_guards = read_guard::acquire(&mut cli)?;
     if let Some(code) = catalog::prepare(&mut cli)? {
         return Ok(code);
     }

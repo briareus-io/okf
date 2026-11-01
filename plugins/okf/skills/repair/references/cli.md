@@ -1,6 +1,6 @@
 # okf CLI — repair command reference
 
-> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.6.0, OKF spec 0.2). Do not hand-edit; regenerate instead.
+> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.6.1, OKF spec 0.2). Do not hand-edit; regenerate instead.
 
 This focused reference contains only commands selected for the `repair` workflow. First pass the skill CLI compatibility preflight. Consult this reference when exact arguments or output shapes are needed. For a compatible CLI that rejects documented syntax, use that command's `--help` output as the runtime authority.
 
@@ -80,11 +80,25 @@ Authored concept metadata remains open. These computed records describe scope, i
     "plan_digest": "string",
     "plan_kind": "initial|update|registration-change"
   },
+  "concept": {
+    "discriminator": "no kind field is added; unprojected concept metadata",
+    "frontmatter_conflicts": "optional object preserving authored values whose names collide with computed fields, including authored id",
+    "id": "computed suffix-free bundle-relative concept path",
+    "identity_projection": "--project '$id' selects computed identity; --project id selects authored frontmatter id",
+    "trust_tier": "unverified|machine-confirmed|human-reviewed",
+    "verification_current": "boolean|null; latest valid verification compared with generated.at (legacy timestamp fallback); null when either timestamp is unavailable"
+  },
   "context-scope": {
     "complete": "boolean",
     "examined": "array<object>",
     "requested": "array<string>",
     "unavailable": "array<string>"
+  },
+  "doctor-normalization": {
+    "applied": "boolean",
+    "diff": "string",
+    "links": "array<{from:string,to:string}>",
+    "path": "path"
   },
   "effective-settings": {
     "bundle": "string",
@@ -223,7 +237,7 @@ Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--ca
 
 **Path namespaces:** a leading `/` means bundle-root-relative, not an operating-system absolute path. Other local paths resolve against the declaring concept's directory when `--from` is supplied, otherwise the bundle root. Keep `--from` on the subsequent read too. JSON uses `artifact_kind` (concept, artifact, reserved, support, external, scope, missing, or blocked), `path`, `exists`, `size`, and `message`. Missing/blocked resolution exits 1. A scope descriptor is provenance, not a missing file.
 
-**Repository sources:** with repo `/work/app`, bundle `/work/app/knowledge`, and declaring concept `notes/service`, `/references/spec.txt` resolves to `/work/app/knowledge/references/spec.txt`. A `kind=git-path` or `git-commit` source `src/service.rs` is instead fingerprinted from the Git worktree root as `/work/app/src/service.rs`; the artifact resolver does not reinterpret paths by source kind. File/line-range/markdown-heading fingerprints use bundle-relative paths. Record the actual source location and convention; do not assume fingerprint and artifact paths coincide. Inspect external repository evidence with normal source tools within existing read authorization. Do not rewrite provenance, bypass containment, or mirror files merely to make artifact resolution succeed.
+**Repository sources:** with repo `/work/app`, bundle `/work/app/knowledge`, and declaring concept `notes/service`, `/references/spec.txt` resolves to `/work/app/knowledge/references/spec.txt`. A `kind=git-path` or `git-commit` source `src/service.rs` is instead fingerprinted from the Git worktree root as `/work/app/src/service.rs`; the artifact resolver does not reinterpret paths by source kind. File/line-range/markdown-heading sources use bundle-root-relative paths in fingerprinting, doctor, and graph resolution; kind-less provenance and body links remain document-relative. Generic artifact commands cannot infer a source kind from the resource string: omit `--from` for a typed bundle-root source path. Correct typed source paths that previously relied on graph's document-relative interpretation. Ordinary cross-bundle paths and logical references require a registered target in explicit examination scope. Record the actual source location and convention; do not assume fingerprint and artifact paths coincide. Inspect external repository evidence with normal source tools within existing read authorization. Do not rewrite provenance, bypass containment, or mirror files merely to make artifact resolution succeed.
 
 ### `okf artifact show`
 
@@ -242,7 +256,7 @@ Output stream: `artifact-content`.
 
 Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
 
-For document-relative paths, pass the same `--from` used during resolution. JSON includes `text`, `binary`, `truncated`, `size`, `sha256`, and `path`. Binary files provide metadata only. Inspect `truncated` before treating a read as complete; human output alone does not expose this flag. Use bounded line windows and a sufficient byte budget for the needed range; do not infer absence from a truncated result. Use `show` for concepts and this command for opaque or reserved files.
+For document-relative paths, pass the same `--from` used during resolution. For bundle-root-relative file/line-range/markdown-heading source resources, omit `--from`; this generic reader does not infer the source kind. JSON includes `text`, `binary`, `truncated`, `size`, `sha256`, and `path`. Binary files provide metadata only. Inspect `truncated` before treating a read as complete; human output alone does not expose this flag. Use bounded line windows and a sufficient byte budget for the needed range; do not infer absence from a truncated result. Use `show` for concepts and this command for opaque or reserved files.
 
 Local artifact reads remain inside the resolved target bundle and requested examination scope. For an HTTP(S) URL, `--fetch` requires a network-enabled build and authorization covering that source. A user request to inspect a named source can supply that authorization; no separate OKF policy file is specified by this command. If unavailable, use an authorized external retrieval tool or report the evidence gap. Do not send ambient credentials. Reading computation, executor, or attester code never authorizes execution.
 
@@ -390,7 +404,7 @@ Output stream: `concept,projection`.
 
 Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
 
-Without `--json`, show includes the serialized frontmatter and full Markdown body. Plain `show --json` returns metadata only: frontmatter plus `id`, `trust_tier`, `effective_status`, `effective_generated_at`, `latest_verified_at`, and `verification_current`. It does not include the body. `--outline --json` returns `headings` with `line`, `level`, and `text`; `--lines START:END --json` returns `start`, actual `end`, and `lines` containing `line` and `text`. Line numbers refer to the serialized document, including frontmatter, excluding the three-line display header. `show -n` (or `--numbered`) prints the full document with these numbers and no header; its JSON uses the same line-range record. `show --body` prints only raw Markdown; with `--json` it returns a body record containing `id` and `body`. An outline or selected slice does not establish complete document-review coverage.
+Without `--json`, show includes the serialized frontmatter and full Markdown body. Plain `show --json` returns metadata only: frontmatter plus `id`, `trust_tier`, `effective_status`, `effective_generated_at`, `latest_verified_at`, and `verification_current`. It does not include the body. `--outline --json` returns `headings` with `line`, `level`, and `text`; `--lines START:END --json` returns `start`, actual `end`, and `lines` containing `line` and `text`. Line numbers refer to the serialized document, including frontmatter, excluding the three-line display header. `show -n` (or `--numbered`) prints the full document with these numbers and no header; its JSON uses the same line-range record. `show --body` prints only raw Markdown; with `--json` it returns a body record containing `id` and `body`. An outline or selected slice does not establish complete document-review coverage. Unprojected `id` is the computed path; an authored frontmatter `id` is preserved in `frontmatter_conflicts.id`. `verification_current` compares a valid latest verification timestamp with the effective generation timestamp; null means the comparison is unavailable, not necessarily that the concept has never been reviewed.
 
 ## check
 
@@ -421,12 +435,17 @@ Diagnose compatibility and safely repair an existing bundle for OKF v0.2.
 | `<bundle>` | positional | no | Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory) |
 | `--target <value>` | string | no | Target OKF version (default: `0.2`) |
 | `--fix-safe` | bool | no | Enable the allow-listed safe repair set (default: `false`) |
-| `--dry-run` | bool | no | Show safe repairs without writing (the default without --yes) (default: `false`) |
-| `--yes` | bool | no | Confirm applying --fix-safe changes non-interactively (default: `false`) |
+| `--normalize-relative-links` | bool | no | Explicitly normalize bare body links to their current document-relative targets; preview unless --yes (default: `false`) |
+| `--dry-run` | bool | no | Show requested repairs without writing (the default without --yes) (default: `false`) |
+| `--yes` | bool | no | Confirm applying --fix-safe or --normalize-relative-links changes non-interactively (default: `false`) |
 
-Output stream: `doctor-finding,doctor-summary,migration-plan,migration-applied`.
+Output stream: `doctor-finding,doctor-summary,doctor-normalization,migration-plan,migration-applied`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--scope-bundle`.
+
+Inspect migration findings without changing files by default. Catalog-aware source checks require explicit `--scope-bundle` or `--catalog-scope` for other registered bundles. File, line-range, and markdown-heading source paths use the bundle root, consistently with fingerprinting and graph resolution; kind-less provenance and body links use document-relative paths. A leading slash in a typed file source retains filesystem-absolute semantics, unlike a leading slash in a Markdown link. Correct typed sources that previously relied on graph resolution treating them as document-relative.
+
+`--normalize-relative-links` explicitly chooses current document-relative semantics for bare body links and previews exact mappings and diffs; add `--yes` to publish, while `--dry-run` always previews. It does not infer original author intent and is separate from `--fix-safe`. Only checked existing local targets are normalized; missing, blocked, and unrecognized or ambiguous destination syntax remain for review. Destination-only rewrites preserve frontmatter, source entries, labels, titles, and query/fragment suffixes. Normalization is published before any requested safe repairs, in a separate transaction; the two are not one atomic operation. Review completion evidence if later checks or repairs fail.
 
 ### `okf lint` · _conditionally mutates_
 
@@ -442,7 +461,7 @@ Output stream: `finding,scope,fix`.
 
 Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--scope-bundle`.
 
-For sources with a fingerprint kind, `source-unrecorded` warns when no baseline exists. `source-missing` errors when file, line-range, or markdown-heading sources cannot be fingerprinted, even without a baseline. Lint does not fetch URLs or inspect Git sources. Configure `source_unrecorded: off` (or `info`, `warn`, `error`; default `warn`) under `settings.lint` in `okf-bundle.yaml`. Legacy TOML bundle settings remain compatibility input. Disabling this rule leaves `source-missing` and `stale` checks active. All lint settings accept `off`, `info`, `warn`, or `error`. Defaults: `broken_link` and `source_missing` are `error`; `missing_title`, `spec_v02` (finding rule `okf-v02`), `ontology_violation`, `source_unrecorded`, and `index_coverage` are `warn`; `missing_description` and `orphan` are `info`. Omitted settings keep these defaults. `off` suppresses the selected lint rule only; validation and stale checks remain independent. `index_exclude` controls index coverage exclusions and `finding_budget` limits ontology findings (positive, default 1,000 per concept). Use `--fail-on warn` to fail on warnings as well as errors.
+For sources with a fingerprint kind, `source-unrecorded` warns when no baseline exists. `source-missing` errors when file, line-range, or markdown-heading sources cannot be fingerprinted, even without a baseline. Lint does not fetch URLs or inspect Git sources. Configure `source_unrecorded: off` (or `info`, `warn`, `error`; default `warn`) under `settings.lint` in `okf-bundle.yaml`. Legacy TOML bundle settings remain compatibility input. Disabling this rule leaves `source-missing` and `stale` checks active. All lint settings accept `off`, `info`, `warn`, or `error`. Defaults: `broken_link` and `source_missing` are `error`; `missing_title`, `spec_v02` (finding rule `okf-v02`), `ontology_violation`, `source_unrecorded`, `invalid_reference`, and `index_coverage` are `warn`; `missing_description` and `orphan` are `info`. Omitted settings keep these defaults. `off` suppresses the selected lint rule only; validation and stale checks remain independent. `index_exclude` controls index coverage exclusions and `finding_budget` limits ontology findings (positive, default 1,000 per concept). Use `--fail-on warn` to fail on warnings as well as errors.
 
 ### `okf validate`
 

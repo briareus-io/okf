@@ -182,6 +182,62 @@ fn snapshot(root: &Path) -> Result<BTreeMap<PathBuf, Vec<u8>>> {
     Ok(out)
 }
 
+/// Reuse parsed documents only when their captured bytes are exactly unchanged.
+/// The cache lives for one preparation and never substitutes for the apply baseline.
+fn snapshot_bundle(
+    root: &Path,
+    files: &BTreeMap<PathBuf, Vec<u8>>,
+    previous: Option<(&BTreeMap<PathBuf, Vec<u8>>, crate::bundle::loader::Bundle)>,
+) -> Result<crate::bundle::loader::Bundle> {
+    let mut concepts = Vec::new();
+    let mut failures = Vec::new();
+    let (old_files, mut old_concepts) = match previous {
+        Some((files, bundle)) => (
+            Some(files),
+            bundle
+                .concepts
+                .into_iter()
+                .map(|concept| (concept.id.0.clone(), concept))
+                .collect::<BTreeMap<_, _>>(),
+        ),
+        None => (None, BTreeMap::new()),
+    };
+    for (path, bytes) in files {
+        if crate::bundle::walk::is_support_path(path)
+            || path.extension().and_then(|extension| extension.to_str()) != Some("md")
+            || matches!(
+                path.file_name().and_then(|name| name.to_str()),
+                Some("index.md" | "log.md")
+            )
+        {
+            continue;
+        }
+        let relative = path.to_string_lossy();
+        let id = ConceptId::from_relative(relative.strip_suffix(".md").unwrap());
+        if old_files.is_some_and(|files| files.get(path) == Some(bytes)) {
+            if let Some(concept) = old_concepts.remove(&id.0) {
+                concepts.push(concept);
+                continue;
+            }
+        }
+        let text = std::str::from_utf8(bytes)
+            .map_err(|e| OkfError::Io(format!("{}: {e}", root.join(path).display())))?;
+        match crate::parse::parse_concept_file(id, text, &root.join(path)) {
+            Ok(concept) => concepts.push(concept),
+            Err(OkfError::Yaml(message)) => failures.push(message),
+            Err(error) => return Err(error),
+        }
+    }
+    if !failures.is_empty() {
+        return Err(OkfError::yaml_files(failures));
+    }
+    concepts.sort_by(|a, b| a.id.0.cmp(&b.id.0));
+    Ok(crate::bundle::loader::Bundle {
+        root: root.to_path_buf(),
+        concepts,
+    })
+}
+
 fn digest(files: &BTreeMap<PathBuf, Vec<u8>>, interpretation: &str) -> String {
     let mut hash = Sha256::new();
     hash.update(interpretation.as_bytes());
@@ -255,14 +311,16 @@ fn write_document(root: &Path, path: &str, content: &str, replace: bool) -> Resu
     }
     if replace {
         let old = super::edit::load_concept(root, &id)?;
-        let mut spec = super::edit::EditSpec::default();
-        spec.unsets = old
-            .frontmatter
-            .map
-            .keys()
-            .filter(|k| !concept.frontmatter.map.contains_key(*k) && k.as_str() != "verified")
-            .cloned()
-            .collect();
+        let mut spec = super::edit::EditSpec {
+            unsets: old
+                .frontmatter
+                .map
+                .keys()
+                .filter(|k| !concept.frontmatter.map.contains_key(*k) && k.as_str() != "verified")
+                .cloned()
+                .collect(),
+            ..Default::default()
+        };
         spec.structured.sets = concept.frontmatter.map.into_iter().collect();
         spec.set_body = Some(concept.body);
         super::edit::edit(root, &id.0, &spec)?;
@@ -357,10 +415,11 @@ fn registered_reference(
 /// Missing local references include authored concept links and structural navigation.
 fn missing(
     root: &Path,
+    files: &BTreeMap<PathBuf, Vec<u8>>,
+    bundle: &crate::bundle::loader::Bundle,
     ontology: Option<&crate::ontology::schema::Ontology>,
     context: &crate::bundle::context::Context,
 ) -> Result<BTreeSet<String>> {
-    let bundle = crate::bundle::loader::load_bundle(root)?;
     let resolver = crate::query::artifact::ArtifactResolver::new(root);
     let mut out = BTreeSet::new();
     let mut check = |id: &str, raw: &str, bundle_relative: bool| {
@@ -376,10 +435,19 @@ fn missing(
         {
             return;
         }
-        if resolved.kind == crate::query::artifact::ArtifactKind::Missing && !bundle_relative {
+        if !bundle_relative
+            && (resolved.kind == crate::query::artifact::ArtifactKind::Missing
+                || (resolved.kind == crate::query::artifact::ArtifactKind::Blocked
+                    && resolved.message.as_deref() == Some("resolved resource is not a file")))
+        {
             let target = crate::model::link::resolve_link(&ConceptId::from_relative(id), raw);
             if bundle.get(&target.0).is_some() {
-                return;
+                // A sibling directory must not shadow a known suffix-free concept ID.
+                // Re-resolve the actual Markdown path to retain containment checks.
+                let document = resolver.resolve(None, &format!("{}.md", target.0));
+                if document.kind == crate::query::artifact::ArtifactKind::Concept {
+                    return;
+                }
             }
         }
         if matches!(
@@ -466,16 +534,19 @@ fn missing(
             }
         }
     }
-    for path in crate::bundle::walk::walk_markdown(root)? {
-        if !matches!(
-            path.file_name().and_then(|s| s.to_str()),
-            Some("index.md" | "log.md")
-        ) {
+    for (path, bytes) in files {
+        if crate::bundle::walk::is_support_path(path)
+            || !matches!(
+                path.file_name().and_then(|s| s.to_str()),
+                Some("index.md" | "log.md")
+            )
+        {
             continue;
         }
-        let text = std::fs::read_to_string(root.join(&path))?;
+        let text = std::str::from_utf8(bytes)
+            .map_err(|e| OkfError::Io(format!("{}: {e}", root.join(path).display())))?;
         let id = format!("/{}", path.to_string_lossy().trim_end_matches(".md"));
-        for event in pulldown_cmark::Parser::new(&text) {
+        for event in pulldown_cmark::Parser::new(text) {
             if let pulldown_cmark::Event::Start(
                 pulldown_cmark::Tag::Link { dest_url, .. }
                 | pulldown_cmark::Tag::Image { dest_url, .. },
@@ -546,13 +617,17 @@ pub fn prepare(root: &Path, set: &ChangeSet) -> Result<Plan> {
     let workspace = Workspace::new()?;
     let _staging_evidence = transaction::suppress_publication_evidence();
     let stage = &workspace.0;
+    let mut directories = BTreeSet::new();
     for (path, content) in &before {
         let target = stage.join(path);
-        std::fs::create_dir_all(target.parent().unwrap())?;
+        if directories.insert(target.parent().unwrap().to_path_buf()) {
+            std::fs::create_dir_all(target.parent().unwrap())?;
+        }
         std::fs::write(target, content)?;
     }
     let context = crate::bundle::context::current_context(Some(&root.to_string_lossy()), None)?;
-    let previous_missing = missing(stage, ontology.as_ref(), &context)?;
+    let before_bundle = snapshot_bundle(stage, &before, None)?;
+    let previous_missing = missing(stage, &before, &before_bundle, ontology.as_ref(), &context)?;
     let mut allowed_removed = BTreeSet::new();
     let stage_gate = transaction::suppress_ontology_gate();
     for op in &set.operations {
@@ -625,7 +700,18 @@ pub fn prepare(root: &Path, set: &ChangeSet) -> Result<Plan> {
         }
     }
     drop(stage_gate);
-    let report = crate::check::validate::validate_bundle(stage)?;
+    let after = snapshot(stage)?;
+    // This is the same physical/core-profile boundary as validate_bundle. Validate
+    // captured bytes so conformance and publication use one final-state image.
+    let report = crate::check::validate::ValidateReport {
+        violations: after
+            .iter()
+            .filter(|(path, _)| path.extension().and_then(|ext| ext.to_str()) == Some("md"))
+            .flat_map(|(path, bytes)| {
+                crate::check::validate::validate_document_bytes(&path.to_string_lossy(), bytes)
+            })
+            .collect(),
+    };
     if !report.is_conformant() {
         return Err(usage(format!(
             "change set leaves nonconformant documents: {}",
@@ -637,7 +723,8 @@ pub fn prepare(root: &Path, set: &ChangeSet) -> Result<Plan> {
                 .join("; ")
         )));
     }
-    let after_missing = missing(stage, ontology.as_ref(), &context)?;
+    let after_bundle = snapshot_bundle(stage, &after, Some((&before, before_bundle)))?;
+    let after_missing = missing(stage, &after, &after_bundle, ontology.as_ref(), &context)?;
     let mut allowed_dangling = Vec::new();
     let introduced = after_missing
         .difference(&previous_missing)
@@ -661,7 +748,6 @@ pub fn prepare(root: &Path, set: &ChangeSet) -> Result<Plan> {
             introduced.join("; ")
         )));
     }
-    let after = snapshot(stage)?;
     for path in controls {
         if before.get(&path) != after.get(&path) {
             return Err(usage(format!(
@@ -674,12 +760,12 @@ pub fn prepare(root: &Path, set: &ChangeSet) -> Result<Plan> {
     let changes: Vec<_> = paths
         .into_iter()
         .filter_map(|path| {
-            let old = before.get(&path).cloned();
-            let new = after.get(&path).cloned();
-            (old != new).then_some(FileChange {
+            let old = before.get(&path);
+            let new = after.get(&path);
+            (old != new).then(|| FileChange {
                 path,
-                before: old,
-                after: new,
+                before: old.cloned(),
+                after: new.cloned(),
             })
         })
         .collect();

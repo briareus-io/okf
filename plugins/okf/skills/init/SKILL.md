@@ -42,6 +42,11 @@ concept, use `okf show <concept-id> <bundle> --outline`, then `okf show <concept
 
 ## Workflow
 
+For temporary tasks, defects, or milestones, use the [operational-bundle example](references/operational-bundle.md).
+It combines stable authored IDs, dependency references, complete inventory reads, and guarded batch
+writes without routine source fingerprints. Keep application readiness and ID-allocation policy in
+the consuming harness.
+
 1. Choose bundle boundaries from ownership, update/release cycles, and distribution needs; use
    directories within one bundle when these are shared. For multiple bundles, follow the
    [catalog setup example](references/multi-bundle.md) to create nonoverlapping roots, stable IDs,

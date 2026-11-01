@@ -301,6 +301,14 @@ pub fn normalize(path: &Path) -> PathBuf {
     result
 }
 
+/// Discover the nearest workspace catalog without merging ancestor catalogs.
+pub fn discover(start: &Path) -> Option<PathBuf> {
+    start
+        .ancestors()
+        .map(|p| p.join("okf-catalog.yaml"))
+        .find(|p| p.is_file())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -344,12 +352,4 @@ mod tests {
         std::fs::write(&overrides, "bundles: {acme.a: b}\n").unwrap();
         assert!(load_catalog(&dir.path().join("catalog.yaml"), Some(&overrides)).is_err());
     }
-}
-
-/// Discover the nearest workspace catalog without merging ancestor catalogs.
-pub fn discover(start: &Path) -> Option<PathBuf> {
-    start
-        .ancestors()
-        .map(|p| p.join("okf-catalog.yaml"))
-        .find(|p| p.is_file())
 }

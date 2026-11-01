@@ -66,11 +66,10 @@ pub fn run(command: &ChangeSetCmd, json_output: bool) -> Result<i32> {
     let count = plan.changes.len();
     let allowed_dangling = plan.allowed_dangling.clone();
     let records = plan.changes.iter().map(|c| {
-        let diff = match (c.before.as_deref(), c.after.as_deref()) {
-            (before, after) => match (std::str::from_utf8(before.unwrap_or_default()), std::str::from_utf8(after.unwrap_or_default())) {
+        let (before, after) = (c.before.as_deref(), c.after.as_deref());
+        let diff = match (std::str::from_utf8(before.unwrap_or_default()), std::str::from_utf8(after.unwrap_or_default())) {
                 (Ok(old), Ok(new)) => Some(structured::preview_diff(&c.path, old, new)),
                 _ => None,
-            }
         };
         json!({"kind":"changeset-file","path":c.path,"operation":if c.before.is_none(){"create"}else if c.after.is_none(){"remove"}else{"replace"},"before_bytes":c.before.as_ref().map(Vec::len),"after_bytes":c.after.as_ref().map(Vec::len),"diff":diff})
     }).collect::<Vec<_>>();

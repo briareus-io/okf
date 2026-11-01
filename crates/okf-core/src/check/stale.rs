@@ -645,10 +645,8 @@ mod tests {
         assert!(findings
             .iter()
             .all(|source| source.drift == DriftKind::Unavailable));
-        for index in 0..5 {
-            assert!(findings[index]
-                .message
-                .contains(&format!("sources[{index}]")));
+        for (index, finding) in findings.iter().enumerate() {
+            assert!(finding.message.contains(&format!("sources[{index}]")));
         }
         assert!(findings[0].message.contains("resource"));
         assert!(findings[3].message.contains("kind"));

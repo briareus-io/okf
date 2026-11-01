@@ -6,6 +6,7 @@ pub mod edit;
 pub mod gate;
 pub mod init;
 pub mod mv;
+pub mod normalize_links;
 pub mod refresh;
 pub mod rm;
 pub mod structured;

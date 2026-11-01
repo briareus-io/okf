@@ -1,5 +1,9 @@
 # Author nested metadata and semantic relationships
 
+For a complete Task/Defect/Milestone setup, see the
+[operational-bundle example](../../init/references/operational-bundle.md), including stable IDs,
+dependency references, complete inventory reads, and guarded batches.
+
 Use the structured CLI inputs for modeled changes. Preserve existing uncommitted work and record
 baseline validation/lint findings. `--set` still names literal scalar keys; dots do not traverse.
 

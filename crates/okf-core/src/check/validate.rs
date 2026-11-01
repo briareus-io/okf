@@ -297,14 +297,7 @@ pub fn validate_bundle_profile(root: &Path, profile: ValidationProfile) -> Resul
         let rel = rel_path.to_string_lossy().to_string();
         let bytes =
             std::fs::read(&path).map_err(|e| OkfError::Io(format!("{}: {e}", path.display())))?;
-        match String::from_utf8(bytes) {
-            Ok(content) => violations.extend(validate_document(&rel, &content)),
-            Err(_) => violations.push(Violation {
-                file: rel.replace('\\', "/"),
-                rule: ValidateRule::InvalidUtf8,
-                message: "Markdown document is not valid UTF-8".to_string(),
-            }),
-        }
+        violations.extend(validate_document_bytes(&rel, &bytes));
     }
 
     // Deterministic ordering by file, then rule.
@@ -315,6 +308,18 @@ pub fn validate_bundle_profile(root: &Path, profile: ValidationProfile) -> Resul
     });
 
     Ok(ValidateReport { violations })
+}
+
+/// Validate captured bytes without rereading a document from the filesystem.
+pub(crate) fn validate_document_bytes(rel: &str, bytes: &[u8]) -> Vec<Violation> {
+    match std::str::from_utf8(bytes) {
+        Ok(content) => validate_document(rel, content),
+        Err(_) => vec![Violation {
+            file: rel.replace('\\', "/"),
+            rule: ValidateRule::InvalidUtf8,
+            message: "Markdown document is not valid UTF-8".to_string(),
+        }],
+    }
 }
 
 #[cfg(test)]

@@ -342,7 +342,10 @@ pub fn writes_command(command: &Command) -> bool {
         Command::Lint(a) => a.fix,
         Command::Add(a) => !a.dry_run,
         Command::Edit(a) => !a.dry_run,
-        Command::Doctor(a) => a.migration_apply.is_some() || a.fix_safe && a.yes && !a.dry_run,
+        Command::Doctor(a) => {
+            a.migration_apply.is_some()
+                || (a.fix_safe || a.normalize_relative_links) && a.yes && !a.dry_run
+        }
         Command::Catalog(a) => {
             matches!(&a.command,Some(crate::cli::CatalogCmd::Update(u)) if u.apply.is_some())
         }
@@ -531,7 +534,11 @@ pub fn prepare(cli: &mut Cli) -> Result<Option<i32>> {
     if supports_scope
         && !matches!(
             &cli.command,
-            Command::Artifact(_) | Command::Stale(_) | Command::Refresh(_) | Command::Bundle(_)
+            Command::Artifact(_)
+                | Command::Stale(_)
+                | Command::Refresh(_)
+                | Command::Bundle(_)
+                | Command::Doctor(_)
         )
         && (context.catalog.is_some() || scoped || revision)
     {
@@ -999,7 +1006,7 @@ fn run_scoped(cli: &Cli, context: &Context, graph: &CatalogGraph) -> Result<i32>
             }
             Ok(0)
         }
-        Command::Lint(a) => run_lint_scoped(a, cli.json, graph),
+        Command::Lint(a) => run_lint_scoped(a, cli.json, context, graph),
         _ => Err(OkfError::Internal("unsupported scoped dispatch".into())),
     }
 }
@@ -1012,6 +1019,7 @@ fn xml(s: &str) -> String {
 fn run_lint_scoped(
     args: &crate::cli::LintArgs,
     json_output: bool,
+    context: &Context,
     graph: &CatalogGraph,
 ) -> Result<i32> {
     use okf_core::check::lint::{lint_bundle, meets_threshold, FailOn, Finding, Severity};
@@ -1088,6 +1096,12 @@ fn run_lint_scoped(
             ..config
         };
         let mut findings = lint_bundle(&bundle, None, &document_config);
+        findings.extend(okf_core::check::lint::rules::invalid_reference::run(
+            &bundle,
+            ontology.as_ref(),
+            context.catalog.as_ref(),
+            config.invalid_reference,
+        ));
         // Ordering uses the bundle's ontology; reference validation below uses catalog identity.
         let local_graph = okf_core::graph::build::build_graph(&bundle, None);
         findings.extend(okf_core::check::lint::rules::frontmatter_order::run(

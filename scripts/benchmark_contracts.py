@@ -63,12 +63,22 @@ def main():
             root = workspace / f"bundle-{size}"
             root.mkdir()
             fixture(root, size)
+            changeset = workspace / f"changeset-{size}.json"
+            changeset.write_text(json.dumps({
+                "version": 1,
+                "operations": [{
+                    "op": "create", "path": "planned-note.md",
+                    "frontmatter": {"type": "Note", "title": "Planned note"},
+                    "body": "A single-create preparation benchmark.\n",
+                }],
+            }), encoding="utf-8")
             workloads = {
                 "bounded-search": ["search", str(root), "--text", "contract", "--limit", "10", "--json"],
                 "full-inventory": ["list", str(root), "--full-scan", "--json"],
                 "projected-read": ["show", "note-0", str(root), "--project", "$id", "--json"],
                 "shared-source-stale": ["stale", str(root), "--json"],
                 "single-edit-preview": ["edit", "note-0", str(root), "--set", "title=Revised", "--dry-run", "--json"],
+                "single-create-changeset-plan": ["changeset", "plan", str(root), "--from", f"@{changeset}", "--json"],
             }
             for name, arguments in workloads.items():
                 first = run(binary, arguments, workspace)

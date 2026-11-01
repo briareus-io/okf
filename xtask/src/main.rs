@@ -60,7 +60,7 @@ fn main() {
         }
         Some("install") => {
             eprintln!(
-                "OKF CLI/plugin 0.6 adds manifest context and managed dependencies. Review releases/0.6.0.md and knowledge/reference/migrations/0.6.0.md before installing."
+                "OKF CLI/plugin 0.6.1 corrects source paths and coordinates readers with publication. Review releases/0.6.1.md and knowledge/reference/migrations/0.6.0.md before installing."
             );
             if local_signing::enabled() {
                 let install_root = local_signing::install_root(&root);
@@ -566,11 +566,19 @@ fn command_guidance(name: &str) -> &'static str {
             `remove` with an exact bundle-relative file `path`; `put-artifact` with `path`, text `content`, and optional `replace: true`. \
             Splits and merges combine creates, explicit retarget mappings, and removal; no semantic mapping is inferred. \
             Operations run on an isolated copy; the final bundle must be conformant and introduce no dangling supported local references. \
+            Ordering matters: editing a link to `/old.md` before moving `/old` to `/new` lets the move rewrite it; \
+            writing that old link after the move introduces a dangling reference and is rejected. Prefer final target paths when practical. \
             Checks cover local Markdown/artifact links and file, line-range, and markdown-heading sources; Git, URL, and producer-specific sources are not checked. \
             Existing unrelated broken references may remain. Concept replacement/edit invalidates verification; content cannot supply verification. \
             Plan and `apply --dry-run` print all file diffs plus a base digest without publishing authored bundle content; coordination state may be created. \
             Use `apply --expect <base-digest>` to guard a reviewed baseline, with the same reviewed change document. \
-            Publication is journaled and atomic per file, not an atomic snapshot for concurrent readers. \
+            Apply without `--expect` already prepares, validates, and rechecks its publication baseline in one invocation; \
+            it cannot guard an application decision made before that invocation. \
+            Publication is journaled and atomic per file. Ordinary working-tree CLI reads hold shared publication guards \
+            through payload delivery and refuse an active publisher or pending recovery journal; arbitrary filesystem readers \
+            can still see intermediate files. Separate CLI calls are not one snapshot, and external edits bypass the guards. \
+            Managed immutable snapshots need no coordination writes; a read-only root without an existing lock is readable \
+            without a coordination guarantee against privileged or external writers. \
             Cooperating CLI writers refuse a pending transaction. Cross-bundle writes and configuration changes are unsupported. \
             On interrupted publication use `changeset recover`; do not remove the journal manually.",
         "changeset recover" => "Roll back an interrupted uncommitted publication, or finish cleanup of a committed one. \
@@ -593,13 +601,20 @@ fn command_guidance(name: &str) -> &'static str {
             `show -n` (or `--numbered`) prints the full document with these numbers and no header; \
             its JSON uses the same line-range record. `show --body` prints only raw Markdown; \
             with `--json` it returns a body record containing `id` and `body`. An outline or selected slice \
-            does not establish complete document-review coverage.",
+            does not establish complete document-review coverage. Unprojected `id` is the computed path; \
+            an authored frontmatter `id` is preserved in `frontmatter_conflicts.id`. \
+            `verification_current` compares a valid latest verification timestamp with the effective generation timestamp; \
+            null means the comparison is unavailable, not necessarily that the concept has never been reviewed.",
         "list" => "JSON records contain frontmatter and computed lifecycle/trust metadata, not bodies. \
             Aggregate field occurrence counts only after checking scan completeness and output warnings. \
             The default scan budget is 1,000 eligible documents across scope; --limit bounds output, \
             not scan work. For exhaustive inventory use a sufficient --scan-limit or deliberate \
             --full-scan, and aggregate metadata locally rather than loading all records into context. \
-            Each offset invocation rescans; an incomplete scan has no authoritative continuation.",
+            Each offset invocation rescans; an incomplete scan has no authoritative continuation. \
+            Unprojected `id` is the computed path and `frontmatter_conflicts.id` preserves an authored ID; \
+            `--project '$id' --project id` selects these separately in projection records. \
+            Machine consumers can pass `--guidance off` or configure `guidance.display.json: off`; \
+            require both supported operation envelopes and successful process exit, not just a valid trailer when present.",
         "search" => "The positional argument is the bundle, never query text. Text requires `--text`; \
             structured filters work without it. No filters means inventory. Text-search JSON \
             adds `search.score` and bounded `search.matches` to metadata records, not full bodies. \
@@ -632,12 +647,25 @@ fn command_guidance(name: &str) -> &'static str {
             Disabling this rule leaves `source-missing` and `stale` checks active. \
             All lint settings accept `off`, `info`, `warn`, or `error`. Defaults: `broken_link` \
             and `source_missing` are `error`; `missing_title`, `spec_v02` (finding rule `okf-v02`), \
-            `ontology_violation`, `source_unrecorded`, and `index_coverage` are `warn`; \
+            `ontology_violation`, `source_unrecorded`, `invalid_reference`, and `index_coverage` are `warn`; \
             `missing_description` and `orphan` are `info`. Omitted settings keep these defaults. \
             `off` suppresses the selected lint rule only; validation and stale checks remain independent. \
             `index_exclude` controls index coverage exclusions and `finding_budget` limits ontology \
             findings (positive, default 1,000 per concept). \
             Use `--fail-on warn` to fail on warnings as well as errors.",
+        "doctor" => "Inspect migration findings without changing files by default. Catalog-aware source checks require \
+            explicit `--scope-bundle` or `--catalog-scope` for other registered bundles. File, line-range, and \
+            markdown-heading source paths use the bundle root, consistently with fingerprinting and graph resolution; \
+            kind-less provenance and body links use document-relative paths. A leading slash in a typed file source \
+            retains filesystem-absolute semantics, unlike a leading slash in a Markdown link. Correct typed sources \
+            that previously relied on graph resolution treating them as document-relative.\n\n\
+            `--normalize-relative-links` explicitly chooses current document-relative semantics for bare body links \
+            and previews exact mappings and diffs; add `--yes` to publish, while `--dry-run` always previews. \
+            It does not infer original author intent and is separate from `--fix-safe`. Only checked existing local \
+            targets are normalized; missing, blocked, and unrecognized or ambiguous destination syntax remain for review. \
+            Destination-only rewrites preserve frontmatter, source entries, labels, titles, and query/fragment suffixes. \
+            Normalization is published before any requested safe repairs, in a separate transaction; the two are not \
+            one atomic operation. Review completion evidence if later checks or repairs fail.",
         "artifact resolve" => "**Path namespaces:** a leading `/` means bundle-root-relative, not an \
             operating-system absolute path. Other local paths resolve against the declaring concept's \
             directory when `--from` is supplied, otherwise the bundle root. Keep `--from` on the \
@@ -649,12 +677,18 @@ fn command_guidance(name: &str) -> &'static str {
             `/work/app/knowledge/references/spec.txt`. A `kind=git-path` or `git-commit` source \
             `src/service.rs` is instead fingerprinted from the Git worktree root as \
             `/work/app/src/service.rs`; the artifact resolver does not reinterpret paths by source kind. \
-            File/line-range/markdown-heading fingerprints use bundle-relative paths. Record the \
+            File/line-range/markdown-heading sources use bundle-root-relative paths in fingerprinting, doctor, \
+            and graph resolution; kind-less provenance and body links remain document-relative. Generic artifact \
+            commands cannot infer a source kind from the resource string: omit `--from` for a typed bundle-root \
+            source path. Correct typed source paths that previously relied on graph's document-relative interpretation. \
+            Ordinary cross-bundle paths and logical references require a registered target in explicit examination scope. Record the \
             actual source location and convention; do not assume fingerprint and artifact paths coincide. \
             Inspect external repository evidence with normal source tools within existing read \
             authorization. Do not rewrite provenance, bypass containment, or mirror files merely \
             to make artifact resolution succeed.",
         "artifact show" => "For document-relative paths, pass the same `--from` used during resolution. \
+            For bundle-root-relative file/line-range/markdown-heading source resources, omit `--from`; \
+            this generic reader does not infer the source kind. \
             JSON includes `text`, `binary`, `truncated`, `size`, `sha256`, and `path`. Binary files \
             provide metadata only. Inspect `truncated` before treating a read as complete; human \
             output alone does not expose this flag. Use bounded line windows and a sufficient byte \
