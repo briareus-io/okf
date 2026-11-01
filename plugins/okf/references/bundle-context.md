@@ -93,6 +93,11 @@ a change. CLI writes place `type` first, then ontology-declared fields and refer
 fields. This is a presentation convention, not conformance. Read-only tasks do not normalize files;
 normalization may change YAML comments/presentation, so review the diff when formatting is requested.
 
+Normal concept writes use readable YAML by default, regardless of JSON or YAML input; they
+preserve parsed values rather than authored quoting or comments. Markdown wrapping is opt-in and
+runs only through explicit formatting. For requested presentation changes, read the
+[formatting guide](formatting.md); formatting is separate from semantic edits and conformance repair.
+
 Configure lint in `settings.lint` of `okf-bundle.yaml`; legacy TOML remains compatibility input.
 Consult the generated command reference for severities and defaults. Do not suppress findings or
 refresh fingerprints merely to make checks pass. Preserve curated index prose unless its replacement

@@ -12,20 +12,19 @@ inspect workflow context and artifacts, and trace source impact.
 
 ## Install
 
-**CLI/plugin 0.6.1 upgrade:** read the [migration guide](knowledge/reference/migrations/0.6.0.md)
+**CLI/plugin 0.6.2 upgrade:** read the [migration guide](knowledge/reference/migrations/0.6.0.md)
 before updating an existing installation or automation. Install CLI and plugin together;
-the 0.6.1 plugin supports stable CLI versions `>=0.6.1, <0.7.0`. The document format remains OKF v0.2.
-Read the [0.6.1 release notes](releases/0.6.1.md) for source-path corrections, reader coordination,
-and automation changes before upgrading from 0.6.0.
+the 0.6.2 plugin supports stable CLI versions `>=0.6.2, <0.7.0`. The document format remains OKF v0.2.
+Read the [0.6.2 release notes](releases/0.6.2.md) for changes and upgrade guidance.
 
 For a published release, download its matching installer, inspect it, then run it. If this
 checkout's version has not been published yet, use the source-build instructions below:
 
 ```sh
 curl --fail --location --proto '=https' --proto-redir '=https' \
-  https://github.com/briareus-io/okf/releases/download/v0.6.1/install.sh -o install.sh
+  https://github.com/briareus-io/okf/releases/download/v0.6.2/install.sh -o install.sh
 # Review install.sh before running it.
-sh install.sh 0.6.1
+sh install.sh 0.6.2
 export PATH="$HOME/.local/bin:$PATH"
 okf version
 ```

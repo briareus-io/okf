@@ -60,7 +60,7 @@ fn main() {
         }
         Some("install") => {
             eprintln!(
-                "OKF CLI/plugin 0.6.1 corrects source paths and coordinates readers with publication. Review releases/0.6.1.md and knowledge/reference/migrations/0.6.0.md before installing."
+                "OKF CLI/plugin 0.6.2 adds configurable presentation formatting. Review releases/0.6.2.md and knowledge/reference/migrations/0.6.0.md before installing."
             );
             if local_signing::enabled() {
                 let install_root = local_signing::install_root(&root);
@@ -180,6 +180,10 @@ fn run_docs(check: bool) {
             .is_some_and(|args| args.iter().any(|arg| arg["name"] == "bundle"));
         let invocation_note = if cmd["name"] == "schema" {
             "This command is always NDJSON; `--json` is accepted but unnecessary."
+        } else if cmd["name"] == "format" {
+            "Global `--json` requests NDJSON. `--bundle <path>` selects a directory; the optional \
+             positional is a concept ID, not a bundle path. `--bundle-id` selects a catalog identity. \
+             Without either selector, normal bundle-context resolution applies."
         } else if has_bundle {
             "Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; \
              `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured \
@@ -434,8 +438,8 @@ fn cli_reference(header: &Value, commands: &[&Value], skill: Option<&str>) -> St
     }
     out.push_str(
         "Commands with a human form accept global `--json` for NDJSON; `schema` is always \
-         NDJSON. Bundle-aware commands take an optional trailing `bundle` path or a separate \
-         `--bundle-id` selector. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured \
+         NDJSON. Most bundle-aware commands take an optional trailing `bundle` path or a separate \
+         `--bundle-id` selector; `format` uses `--bundle <path>` and an optional concept ID positional. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured \
          default, sole catalog entry, then uncataloged cwd. Catalog registration alone does not \
          extend examination scope. Meta commands have no bundle, and `source-scan` takes an \
          explicit arbitrary directory.\n\n\
@@ -736,6 +740,14 @@ fn command_guidance(name: &str) -> &'static str {
             parameters with repeatable `--parameter name:type:required` (omit `:required` when optional). \
             Choose `--computation <resource>` or `--inline-computation @file`, then add reviewed \
             executor/receipt/attester fields as needed. These describe a contract and authorize no execution.",
+        "format" => "Presentation-only formatting preserves verification and generation metadata. \
+            `--check` does not publish and exits 1 for formatting drift; `--dry-run` previews the diff. \
+            Omit the concept ID for the whole selected bundle. YAML uses `settings.formatting.yaml` \
+            (readable by default, target width 100; legacy retains the previous serializer). Markdown \
+            wrapping is disabled by default and runs only here when `settings.formatting.markdown.wrap_prose` \
+            is true. A width of 0 disables wrapping. Unsupported Markdown structures remain unchanged. \
+            YAML comments and scalar styles may normalize; file fingerprints may change. \
+            Formatting is not conformance repair, fingerprint refresh, or claim verification.",
         "edit" => "`--set` keeps literal scalar keys; a dotted key is not traversal. `--set-yaml` \
             replaces a complete named value. `--set-path` parses YAML and creates intermediate maps \
             for object-only paths; `--unset-path` removes an object property. `--patch` accepts an \

@@ -100,6 +100,8 @@ fn output_record_contracts() -> Value {
         "baseline": {"schema_version":1,"bundle":"path","base_digest":"opaque string"},
         "drift": {"schema_version":2,"concept":"string","expired":"timestamp|null","sources":"array<{resource:string,kind:string,state:drifted|unrecorded|missing|unavailable|unsupported,code:string,message:string}>"},
         "diagnostic-summary": {"schema_version":1,"examined":"integer","displayed":"integer","omitted":"integer"},
+        "format-file": {"schema_version":1,"path":"path","applied":"boolean","diff":"string|null"},
+        "format-summary": {"schema_version":1,"files":"integer","applied":"boolean"},
         "changeset-file": {"path":"path","operation":"create|replace|remove","before_bytes":"integer|null","after_bytes":"integer|null","diff":"string|null"},
         "changeset-summary": {"base_digest":"string","files":"integer","applied":"boolean","publication":"journaled-per-file"},
         "changeset-recovery": {"paths":"array<path>"},
@@ -177,6 +179,7 @@ fn command_record(full_name: &str, cmd: &ClapCommand) -> Value {
 
     let mutates_when = match full_name {
         "lint" => json!({"fix": true}),
+        "format" => json!({"check": false, "dry-run": false}),
         "doctor" => {
             json!({"any_of":[{"fix-safe": true, "yes": true, "dry-run": false},{"normalize-relative-links":true,"yes":true,"dry-run":false},{"migration-apply":"present"}]})
         }
@@ -494,6 +497,7 @@ fn meta(name: &str) -> (&'static str, bool, &'static str) {
         "init" => ("mutate", true, "change"),
         "add" => ("mutate", true, "change"),
         "edit" => ("mutate", true, "change"),
+        "format" => ("mutate", true, "format-file,format-summary"),
         "mv" => ("mutate", true, "change"),
         "rm" => ("mutate", true, "change"),
         "verify" => ("mutate", true, "change"),

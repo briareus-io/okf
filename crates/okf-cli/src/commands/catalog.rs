@@ -53,6 +53,7 @@ pub fn bundle_slot(command: &mut Command) -> Option<&mut Option<String>> {
         Command::Rm(a) => &mut a.bundle,
         Command::Verify(a) => &mut a.bundle,
         Command::Refresh(a) => &mut a.bundle,
+        Command::Format(a) => &mut a.bundle,
         Command::Docs(a) => &mut a.bundle,
         Command::Changeset(cmd) => match cmd {
             ChangeSetCmd::Plan(a) | ChangeSetCmd::Apply(a) => &mut a.bundle,
@@ -342,6 +343,7 @@ pub fn writes_command(command: &Command) -> bool {
         Command::Lint(a) => a.fix,
         Command::Add(a) => !a.dry_run,
         Command::Edit(a) => !a.dry_run,
+        Command::Format(a) => !a.dry_run && !a.check,
         Command::Doctor(a) => {
             a.migration_apply.is_some()
                 || (a.fix_safe || a.normalize_relative_links) && a.yes && !a.dry_run

@@ -327,3 +327,16 @@ remain available as described in the [selector reference](selectors.md) and [que
 Unknown types and metadata, optional families, and broken links remain consumable under
 OKF v0.2. A local write policy, unsupported operation, or unavailable resource is reported
 separately from `validate` conformance.
+
+## Format presentation explicitly
+
+[format](../commands/format.md) selects a bundle with `--bundle <path>` (or `--bundle-id`), and
+its optional positional selects one concept. Omit that ID for bundle-wide formatting. `--dry-run`
+previews without publishing; `--check` reports drift with exit 1, or 0 when clean. Ordinary
+invocations publish through the guarded transaction path. YAML policy also applies to normal
+concept writes; configured Markdown wrapping runs only through explicit formatting.
+
+Formatting preserves parsed frontmatter values, verification, and generation metadata. It may
+normalize YAML comments and scalar presentation, and raw file fingerprints may change. This is
+separate from meaningful editing, conformance repair, source refresh, and review. There is no
+formatting lint rule; use `format --check` when a presentation gate is wanted.

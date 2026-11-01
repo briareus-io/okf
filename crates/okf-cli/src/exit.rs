@@ -174,6 +174,7 @@ pub(crate) fn command_name(command: &crate::cli::Command) -> String {
         Command::Init(_) => "init".into(),
         Command::Add(_) => "add".into(),
         Command::Edit(_) => "edit".into(),
+        Command::Format(_) => "format".into(),
         Command::Mv(_) => "mv".into(),
         Command::Rm(_) => "rm".into(),
         Command::Verify(_) => "verify".into(),

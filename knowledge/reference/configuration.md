@@ -128,3 +128,26 @@ Omitted settings retain these defaults:
 remain independent. `index_exclude` accepts glob patterns for index coverage exclusions.
 `finding_budget` is a positive ontology finding limit (default 1,000 per concept).
 `--fail-on` controls only the exit threshold; it does not change finding severities.
+
+## Presentation formatting
+
+The bundle manifest accepts `settings.formatting.yaml` and `settings.formatting.markdown`:
+
+```yaml
+settings:
+  formatting:
+    yaml: {style: readable, line_width: 100}
+    markdown: {wrap_prose: false, line_width: 100}
+```
+
+These are the defaults. YAML style accepts `readable` or `legacy`; `line_width: 0` disables
+wrapping for either format. Width is a target, so indivisible tokens can exceed it. Markdown
+wrapping is opt-in and occurs only through explicit [format](../commands/format.md) invocations;
+normal concept edits only apply the YAML policy. See that command for the supported Markdown
+subset, value-preservation checks, and check/preview/apply examples.
+
+Legacy TOML accepts `[bundle_settings.default.formatting.yaml]` and
+`[bundle_settings.default.formatting.markdown]`, or the corresponding named-bundle tables.
+Existing conflict rules apply when TOML and manifest settings coexist. `bundle context` exposes
+effective formatting settings and their origins. Formatting policy is a local tool setting,
+not an additional OKF conformance requirement or a mandate to reformat every bundle.

@@ -48,6 +48,7 @@ Start with a task below. Each page owns its exact arguments and supported global
 - [okf changeset apply](changeset-apply.md) — Publish validated coordinated record changes with guarded inputs and recoverable per-file writes.
 - [okf changeset recover](changeset-recover.md) — Recover interrupted publication without overwriting intervening edits.
 - [okf edit](edit.md) — Losslessly edits a concept's frontmatter or body and invalidates its prior verification.
+- [okf format](format.md) — Format YAML and opt-in Markdown prose without changing values or verification.
 - [okf init](init.md) — Creates a new empty OKF bundle: base structure plus a starter ontology.yaml.
 - [okf mv](mv.md) — Moves or renames a concept and rewrites every inbound link.
 - [okf ontology add](ontology-add.md) — Defines a new concept type with its typed fields and reference rules, written to ontology.yaml through the lossless ontology editor.

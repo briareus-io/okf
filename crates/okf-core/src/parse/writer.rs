@@ -30,6 +30,14 @@ pub fn write_concept_with_ontology(
     concept: &Concept,
     ontology: Option<&crate::ontology::schema::Ontology>,
 ) -> Result<String> {
+    write_concept_formatted(concept, ontology, &Default::default())
+}
+
+pub fn write_concept_formatted(
+    concept: &Concept,
+    ontology: Option<&crate::ontology::schema::Ontology>,
+    formatting: &crate::bundle::settings::YamlFormatting,
+) -> Result<String> {
     use crate::ontology::field_types::resolve_field;
     use indexmap::IndexMap;
     let mut map = concept.frontmatter.map.clone();
@@ -59,7 +67,7 @@ pub fn write_concept_with_ontology(
         }
     }
     ordered.extend(map);
-    let fm = super::yaml::serialize_frontmatter(&ordered)?;
+    let fm = super::yaml::serialize_formatted(&ordered, formatting)?;
     Ok(assemble(&fm, &concept.body))
 }
 
@@ -96,7 +104,7 @@ pub fn needs_order_normalization(
     ontology: Option<&crate::ontology::schema::Ontology>,
 ) -> Result<bool> {
     let authored = assemble(
-        &super::yaml::serialize_frontmatter(&concept.frontmatter.map)?,
+        &super::yaml::serialize_formatted(&concept.frontmatter.map, &Default::default())?,
         &concept.body,
     );
     Ok(authored != write_concept_with_ontology(concept, ontology)?)

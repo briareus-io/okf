@@ -1,10 +1,10 @@
 # okf CLI — update command reference
 
-> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.6.1, OKF spec 0.2). Do not hand-edit; regenerate instead.
+> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.6.2, OKF spec 0.2). Do not hand-edit; regenerate instead.
 
 This focused reference contains only commands selected for the `update` workflow. First pass the skill CLI compatibility preflight. Consult this reference when exact arguments or output shapes are needed. For a compatible CLI that rejects documented syntax, use that command's `--help` output as the runtime authority.
 
-Commands with a human form accept global `--json` for NDJSON; `schema` is always NDJSON. Bundle-aware commands take an optional trailing `bundle` path or a separate `--bundle-id` selector. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Catalog registration alone does not extend examination scope. Meta commands have no bundle, and `source-scan` takes an explicit arbitrary directory.
+Commands with a human form accept global `--json` for NDJSON; `schema` is always NDJSON. Most bundle-aware commands take an optional trailing `bundle` path or a separate `--bundle-id` selector; `format` uses `--bundle <path>` and an optional concept ID positional. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Catalog registration alone does not extend examination scope. Meta commands have no bundle, and `source-scan` takes an explicit arbitrary directory.
 
 Exit codes: 0 means success under the selected failure threshold, not necessarily no findings; 1 means findings or an unsuccessful resolution; 2 means usage errors; 3 means environment/I/O/YAML errors; 4 means an internal error. Inspect findings even with `--fail-on never`. NDJSON is one record per line, not a JSON array. In CLI 0.6, JSON operations begin with `operation-start` and normally end with `operation-complete`; require the terminal record and check the actual exit before accepting a complete result. A successful bounded read may still report partial examination or matching. Preview and dry-run operations do not publish authored content but may create coordination state.
 
@@ -114,6 +114,17 @@ Authored concept metadata remains open. These computed records describe scope, i
   "effective-settings": {
     "bundle": "string",
     "settings": "interpretation-settings"
+  },
+  "format-file": {
+    "applied": "boolean",
+    "diff": "string|null",
+    "path": "path",
+    "schema_version": 1
+  },
+  "format-summary": {
+    "applied": "boolean",
+    "files": "integer",
+    "schema_version": 1
   },
   "guidance": {
     "content": "full|summary",
@@ -543,6 +554,23 @@ Output stream: `change`.
 Supported global options: `--bundle-id`, `--catalog`, `--guidance`, `--json`.
 
 `--set` keeps literal scalar keys; a dotted key is not traversal. `--set-yaml` replaces a complete named value. `--set-path` parses YAML and creates intermediate maps for object-only paths; `--unset-path` removes an object property. `--patch` accepts an RFC 6902 array with concrete JSON Pointer paths, including list edits and `test` guards. Inputs accept inline YAML/JSON, `@file`, or `-`; only one stdin consumer is permitted. Duplicate/non-string keys, tags, anchors, aliases, merge keys, nonfinite numbers and multiple documents fail. `--dry-run` previews without writes. Use `--add-source-json @file` for source mappings. Do not fabricate verification. Meaningful edits remove active `verified` events and update existing `generated.at`; preserve needed historical evidence separately. Body files contain Markdown only, without frontmatter. Section flags take heading and text as separate values. `--replace OLD NEW` replaces exactly one literal body match; `--all` replaces every match and still fails if none exist. `--rename-section OLD NEW` changes a uniquely matched heading without replacing its content. Malformed YAML must be repaired before this command can load it.
+
+### `okf format` · _conditionally mutates_
+
+Format YAML and opt-in Markdown prose without changing verification.
+
+| Argument | Type | Required | Description |
+|----------|------|----------|-------------|
+| `<concept>` | positional | no | One concept ID; omit to format the entire bundle |
+| `--bundle <value>` | path | no | Bundle directory (otherwise use the current context) |
+| `--check` | bool | no | Report drift without writing; exit 1 when formatting is needed (default: `false`) |
+| `--dry-run` | bool | no | Preview the complete diff without writing (default: `false`) |
+
+Output stream: `format-file,format-summary`.
+
+Supported global options: `--bundle-id`, `--catalog`, `--guidance`, `--json`.
+
+Presentation-only formatting preserves verification and generation metadata. `--check` does not publish and exits 1 for formatting drift; `--dry-run` previews the diff. Omit the concept ID for the whole selected bundle. YAML uses `settings.formatting.yaml` (readable by default, target width 100; legacy retains the previous serializer). Markdown wrapping is disabled by default and runs only here when `settings.formatting.markdown.wrap_prose` is true. A width of 0 disables wrapping. Unsupported Markdown structures remain unchanged. YAML comments and scalar styles may normalize; file fingerprints may change. Formatting is not conformance repair, fingerprint refresh, or claim verification.
 
 ### `okf mv` · _mutates_
 

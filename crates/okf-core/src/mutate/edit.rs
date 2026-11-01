@@ -188,8 +188,12 @@ fn atomic_write_mode(path: &Path, bytes: &[u8], create_only: bool) -> Result<()>
 /// Render through the exact validation used by normal and preview writes.
 pub(crate) fn render_validated(root: &Path, concept: &Concept) -> Result<String> {
     let path = id_to_path(root, &concept.id)?;
-    let (_, ontology) = crate::bundle::settings::load_for(root)?;
-    let text = write_concept_with_ontology(concept, ontology.as_ref())?;
+    let (settings, ontology) = crate::bundle::settings::load_for(root)?;
+    let text = crate::parse::writer::write_concept_formatted(
+        concept,
+        ontology.as_ref(),
+        &settings.settings.formatting.yaml,
+    )?;
     let rel = path
         .strip_prefix(root)
         .map_err(|e| OkfError::Internal(e.to_string()))?

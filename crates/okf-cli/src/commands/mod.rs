@@ -9,6 +9,7 @@ pub mod catalog;
 pub mod changeset;
 pub mod check;
 pub mod filters;
+pub mod format;
 pub mod mutate;
 pub mod ontology;
 pub mod query;
@@ -199,6 +200,7 @@ pub fn run(mut cli: Cli) -> Result<i32> {
         Command::Init(a) => mutate::run_init(a, json),
         Command::Add(a) => mutate::run_add(a, json),
         Command::Edit(a) => mutate::run_edit(a, json),
+        Command::Format(a) => format::run(a, json),
         Command::Mv(a) => mutate::run_mv(a, json),
         Command::Rm(a) => mutate::run_rm(a, json),
         Command::Verify(a) => mutate::run_verify(a, json),

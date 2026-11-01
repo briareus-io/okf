@@ -114,3 +114,12 @@ Review affected files, effective-value conflicts, ontology path rebases, and ret
 Apply the reviewed plan with `okf doctor --migration-apply <plan.yaml>`. Ordinary doctor inspection,
 `--fix-safe`, and lint fixes do not authorize workspace-wide migration. A changed plan baseline
 requires a new review; never discard unknown settings or overwrite unrelated files to make migration pass.
+
+## Presentation-only formatting
+
+For requested quoting cleanup or prose wrapping, use the shared [formatting guide](../../references/formatting.md).
+Preview with `okf format --bundle <bundle> --dry-run`; apply within the requested scope, then use
+`okf format --bundle <bundle> --check` for drift. Use the optional concept ID to limit the change.
+Formatting retains verification and generation metadata; meaningful content edits still follow
+this skill's review workflow. Do not enable Markdown wrapping or format unrelated concepts merely
+because a source or document changed.

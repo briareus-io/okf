@@ -17,7 +17,9 @@ uses:
 - /commands/lint
 - /commands/docs
 title: okf:update skill
-description: Separately triages lifecycle expiry, standard source evidence, fingerprint drift, and content changes, then reconciles concepts without overstating refresh.
+description: >-
+  Separately triages lifecycle expiry, standard source evidence, fingerprint drift, and
+  content changes, then reconciles concepts without overstating refresh.
 sources:
 - resource: plugins/okf/skills/update/references/cli.md
   kind: git-path
@@ -52,3 +54,13 @@ Structured authoring follows the ontology skill's shared example. Use structured
 YAML/file inputs and bulk apply for dependent schemas; use concept `--set-yaml`, object paths,
 or RFC 6902 patches for frontmatter. Review dry-run and actual diffs, preserve source lineage,
 and retain meaningful-change verification consequences. Model validation does not attest claims.
+
+## Presentation-only updates
+
+For requested quoting cleanup or prose wrapping, use [format](../commands/format.md), previewing
+with `okf format --bundle knowledge --dry-run` and checking drift with
+`okf format --bundle knowledge --check`. Restrict the optional concept ID when only one document
+is in scope. Formatting retains verification and generation metadata, while meaningful rewrites
+still require review. Markdown wrapping remains opt-in; do not enable it as an incidental part
+of source reconciliation. Formatting may change raw fingerprints, so review affected citations
+before any separate refresh.

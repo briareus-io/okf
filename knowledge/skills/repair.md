@@ -12,7 +12,9 @@ uses:
 - /commands/graph
 - /commands/docs
 title: okf:repair skill
-description: Uses okf doctor to diagnose and safely repair an existing bundle for v0.2 while preserving legal extensions and stopping for semantic choices.
+description: >-
+  Uses okf doctor to diagnose and safely repair an existing bundle for v0.2 while
+  preserving legal extensions and stopping for semantic choices.
 sources:
 - resource: plugins/okf/skills/repair/references/cli.md
   kind: git-path
@@ -40,3 +42,11 @@ Structured authoring follows the ontology skill's shared example. Use structured
 YAML/file inputs and bulk apply for dependent schemas; use concept `--set-yaml`, object paths,
 or RFC 6902 patches for frontmatter. Review dry-run and actual diffs, preserve source lineage,
 and retain meaningful-change verification consequences. Model validation does not attest claims.
+
+## Formatting is separate from repair
+
+Requested presentation cleanup uses [format](../commands/format.md). Preview with
+`okf format --bundle knowledge --dry-run`; apply within the selected scope and use `--check`
+for formatting drift. Formatting preserves values and verification but does not repair malformed
+YAML, choose missing types, or establish conformance. Markdown wrapping is disabled unless
+explicitly configured. Do not add bundle-wide formatting to a repair merely to normalize style.

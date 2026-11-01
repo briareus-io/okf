@@ -1,6 +1,6 @@
 ---
 name: update
-description: Reconcile OKF concepts after source or concept changes using lifecycle, source metadata, fingerprint drift, affected analysis, and git diff. Use for documentation sync; refresh fingerprints only after review and route meaningful rewrites to re-verification.
+description: Reconcile OKF concepts after source or concept changes using lifecycle, source metadata, fingerprint drift, affected analysis, and git diff. Use for documentation sync or requested presentation formatting; refresh fingerprints only after review and route meaningful rewrites to re-verification.
 ---
 
 # Update concepts after changes
@@ -136,3 +136,12 @@ Re-run nested metadata and index-coverage lint after metadata or layout changes.
 operations do not rewrite curated indexes. Use the declared selectors to locate affected records;
 use object paths or concrete JSON Pointer patches for writes, rather than list query selectors. Review the combined repository
 diff when changes span bundles; there is no automatic cross-bundle rename transaction.
+
+## Presentation-only formatting
+
+For requested quoting cleanup or prose wrapping, use the shared [formatting guide](../../references/formatting.md).
+Preview with `okf format --bundle <bundle> --dry-run`; apply within the requested scope, then use
+`okf format --bundle <bundle> --check` for drift. Use the optional concept ID to limit the change.
+Formatting retains verification and generation metadata; meaningful content edits still follow
+this skill's review workflow. Do not enable Markdown wrapping or format unrelated concepts merely
+because a source or document changed.

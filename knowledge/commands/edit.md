@@ -3,7 +3,9 @@ type: Command
 group: mutate
 mutates: true
 title: okf edit
-description: Losslessly edits a concept's frontmatter or body and invalidates its prior verification.
+description: >-
+  Losslessly edits a concept's frontmatter or body and invalidates its prior
+  verification.
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
@@ -21,7 +23,9 @@ Losslessly edits a concept in place. Frontmatter: `--set key=value` (scalar), `-
 `--add key=value` (append a list item, idempotent), `--remove key=value` (drop list items).
 Body: `--set-body` / `--append-body` / `--clear-body`, or the section-aware `--set-section` /
 `--append-section` / `--remove-section` (heading matched by GitHub slug). Body/section text
-accepts `@file` or `-` (stdin). Unrelated keys and their values are preserved; YAML presentation may normalize.
+accepts `@file` or `-` (stdin). Unrelated keys and their values are preserved; YAML presentation follows the bundle formatting settings.
+Readable YAML is the default for both JSON and YAML input. Markdown is not automatically wrapped;
+use explicit [format](format.md) for opt-in prose wrapping or presentation-only changes.
 Every meaningful edit removes the concept's `verified` entries, so its derived trust tier returns
 to `unverified` until the revised document is reviewed and verified again.
 

@@ -101,6 +101,8 @@ pub enum Command {
     Add(AddArgs),
     /// Edit a concept losslessly and invalidate its prior verification.
     Edit(EditArgs),
+    /// Format YAML and opt-in Markdown prose without changing verification.
+    Format(FormatArgs),
     /// Move/rename a concept and rewrite every inbound link.
     Mv(MvArgs),
     /// Remove a concept; refuse if backlinks would dangle unless `--force`.
@@ -1203,4 +1205,19 @@ pub fn command_tree() -> clap::Command {
     }
     command.build();
     command
+}
+
+#[derive(Debug, Args)]
+pub struct FormatArgs {
+    /// One concept ID; omit to format the entire bundle.
+    pub concept: Option<String>,
+    /// Bundle directory (otherwise use the current context).
+    #[arg(long)]
+    pub bundle: Option<String>,
+    /// Report drift without writing; exit 1 when formatting is needed.
+    #[arg(long, conflicts_with = "dry_run")]
+    pub check: bool,
+    /// Preview the complete diff without writing.
+    #[arg(long)]
+    pub dry_run: bool,
 }

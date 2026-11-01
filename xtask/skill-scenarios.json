@@ -289,7 +289,8 @@
       "okf catalog",
       "okf edit <concept-id> <bundle> --set-path \"deadline.within=72\"",
       "okf edit <concept-id> <bundle> --patch @/tmp/changes.yaml --dry-run",
-      "okf bundle context"
+      "okf bundle context",
+      "okf format --bundle <bundle> --dry-run"
     ],
     "reference_commands": [
       "artifact resolve",
@@ -315,7 +316,8 @@
       "bundle resource list",
       "bundle resource show",
       "catalog sync",
-      "catalog update"
+      "catalog update",
+      "format"
     ],
     "prohibited_claims": [
       "refresh clears stale_after",
@@ -325,7 +327,9 @@
       "catalog registration authorizes traversal",
       "current candidate satisfies a known snapshot mismatch",
       "inverse backlink proves target consent",
-      "metadata checks establish policy compliance"
+      "metadata checks establish policy compliance",
+      "format enables Markdown wrapping automatically",
+      "format refreshes fingerprints or verifies claims"
     ],
     "mutation_boundary": "Reconcile meaning before refresh and route meaningful rewrites to re-verification.",
     "report_contains": [
@@ -511,7 +515,8 @@
       "okf edit <concept-id> <bundle> --replace \"Old phrase\" \"New phrase\"",
       "okf edit <concept-id> <bundle> --rename-section \"Old heading\" \"New heading\"",
       "okf catalog",
-      "okf bundle context"
+      "okf bundle context",
+      "okf format --bundle <bundle> --dry-run"
     ],
     "reference_commands": [
       "artifact list",
@@ -534,14 +539,17 @@
       "bundle resource list",
       "bundle resource show",
       "catalog sync",
-      "catalog update"
+      "catalog update",
+      "format"
     ],
     "prohibited_claims": [
       "doctor fixes semantic findings automatically",
       "doctor creates a backup",
       "artifact put refreshes citing concepts automatically",
       "catalog registration authorizes traversal",
-      "current candidate satisfies a known snapshot mismatch"
+      "current candidate satisfies a known snapshot mismatch",
+      "format enables Markdown wrapping automatically",
+      "format refreshes fingerprints or verifies claims"
     ],
     "mutation_boundary": "Diagnose read-only first; preserve recovery for writes, preview safe fixes, honor existing authorization, and stop affected writes for unresolved semantics.",
     "report_contains": [

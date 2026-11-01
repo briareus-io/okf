@@ -74,6 +74,8 @@ impl Default for FacetSettings {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BundleSettings {
+    #[serde(default)]
+    pub formatting: FormattingSettings,
     pub ontology: Option<String>,
     #[serde(default)]
     pub query_presets: BTreeMap<String, QueryPreset>,
@@ -640,4 +642,49 @@ pub fn merge_settings(
         }
     }
     Ok(())
+}
+
+/// Presentation policy; Markdown is only applied by explicit formatting commands.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct FormattingSettings {
+    pub yaml: YamlFormatting,
+    pub markdown: MarkdownFormatting,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum YamlStyle {
+    #[default]
+    Readable,
+    Legacy,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct YamlFormatting {
+    pub style: YamlStyle,
+    /// Target columns; zero disables wrapping.
+    pub line_width: usize,
+}
+impl Default for YamlFormatting {
+    fn default() -> Self {
+        Self {
+            style: YamlStyle::Readable,
+            line_width: 100,
+        }
+    }
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct MarkdownFormatting {
+    pub wrap_prose: bool,
+    /// Target columns; zero disables wrapping.
+    pub line_width: usize,
+}
+impl Default for MarkdownFormatting {
+    fn default() -> Self {
+        Self {
+            wrap_prose: false,
+            line_width: 100,
+        }
+    }
 }
