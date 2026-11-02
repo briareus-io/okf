@@ -28,6 +28,6 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `change`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--scope-bundle`.
+Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--scope-bundle`.
 
 The backlink guard includes curated index/log navigation, declared structured references, and standard internal resources. --force deliberately permits dangling references. For coordinated cleanup, remove references and records in one changeset.

@@ -701,12 +701,15 @@ pub fn prepare(root: &Path, set: &ChangeSet) -> Result<Plan> {
     }
     drop(stage_gate);
     let after = snapshot(stage)?;
-    // This is the same physical/core-profile boundary as validate_bundle. Validate
-    // captured bytes so conformance and publication use one final-state image.
+    // Coordinated writes use the bundle tooling profile, like concept discovery.
+    // Root support Markdown is not a concept. Keep it in the captured snapshot
+    // and reviewed baseline, but exclude it from concept conformance checks.
+    // Validate captured bytes so conformance and publication share one image.
     let report = crate::check::validate::ValidateReport {
         violations: after
             .iter()
             .filter(|(path, _)| path.extension().and_then(|ext| ext.to_str()) == Some("md"))
+            .filter(|(path, _)| !crate::bundle::walk::is_support_path(path))
             .flat_map(|(path, bytes)| {
                 crate::check::validate::validate_document_bytes(&path.to_string_lossy(), bytes)
             })

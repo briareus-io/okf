@@ -60,7 +60,7 @@ fn main() {
         }
         Some("install") => {
             eprintln!(
-                "OKF CLI/plugin 0.6.2 adds configurable presentation formatting. Review releases/0.6.2.md and knowledge/reference/migrations/0.6.0.md before installing."
+                "OKF CLI/plugin 0.6.3 adds scoped context delivery and optional freshness tokens. Review releases/0.6.3.md and knowledge/reference/migrations/0.6.0.md before installing."
             );
             if local_signing::enabled() {
                 let install_root = local_signing::install_root(&root);
@@ -550,10 +550,13 @@ fn cli_reference(header: &Value, commands: &[&Value], skill: Option<&str>) -> St
 /// observable behavior that cannot be inferred from the argument table.
 fn command_guidance(name: &str) -> &'static str {
     match name {
-        "bundle context" => "Load global task context before source access, then full applicable command guidance before acting. \
-            Context includes effective settings and origins, instruction content/completeness, and an effective digest including loaded instruction files. \
-            --all and historical context are inspection, not workflow activation. Missing required instructions block dependent agent work. \
-            Incidental guidance output does not replace pre-action loading.",
+        "bundle context" => "Batch known operations in the initial request to load global and mandatory scoped instructions together. \
+            Reference-tier rules expand with --rule; --all and historical context are inspection only. \
+            --settings-detail compact explicitly projects settings; full JSON remains the default. --stats reports delivered instruction bytes. \
+            --token emits a stateless receipt after delivery; pass it with --context (or @file) on covered commands, or check with --check-token. \
+            A stale supplied token fails before execution; tokens are optional and are not authorization or concept-content guards. \
+            Context digest version 2 covers loaded instructions and selected workflow resources as well as settings, ontology and snapshot identity. \
+            Incidental guidance never replaces pre-action loading.",
         "bundle validate" => "Validate the optional manifest's structure and supported schema without treating prose instructions as executable checks. \
             Manifest validation is distinct from core concept conformance and bundle-profile knowledge validation.",
         "bundle resource list" | "bundle resource show" => "Support files are excluded from ordinary knowledge discovery. \

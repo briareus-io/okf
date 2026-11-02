@@ -164,3 +164,87 @@ fn pending_publication_blocks_unrelated_writers_until_recovery() {
         .assert()
         .success();
 }
+
+#[test]
+fn support_markdown_uses_bundle_profile_and_remains_in_the_reviewed_baseline() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::create_dir(dir.path().join(".okf-bundle")).unwrap();
+    let support = dir.path().join(".okf-bundle/authoring.md");
+    fs::write(&support, "Plain Markdown instructions, not a concept.\n").unwrap();
+    fs::write(
+        dir.path().join("okf-bundle.yaml"),
+        "manifest_version: 1\nguidance:\n  instructions_file: .okf-bundle/authoring.md\n",
+    )
+    .unwrap();
+    let original = "---\ntype: Instruction\nstatus: stable\n---\nOriginal body.\n";
+    fs::write(dir.path().join("note.md"), original).unwrap();
+    let noop = r#"{"version":1,"operations":[{"op":"edit","concept":"/note","patch":[{"op":"test","path":"/status","value":"stable"}]}]}"#;
+    let output = okf()
+        .args(["changeset", "plan", "--from", noop, "--json"])
+        .arg(dir.path())
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let data = rows(&output);
+    let summary = data
+        .iter()
+        .find(|r| r["kind"] == "changeset-summary")
+        .unwrap();
+    assert_eq!(summary["files"], 0);
+    let digest = summary["base_digest"].as_str().unwrap();
+    okf()
+        .args(["changeset", "apply", "--from", noop, "--expect", digest])
+        .arg(dir.path())
+        .assert()
+        .success();
+    assert_eq!(
+        fs::read_to_string(dir.path().join("note.md")).unwrap(),
+        original
+    );
+    assert_eq!(
+        fs::read_to_string(&support).unwrap(),
+        "Plain Markdown instructions, not a concept.\n"
+    );
+    let edit = r#"{"version":1,"operations":[{"op":"edit","concept":"/note","body":"Updated body."},{"op":"create","path":"other.md","content":"---\ntype: Note\n---\nRelated concept.\n"}]}"#;
+    // A support-file change must still invalidate the reviewed baseline.
+    fs::write(&support, "Updated instructions.\n").unwrap();
+    okf()
+        .args(["changeset", "apply", "--from", edit, "--expect", digest])
+        .arg(dir.path())
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("digest differs"));
+    assert_eq!(
+        fs::read_to_string(dir.path().join("note.md")).unwrap(),
+        original
+    );
+    assert!(!dir.path().join("other.md").exists());
+    okf()
+        .args(["changeset", "apply", "--from", edit])
+        .arg(dir.path())
+        .assert()
+        .success();
+    assert!(fs::read_to_string(dir.path().join("note.md"))
+        .unwrap()
+        .contains("Updated body."));
+    assert!(dir.path().join("other.md").exists());
+    assert_eq!(
+        fs::read_to_string(&support).unwrap(),
+        "Updated instructions.\n"
+    );
+    // The exclusion applies only to root support files, never ordinary or nested Markdown.
+    for path in ["broken.md", "nested/.okf-bundle/broken.md"] {
+        let target = dir.path().join(path);
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        fs::write(&target, "Missing required frontmatter.\n").unwrap();
+        okf()
+            .args(["changeset", "plan", "--from", noop])
+            .arg(dir.path())
+            .assert()
+            .code(2)
+            .stderr(predicate::str::contains("nonconformant documents"));
+        fs::remove_file(target).unwrap();
+    }
+}

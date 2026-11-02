@@ -35,6 +35,6 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `change`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--scope-bundle`.
+Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--scope-bundle`.
 
 Moves rewrite inline/reference-style Markdown, self-links, declared simple/nested references, and curated index/log links within the selected bundle. File/text fingerprint sources retain bundle-root semantics; Git sources retain worktree-root semantics. Destinations must be absent. The complete write set is prevalidated and journaled for rollback. Use changeset plan/apply for coordinated moves, replacement, splits, or cleanup. Cross-bundle referrers are not rewritten.

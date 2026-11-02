@@ -133,16 +133,60 @@ context. They do not import a document, fetch a URL, or run a script.
 operation names include subcommands such as `artifact resolve`; omitted `operations` makes a rule
 bundle-wide, while an empty list is invalid.
 
-Skills load global guidance before source access and applicable command instructions before acting.
-Incidental guidance in command output cannot replace that pre-action read. JSON defaults to full
-guidance, and text output uses a short stderr notice. The effective context digest includes loaded
-instruction files, so editing a required file invalidates cached context even if the manifest is
-unchanged.
+Batch known operations in the first request: it returns global guidance and applicable mandatory
+rules together. Incidental command guidance does not replace that pre-action read. JSON context
+retains the full settings by default; `--settings-detail compact` explicitly projects relevant
+groups, retains operational defaults, and reports omissions. This presentation choice does not
+change context identity. Text output explains origins, selection, and summary omissions.
+
+## Keep guidance concise
+
+Existing rules default to `tier: mandatory`. Use `tier: reference` on optional explanatory rules,
+with a useful `description`, and expand a named rule using `--rule ID`. Reference bodies stay
+inspection-only even when expanded. Missing reference files do not block an unrelated operation;
+explicit expansion must deliver the complete body. Named workflows remain the place for procedures.
+Do not remove all modeling rules from `edit`: edits can change type, ownership, and relationships.
+Keep a short mandatory invariant and move extended examples into references.
+
+`--stats` reports delivered instruction bytes per section. `--guidance-budget N` adds an advisory
+budget on mandatory instruction bytes; it neither truncates instructions nor fails the operation.
+Omitted bodies are not read for measurement. Byte counts are not model-token estimates.
+
+Global guidance, rules and workflows accept an optional `provenance` mapping for publisher metadata,
+returned as `origin.provenance`. Publishers can move generator boilerplate there. The CLI preserves
+instruction text exactly, including authored HTML comments.
+
+## Check context freshness
+
+```sh
+okf bundle context "$demo_root/bundle" --operation show --operation edit --operation validate --token --stats --json > "$demo_root/context.ndjson"
+python3 - "$demo_root/context.ndjson" "$demo_root/context-token.json" <<'PYTOKEN'
+import json, pathlib, sys
+records = [json.loads(line) for line in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+assert records[-1]["kind"] == "operation-complete" and records[-1]["exit_code"] == 0
+pathlib.Path(sys.argv[2]).write_text(next(r["token"] for r in records if r["kind"] == "context-token"))
+PYTOKEN
+okf bundle context "$demo_root/bundle" --check-token "@$demo_root/context-token.json" --operation edit --json
+okf show notes/overview "$demo_root/bundle" --context "@$demo_root/context-token.json" --json
+```
+
+Token use is optional. When supplied, a token must be current and cover the operation, or the
+command fails before execution. Repeat `--context` for one token per explicitly examined bundle.
+The token binds resolved identity/root, snapshot, settings/ontology, loaded instruction files, and
+selected workflow resources. Context digest version 2 includes those resources. An ordinary concept
+edit does not invalidate context; changed guidance or workflow resources do. Load new context for
+new operations, workflow inputs, or examination scope. `--check-token` checks without replaying bodies.
+
+Tokens are stateless freshness receipts, not credentials or proof that instructions were followed.
+They do not bind command arguments or concept contents, and a check does not lock out later external
+changes. Existing mutation baselines, write gates, and validation still apply. `--all`, historical
+inspection, and workflows missing required inputs cannot issue execution tokens. Check both the
+process exit and terminal completion record before using a token from an output stream.
 
 ## Choose where supporting material belongs
 
-Use exactly one of `instructions` and `instructions_file` for each instruction body. A selected
-instruction file is mandatory guidance; optional workflow `resources` are supporting material to
+Use exactly one of `instructions` and `instructions_file` for each instruction body. A selected mandatory
+instruction file is required guidance; optional workflow `resources` are supporting material to
 inspect when needed. Paths are relative to the bundle root.
 
 The `.okf-bundle/` directory can also contain scripts, templates, and operational reports. Ordinary

@@ -68,15 +68,28 @@ fn materialize(root: &Path, doc: &str) {
     }
 }
 
-// These example command blocks deliberately contain plain arguments with no shell operators.
+// Examples allow double-quoted literal command paths, but no shell operators,
+// substitutions or escapes. Execute argv directly rather than invoking a shell.
 fn example_commands(doc: &str) -> Vec<Vec<&str>> {
     doc.split("```sh\n")
         .skip(1)
         .flat_map(|block| block.split_once("```").unwrap().0.lines())
         .map(|line| {
-            let words: Vec<_> = line.split_whitespace().collect();
+            assert!(!line.contains(['\'', ';', '|', '&', '\\', '$', '`']));
+            let pieces: Vec<_> = line.split('"').collect();
+            assert_eq!(pieces.len() % 2, 1, "unclosed literal argument: {line}");
+            let words: Vec<_> = pieces
+                .iter()
+                .enumerate()
+                .flat_map(|(index, piece)| {
+                    if index % 2 == 0 {
+                        piece.split_whitespace().collect::<Vec<_>>()
+                    } else {
+                        vec![*piece]
+                    }
+                })
+                .collect();
             assert_eq!(words.first(), Some(&"okf"));
-            assert!(!line.contains(['\'', '"', ';', '|', '&']));
             words[1..].to_vec()
         })
         .collect()

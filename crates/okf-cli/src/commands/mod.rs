@@ -24,6 +24,11 @@ use okf_core::error::Result;
 pub fn run(mut cli: Cli) -> Result<i32> {
     let _command_registry = okf_core::bundle::manifest::command_registry(bundle::command_names());
     let command_name = crate::exit::command_name(&cli.command);
+    if !cli.context.is_empty() && !crate::cli::supports_context(&command_name) {
+        return Err(okf_core::error::OkfError::Usage(format!(
+            "{command_name} does not accept --context"
+        )));
+    }
     if cli.catalog.is_some() && !crate::cli::supports_catalog(&command_name) {
         return Err(okf_core::error::OkfError::Usage(format!(
             "{command_name} does not accept --catalog"
@@ -158,6 +163,7 @@ pub fn run(mut cli: Cli) -> Result<i32> {
         None
     };
     let _read_guards = read_guard::acquire(&mut cli)?;
+    bundle::check_execution_context(&mut cli)?;
     if let Some(code) = catalog::prepare(&mut cli)? {
         return Ok(code);
     }

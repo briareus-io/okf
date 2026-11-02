@@ -117,6 +117,6 @@ Global `--json` requests NDJSON. `--bundle <path>` selects a directory; the opti
 
 Output stream: `format-file,format-summary`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
 
 Presentation-only formatting preserves verification and generation metadata. `--check` does not publish and exits 1 for formatting drift; `--dry-run` previews the diff. Omit the concept ID for the whole selected bundle. YAML uses `settings.formatting.yaml` (readable by default, target width 100; legacy retains the previous serializer). Markdown wrapping is disabled by default and runs only here when `settings.formatting.markdown.wrap_prose` is true. A width of 0 disables wrapping. Unsupported Markdown structures remain unchanged. YAML comments and scalar styles may normalize; file fingerprints may change. Formatting is not conformance repair, fingerprint refresh, or claim verification.

@@ -2,6 +2,7 @@
 pub mod catalog;
 pub mod config;
 pub mod context;
+pub mod context_receipt;
 pub mod loader;
 pub mod resolve;
 pub mod walk;

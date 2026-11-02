@@ -41,7 +41,7 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `doctor-finding,doctor-summary,doctor-normalization,migration-plan,migration-applied`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--scope-bundle`.
+Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--scope-bundle`.
 
 Inspect migration findings without changing files by default. Catalog-aware source checks require explicit `--scope-bundle` or `--catalog-scope` for other registered bundles. File, line-range, and markdown-heading source paths use the bundle root, consistently with fingerprinting and graph resolution; kind-less provenance and body links use document-relative paths. A leading slash in a typed file source retains filesystem-absolute semantics, unlike a leading slash in a Markdown link. Correct typed sources that previously relied on graph resolution treating them as document-relative.
 

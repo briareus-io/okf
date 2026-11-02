@@ -27,6 +27,9 @@ pub struct Cli {
     /// Incidental guidance delivery; explicit context requests always return selected instructions.
     #[arg(long, global = true, value_parser = ["full", "summary", "off"])]
     pub guidance: Option<String>,
+    /// Check a previously loaded context token before execution (repeat per scoped bundle; @file supported).
+    #[arg(long, global = true)]
+    pub context: Vec<String>,
     /// Inspect the consumer repository and its catalog/lock at this revision.
     #[arg(long, global = true, conflicts_with = "revision")]
     pub workspace_revision: Option<String>,
@@ -220,10 +223,28 @@ pub struct BundleContextArgs {
     pub bundle: Option<String>,
     #[arg(long)]
     pub operation: Vec<String>,
+    /// Expand a guidance rule for inspection, including optional reference material (repeatable).
+    #[arg(long)]
+    pub rule: Vec<String>,
     #[arg(long)]
     pub workflow: Vec<String>,
-    #[arg(long, conflicts_with_all = ["operation", "workflow"])]
+    #[arg(long, conflicts_with_all = ["operation", "workflow", "rule", "token", "check_token"])]
     pub all: bool,
+    /// Settings projection; full preserves the complete JSON contract, compact shows relevant values.
+    #[arg(long, default_value = "full", value_parser = ["full", "compact"])]
+    pub settings_detail: String,
+    /// Show delivered instruction bytes per section and totals (not estimated tokens).
+    #[arg(long)]
+    pub stats: bool,
+    /// Advisory byte budget for delivered mandatory instructions; never truncates instructions.
+    #[arg(long)]
+    pub guidance_budget: Option<usize>,
+    /// Issue a stateless context token after complete applicable instruction delivery.
+    #[arg(long)]
+    pub token: bool,
+    /// Check a token without executing an operation; optional --operation checks coverage too.
+    #[arg(long, conflicts_with_all = ["token", "workflow", "rule", "inputs", "query"])]
+    pub check_token: Option<String>,
     /// JSON input object or @file; values remain typed data.
     #[arg(long)]
     pub inputs: Option<String>,
@@ -1150,6 +1171,9 @@ pub fn supports_catalog(name: &str) -> bool {
 pub fn supports_guidance(name: &str) -> bool {
     supports_bundle(name) && !name.starts_with("catalog")
 }
+pub fn supports_context(name: &str) -> bool {
+    supports_guidance(name) && !matches!(name, "init" | "bundle context")
+}
 pub fn command_tree() -> clap::Command {
     let mut command = Cli::command();
     let globals = command
@@ -1175,6 +1199,7 @@ pub fn command_tree() -> clap::Command {
             ("bundle_revision", supports_revision(&name)),
             ("catalog", supports_catalog(&name)),
             ("guidance", supports_guidance(&name)),
+            ("context", supports_context(&name)),
             ("scope_bundle", supports_scope(&name)),
             ("catalog_scope", supports_scope(&name)),
             ("bundle_id", supports_bundle(&name)),

@@ -1,6 +1,6 @@
 # okf CLI — repair command reference
 
-> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.6.2, OKF spec 0.2). Do not hand-edit; regenerate instead.
+> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.6.3, OKF spec 0.2). Do not hand-edit; regenerate instead.
 
 This focused reference contains only commands selected for the `repair` workflow. First pass the skill CLI compatibility preflight. Consult this reference when exact arguments or output shapes are needed. For a compatible CLI that rejects documented syntax, use that command's `--help` output as the runtime authority.
 
@@ -19,6 +19,7 @@ Exit codes: 0 means success under the selected failure threshold, not necessaril
 | `--revision <value>` | string | no | Inspect a locally available Git revision; never fetches missing objects |
 | `--catalog <value>` | string | no | Select a catalog explicitly; relative paths are resolved from the invocation directory |
 | `--guidance <value>` | string | no | Incidental guidance delivery; explicit context requests always return selected instructions |
+| `--context <value>` | list<string> | no | Check a previously loaded context token before execution (repeat per scoped bundle; @file supported) |
 | `--workspace-revision <value>` | string | no | Inspect the consumer repository and its catalog/lock at this revision |
 | `--bundle-revision <value>` | list<string> | no | Inspect a registered bundle at an exact local commit, ID=COMMIT (repeatable) |
 
@@ -37,11 +38,13 @@ Authored concept metadata remains open. These computed records describe scope, i
   },
   "bundle-context": {
     "context_digest": "string",
-    "context_digest_version": 1,
+    "context_digest_version": 2,
     "effective_settings": "object",
     "manifest": "object|null",
     "selection": "object",
-    "setting_origins": "object"
+    "setting_origins": "object",
+    "settings_projection": "{detail:full|compact,omitted:array<string>}",
+    "state_digest": "string"
   },
   "bundle-edge": {
     "evidence": "string",
@@ -88,11 +91,31 @@ Authored concept metadata remains open. These computed records describe scope, i
     "trust_tier": "unverified|machine-confirmed|human-reviewed",
     "verification_current": "boolean|null; latest valid verification compared with generated.at (legacy timestamp fallback); null when either timestamp is unavailable"
   },
+  "context-check": {
+    "context_digest": "string",
+    "operations": "array<string>",
+    "root": "path",
+    "state_digest": "string",
+    "valid": "boolean"
+  },
   "context-scope": {
     "complete": "boolean",
     "examined": "array<object>",
     "requested": "array<string>",
     "unavailable": "array<string>"
+  },
+  "context-stats": {
+    "budget_exceeded": "boolean; advisory only",
+    "delivered_instruction_bytes": "integer",
+    "mandatory_budget": "integer|null",
+    "mandatory_instruction_bytes": "integer",
+    "root": "path",
+    "sections": "array<{id,kind,delivered_bytes,mandatory}>"
+  },
+  "context-token": {
+    "bundle": "string|null",
+    "root": "path",
+    "token": "string; opaque stateless receipt, not a credential"
   },
   "doctor-normalization": {
     "applied": "boolean",
@@ -118,10 +141,14 @@ Authored concept metadata remains open. These computed records describe scope, i
   "guidance": {
     "content": "full|summary",
     "context_digest": "string",
+    "expand_argv": "array<string> (summary in explicit context)",
     "id": "string",
     "instruction_role": "task-guidance|inspected",
     "instructions": "string (full only)",
-    "origin": "object"
+    "omission_reason": "string (summary)",
+    "origin": "object",
+    "selection_reason": "string (explicit context)",
+    "tier": "mandatory|reference (rules)"
   },
   "migration-applied": {
     "report": "object"
@@ -228,7 +255,7 @@ List local artifacts and concepts under a bundle directory.
 
 Output stream: `artifact`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
 
 The positional path selects a bundle root relative to the current directory. To filter within the selected bundle, use `--directory contracts/x`; printed paths remain relative to the bundle root. Use `--directory .` for the entire bundle and `--exclude-concepts` to retain only opaque artifacts and reserved files.
 
@@ -244,7 +271,7 @@ Resolve any OKF path-valued resource with document context.
 
 Output stream: `artifact-resolution`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
 
 **Path namespaces:** a leading `/` means bundle-root-relative, not an operating-system absolute path. Other local paths resolve against the declaring concept's directory when `--from` is supplied, otherwise the bundle root. Keep `--from` on the subsequent read too. JSON uses `artifact_kind` (concept, artifact, reserved, support, external, scope, missing, or blocked), `path`, `exists`, `size`, and `message`. Missing/blocked resolution exits 1. A scope descriptor is provenance, not a missing file.
 
@@ -265,7 +292,7 @@ Retrieve a bounded local text artifact; binary files return metadata only.
 
 Output stream: `artifact-content`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
 
 For document-relative paths, pass the same `--from` used during resolution. For bundle-root-relative file/line-range/markdown-heading source resources, omit `--from`; this generic reader does not infer the source kind. JSON includes `text`, `binary`, `truncated`, `size`, `sha256`, and `path`. Binary files provide metadata only. Inspect `truncated` before treating a read as complete; human output alone does not expose this flag. Use bounded line windows and a sufficient byte budget for the needed range; do not infer absence from a truncated result. Use `show` for concepts and this command for opaque or reserved files.
 
@@ -295,7 +322,7 @@ Concepts that link to a given concept.
 
 Output stream: `concept,relationship,scope,bundle-backlink,bundle-edge`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
 
 ### `okf bundle context`
 
@@ -305,16 +332,22 @@ Return effective settings and selected agent guidance without running a workflow
 |----------|------|----------|-------------|
 | `<bundle>` | positional | no | — |
 | `--operation <value>` | list<string> | no | — |
+| `--rule <value>` | list<string> | no | Expand a guidance rule for inspection, including optional reference material (repeatable) |
 | `--workflow <value>` | list<string> | no | — |
 | `--all` | bool | no |  (default: `false`) |
+| `--settings-detail <value>` | string | no | Settings projection; full preserves the complete JSON contract, compact shows relevant values (default: `full`) |
+| `--stats` | bool | no | Show delivered instruction bytes per section and totals (not estimated tokens) (default: `false`) |
+| `--guidance-budget <value>` | string | no | Advisory byte budget for delivered mandatory instructions; never truncates instructions |
+| `--token` | bool | no | Issue a stateless context token after complete applicable instruction delivery (default: `false`) |
+| `--check-token <value>` | string | no | Check a token without executing an operation; optional --operation checks coverage too |
 | `--inputs <value>` | string | no | JSON input object or @file; values remain typed data |
 | `--query <value>` | string | no | JSON query object or @file; resolve without executing the query |
 
-Output stream: `context-scope,bundle-context,guidance,workflow,effective-query`.
+Output stream: `context-scope,bundle-context,guidance,workflow,effective-query,context-stats,context-token,context-check`.
 
 Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
 
-Load global task context before source access, then full applicable command guidance before acting. Context includes effective settings and origins, instruction content/completeness, and an effective digest including loaded instruction files. --all and historical context are inspection, not workflow activation. Missing required instructions block dependent agent work. Incidental guidance output does not replace pre-action loading.
+Batch known operations in the initial request to load global and mandatory scoped instructions together. Reference-tier rules expand with --rule; --all and historical context are inspection only. --settings-detail compact explicitly projects settings; full JSON remains the default. --stats reports delivered instruction bytes. --token emits a stateless receipt after delivery; pass it with --context (or @file) on covered commands, or check with --check-token. A stale supplied token fails before execution; tokens are optional and are not authorization or concept-content guards. Context digest version 2 covers loaded instructions and selected workflow resources as well as settings, ontology and snapshot identity. Incidental guidance never replaces pre-action loading.
 
 ### `okf bundle resource list`
 
@@ -326,7 +359,7 @@ Inventory support files and the manifest without loading instruction bodies.
 
 Output stream: `bundle-resource`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
 
 Support files are excluded from ordinary knowledge discovery. Explicit inspection is bounded, preserves containment, and never executes scripts or treats support Markdown as concepts.
 
@@ -343,7 +376,7 @@ Read a bounded support file without executing it.
 
 Output stream: `bundle-resource`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
 
 Support files are excluded from ordinary knowledge discovery. Explicit inspection is bounded, preserves containment, and never executes scripts or treats support Markdown as concepts.
 
@@ -369,7 +402,7 @@ Render the link graph (or a bounded rooted neighborhood) as mermaid/dot/graphml.
 
 Output stream: `graph,scope,bundle-node,bundle-edge`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
 
 ### `okf links`
 
@@ -395,7 +428,7 @@ List the direct concept links defined by one concept.
 
 Output stream: `link,relationship,scope,bundle-edge`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
 
 ### `okf show`
 
@@ -413,7 +446,7 @@ Show one concept's content, heading outline, or selected line range.
 
 Output stream: `concept,projection`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
 
 Without `--json`, show includes the serialized frontmatter and full Markdown body. Plain `show --json` returns metadata only: frontmatter plus `id`, `trust_tier`, `effective_status`, `effective_generated_at`, `latest_verified_at`, and `verification_current`. It does not include the body. `--outline --json` returns `headings` with `line`, `level`, and `text`; `--lines START:END --json` returns `start`, actual `end`, and `lines` containing `line` and `text`. Line numbers refer to the serialized document, including frontmatter, excluding the three-line display header. `show -n` (or `--numbered`) prints the full document with these numbers and no header; its JSON uses the same line-range record. `show --body` prints only raw Markdown; with `--json` it returns a body record containing `id` and `body`. An outline or selected slice does not establish complete document-review coverage. Unprojected `id` is the computed path; an authored frontmatter `id` is preserved in `frontmatter_conflicts.id`. `verification_current` compares a valid latest verification timestamp with the effective generation timestamp; null means the comparison is unavailable, not necessarily that the concept has never been reviewed.
 
@@ -429,7 +462,7 @@ Validate the manifest and explicitly declared local resources.
 
 Output stream: `manifest-validation`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
 
 Validate the optional manifest's structure and supported schema without treating prose instructions as executable checks. Manifest validation is distinct from core concept conformance and bundle-profile knowledge validation.
 
@@ -452,7 +485,7 @@ Diagnose compatibility and safely repair an existing bundle for OKF v0.2.
 
 Output stream: `doctor-finding,doctor-summary,doctor-normalization,migration-plan,migration-applied`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--scope-bundle`.
+Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--scope-bundle`.
 
 Inspect migration findings without changing files by default. Catalog-aware source checks require explicit `--scope-bundle` or `--catalog-scope` for other registered bundles. File, line-range, and markdown-heading source paths use the bundle root, consistently with fingerprinting and graph resolution; kind-less provenance and body links use document-relative paths. A leading slash in a typed file source retains filesystem-absolute semantics, unlike a leading slash in a Markdown link. Correct typed sources that previously relied on graph resolution treating them as document-relative.
 
@@ -470,7 +503,7 @@ Advisory checks (broken links, missing fields, orphans, ontology violations).
 
 Output stream: `finding,scope,fix`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--scope-bundle`.
+Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--scope-bundle`.
 
 For sources with a fingerprint kind, `source-unrecorded` warns when no baseline exists. `source-missing` errors when file, line-range, or markdown-heading sources cannot be fingerprinted, even without a baseline. Lint does not fetch URLs or inspect Git sources. Configure `source_unrecorded: off` (or `info`, `warn`, `error`; default `warn`) under `settings.lint` in `okf-bundle.yaml`. Legacy TOML bundle settings remain compatibility input. Disabling this rule leaves `source-missing` and `stale` checks active. All lint settings accept `off`, `info`, `warn`, or `error`. Defaults: `broken_link` and `source_missing` are `error`; `missing_title`, `spec_v02` (finding rule `okf-v02`), `ontology_violation`, `source_unrecorded`, `invalid_reference`, and `index_coverage` are `warn`; `missing_description` and `orphan` are `info`. Omitted settings keep these defaults. `off` suppresses the selected lint rule only; validation and stale checks remain independent. `index_exclude` controls index coverage exclusions and `finding_budget` limits ontology findings (positive, default 1,000 per concept). Use `--fail-on warn` to fail on warnings as well as errors.
 
@@ -485,7 +518,7 @@ Conformance validation — the spec's three hard rules only.
 
 Output stream: `violation,validation-profile`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
 
 ## mutate
 
@@ -503,7 +536,7 @@ Create or replace a local artifact; citing source fingerprints remain unchanged.
 
 Output stream: `artifact-write`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
 
 Write bytes from `@file` to a bundle-relative opaque or reserved artifact. The default (and `--create-only`) refuses an existing destination; `--replace` permits replacement. Parent directories are created as needed. Concept and configuration files are protected, and paths must remain inside the bundle. Recorded source fingerprints are preserved so `stale` detects changes; review citing concepts before `refresh`.
 
@@ -540,7 +573,7 @@ Edit a concept losslessly and invalidate its prior verification.
 
 Output stream: `change`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
 
 `--set` keeps literal scalar keys; a dotted key is not traversal. `--set-yaml` replaces a complete named value. `--set-path` parses YAML and creates intermediate maps for object-only paths; `--unset-path` removes an object property. `--patch` accepts an RFC 6902 array with concrete JSON Pointer paths, including list edits and `test` guards. Inputs accept inline YAML/JSON, `@file`, or `-`; only one stdin consumer is permitted. Duplicate/non-string keys, tags, anchors, aliases, merge keys, nonfinite numbers and multiple documents fail. `--dry-run` previews without writes. Use `--add-source-json @file` for source mappings. Do not fabricate verification. Meaningful edits remove active `verified` events and update existing `generated.at`; preserve needed historical evidence separately. Body files contain Markdown only, without frontmatter. Section flags take heading and text as separate values. `--replace OLD NEW` replaces exactly one literal body match; `--all` replaces every match and still fails if none exist. `--rename-section OLD NEW` changes a uniquely matched heading without replacing its content. Malformed YAML must be repaired before this command can load it.
 
@@ -557,7 +590,7 @@ Format YAML and opt-in Markdown prose without changing verification.
 
 Output stream: `format-file,format-summary`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
 
 Presentation-only formatting preserves verification and generation metadata. `--check` does not publish and exits 1 for formatting drift; `--dry-run` previews the diff. Omit the concept ID for the whole selected bundle. YAML uses `settings.formatting.yaml` (readable by default, target width 100; legacy retains the previous serializer). Markdown wrapping is disabled by default and runs only here when `settings.formatting.markdown.wrap_prose` is true. A width of 0 disables wrapping. Unsupported Markdown structures remain unchanged. YAML comments and scalar styles may normalize; file fingerprints may change. Formatting is not conformance repair, fingerprint refresh, or claim verification.
 
@@ -574,7 +607,7 @@ Append a `verified` entry (the write-side of trust).
 
 Output stream: `change`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
 
 ## render
 
@@ -589,6 +622,6 @@ Generate documentation from a bundle.
 
 Output stream: `docs,change`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
 
 `--format index` writes indexes throughout the bundle, replacing their bodies; it does not merge curated prose. Use it only when all affected index bodies are generated or replacement is already authorized. Preserve curated indexes and edit only necessary links otherwise. Validate after writes. Other formats emit output rather than updating indexes; the default is `md`.

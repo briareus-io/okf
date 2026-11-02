@@ -91,6 +91,14 @@ For authored sources that opt into fingerprints, review the final evidence befor
 baseline with `okf refresh <concept-id> <bundle> --fail-on skipped`. Interpret findings and failure
 policies using the shared source-health rules.
 
+## Author concise operating guidance
+
+When the bundle needs local rules, follow the [guidance authoring example](references/guidance.md).
+Keep mandatory invariants short, map them to every operation where they matter, and put longer
+procedures into named workflows or optional `tier: reference` rules. An `edit` can change type,
+ownership, or relationships; do not remove all modeling rules from it to optimize prose corrections.
+Measure delivered instruction bytes with `bundle context --stats` before broadening rule mappings.
+
 ## Supporting material
 
 `references/` is optional: Markdown files there are concepts; other files are artifacts. Copy only

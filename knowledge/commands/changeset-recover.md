@@ -26,6 +26,6 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `changeset-recovery`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
 
 Roll back an interrupted uncommitted publication, or finish cleanup of a committed one. Recovery refuses an active publisher and refuses to overwrite intervening edits. Preserve the journal if recovery reports a conflict; reconcile those files before retrying.

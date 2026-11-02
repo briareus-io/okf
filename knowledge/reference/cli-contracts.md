@@ -11,7 +11,7 @@ sources:
 ---
 # CLI globals and record contracts
 
-> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.6.2, OKF spec 0.2). Do not hand-edit; regenerate instead.
+> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.6.3, OKF spec 0.2). Do not hand-edit; regenerate instead.
 
 See the [command index](../commands/index.md) for individual arguments and [command contracts](command-contracts.md) for shared behavior. Skills carry focused generated references with their workflows.
 
@@ -30,6 +30,7 @@ Exit codes: 0 means success under the selected failure threshold, not necessaril
 | `--revision <value>` | string | no | Inspect a locally available Git revision; never fetches missing objects |
 | `--catalog <value>` | string | no | Select a catalog explicitly; relative paths are resolved from the invocation directory |
 | `--guidance <value>` | string | no | Incidental guidance delivery; explicit context requests always return selected instructions |
+| `--context <value>` | list<string> | no | Check a previously loaded context token before execution (repeat per scoped bundle; @file supported) |
 | `--workspace-revision <value>` | string | no | Inspect the consumer repository and its catalog/lock at this revision |
 | `--bundle-revision <value>` | list<string> | no | Inspect a registered bundle at an exact local commit, ID=COMMIT (repeatable) |
 
@@ -58,11 +59,13 @@ Authored concept metadata remains open. These computed records describe scope, i
   },
   "bundle-context": {
     "context_digest": "string",
-    "context_digest_version": 1,
+    "context_digest_version": 2,
     "effective_settings": "object",
     "manifest": "object|null",
     "selection": "object",
-    "setting_origins": "object"
+    "setting_origins": "object",
+    "settings_projection": "{detail:full|compact,omitted:array<string>}",
+    "state_digest": "string"
   },
   "bundle-edge": {
     "evidence": "string",
@@ -131,11 +134,31 @@ Authored concept metadata remains open. These computed records describe scope, i
     "schema_version": 1,
     "version": "string"
   },
+  "context-check": {
+    "context_digest": "string",
+    "operations": "array<string>",
+    "root": "path",
+    "state_digest": "string",
+    "valid": "boolean"
+  },
   "context-scope": {
     "complete": "boolean",
     "examined": "array<object>",
     "requested": "array<string>",
     "unavailable": "array<string>"
+  },
+  "context-stats": {
+    "budget_exceeded": "boolean; advisory only",
+    "delivered_instruction_bytes": "integer",
+    "mandatory_budget": "integer|null",
+    "mandatory_instruction_bytes": "integer",
+    "root": "path",
+    "sections": "array<{id,kind,delivered_bytes,mandatory}>"
+  },
+  "context-token": {
+    "bundle": "string|null",
+    "root": "path",
+    "token": "string; opaque stateless receipt, not a credential"
   },
   "diagnostic-summary": {
     "displayed": "integer",
@@ -201,10 +224,14 @@ Authored concept metadata remains open. These computed records describe scope, i
   "guidance": {
     "content": "full|summary",
     "context_digest": "string",
+    "expand_argv": "array<string> (summary in explicit context)",
     "id": "string",
     "instruction_role": "task-guidance|inspected",
     "instructions": "string (full only)",
-    "origin": "object"
+    "omission_reason": "string (summary)",
+    "origin": "object",
+    "selection_reason": "string (explicit context)",
+    "tier": "mandatory|reference (rules)"
   },
   "guidance-scope": {
     "complete": "boolean",

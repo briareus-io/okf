@@ -45,6 +45,8 @@ pub struct Manifest {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Guidance {
+    #[serde(default)]
+    pub provenance: BTreeMap<String, Value>,
     pub instructions: Option<String>,
     pub instructions_file: Option<String>,
     #[serde(default)]
@@ -74,9 +76,21 @@ impl Default for DisplaySettings {
         }
     }
 }
+/// Existing rules remain mandatory; reference bodies are explicitly expanded.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum GuidanceTier {
+    #[default]
+    Mandatory,
+    Reference,
+}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Rule {
+    #[serde(default)]
+    pub tier: GuidanceTier,
+    #[serde(default)]
+    pub provenance: BTreeMap<String, Value>,
     pub id: String,
     pub description: Option<String>,
     pub operations: Option<Vec<String>>,
@@ -86,6 +100,8 @@ pub struct Rule {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Workflow {
+    #[serde(default)]
+    pub provenance: BTreeMap<String, Value>,
     pub description: String,
     pub instructions: Option<String>,
     pub instructions_file: Option<String>,
@@ -355,9 +371,11 @@ pub fn validate_commands(manifest: &Manifest, commands: &[String]) -> Result<()>
     }
     Ok(())
 }
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
 pub struct ContextRequest {
     pub operations: Vec<String>,
+    pub rules: Vec<String>,
     pub workflows: Vec<String>,
     pub all: bool,
     pub inputs: BTreeMap<String, Value>,
@@ -372,6 +390,8 @@ pub struct BundleContext {
     pub snapshot: Option<Value>,
     pub context_digest: String,
     pub context_digest_version: u32,
+    pub state_digest: String,
+    pub state_components: BTreeMap<String, String>,
     pub selection: ContextRequest,
     pub effective_settings: EffectiveSettings,
     pub setting_origins: BTreeMap<String, String>,
@@ -410,14 +430,20 @@ pub fn context(
 ) -> Result<BundleContext> {
     request.operations.sort();
     request.operations.dedup();
+    request.rules.sort();
+    request.rules.dedup();
     request.workflows.sort();
     request.workflows.dedup();
     request.inspection |= super::snapshot_context::is_inspection_active();
     let canonical_root = std::fs::canonicalize(root)?;
     let root = canonical_root.as_path();
-    if request.all && (!request.operations.is_empty() || !request.workflows.is_empty()) {
+    if request.all
+        && (!request.operations.is_empty()
+            || !request.workflows.is_empty()
+            || !request.rules.is_empty())
+    {
         return Err(usage(
-            "--all cannot be combined with operation/workflow selectors",
+            "--all cannot be combined with operation/workflow/rule selectors",
         ));
     }
     for op in &request.operations {
@@ -490,6 +516,7 @@ pub fn context(
     }
     let mut records = Vec::new();
     let mut digests = BTreeMap::new();
+    let mut resource_digests = BTreeMap::new();
     let role = if request.inspection || request.all {
         "inspected"
     } else {
@@ -499,7 +526,12 @@ pub fn context(
         validate_commands(&l.manifest, commands)?;
         let g = &l.manifest.guidance;
         if let Some(body) = read_body(root, &g.instructions, &g.instructions_file, &mut digests)? {
-            records.push(json!({"kind":"guidance","id":"$global","matches_selection":true,"instruction_role":role,"content":"full","instructions":body,"origin":{"manifest":l.path,"manifest_digest":l.digest,"instructions_file":g.instructions_file}}));
+            records.push(json!({"kind":"guidance","id":"$global","matches_selection":true,"instruction_role":role,"content":"full","instructions":body,"origin":{"manifest":l.path,"manifest_digest":l.digest,"instructions_file":g.instructions_file,"provenance":g.provenance}}));
+        }
+        for id in &request.rules {
+            if !g.rules.iter().any(|r| &r.id == id) {
+                return Err(usage(format!("unknown guidance rule {id:?}")));
+            }
         }
         for r in &g.rules {
             let matches = r
@@ -507,8 +539,9 @@ pub fn context(
                 .as_ref()
                 .map(|ops| request.operations.iter().any(|o| ops.contains(o)))
                 .unwrap_or(true);
-            let full = request.all || matches;
-            let mut row = json!({"kind":"guidance","id":r.id,"description":r.description,"operations":r.operations,"matches_selection":if r.operations.is_some()&&request.operations.is_empty(){None}else{Some(matches)},"instruction_role":if full{role}else{"inspected"},"content":if full{"full"}else{"summary"},"origin":{"manifest":l.path,"manifest_digest":l.digest,"instructions_file":r.instructions_file}});
+            let mandatory = r.tier == GuidanceTier::Mandatory;
+            let full = request.all || (matches && mandatory) || request.rules.contains(&r.id);
+            let mut row = json!({"kind":"guidance","id":r.id,"description":r.description,"operations":r.operations,"matches_selection":if r.operations.is_some()&&request.operations.is_empty(){None}else{Some(matches)},"tier":r.tier,"instruction_role":if matches && mandatory{role}else{"inspected"},"content":if full{"full"}else{"summary"},"origin":{"manifest":l.path,"manifest_digest":l.digest,"instructions_file":r.instructions_file,"provenance":r.provenance}});
             if full {
                 row["instructions"] = json!(read_body(
                     root,
@@ -517,7 +550,11 @@ pub fn context(
                     &mut digests
                 )?);
             } else {
-                row["omission_reason"] = json!("outside-selection");
+                row["omission_reason"] = json!(if matches {
+                    "reference-on-demand"
+                } else {
+                    "outside-selection"
+                });
             }
             records.push(row);
         }
@@ -529,7 +566,7 @@ pub fn context(
         for (name, w) in &l.manifest.workflows {
             let selected = request.workflows.contains(name);
             let full = request.all || selected;
-            let mut row = json!({"kind":"workflow","id":name,"description":w.description,"selected":selected,"content":if full{"full"}else{"summary"},"origin":{"manifest":l.path,"manifest_digest":l.digest,"instructions_file":w.instructions_file}});
+            let mut row = json!({"kind":"workflow","id":name,"description":w.description,"selected":selected,"content":if full{"full"}else{"summary"},"origin":{"manifest":l.path,"manifest_digest":l.digest,"instructions_file":w.instructions_file,"provenance":w.provenance}});
             if full {
                 row["instructions"] = json!(read_body(
                     root,
@@ -551,11 +588,15 @@ pub fn context(
                             path.display()
                         ))
                     })?;
+                    resource_digests.insert(resource.clone(), sha256_hex(&bytes));
                     resources.push(
                         json!({"path":resource,"digest":sha256_hex(&bytes),"size":bytes.len()}),
                     );
                 }
                 row["resource_metadata"] = json!(resources);
+            }
+            if !full {
+                row["omission_reason"] = json!("workflow-not-selected");
             }
             if selected {
                 for k in request.inputs.keys() {
@@ -589,8 +630,8 @@ pub fn context(
             }
             records.push(row);
         }
-    } else if !request.workflows.is_empty() {
-        return Err(usage("bundle has no workflows"));
+    } else if !request.workflows.is_empty() || !request.rules.is_empty() {
+        return Err(usage("bundle has no guidance rules or workflows"));
     }
     if !request.inputs.is_empty() && request.workflows.is_empty() {
         return Err(usage("workflow inputs require a selected workflow"));
@@ -598,7 +639,35 @@ pub fn context(
     let manifest = loaded
         .as_ref()
         .map(|l| json!({"path":l.path,"version":l.manifest.manifest_version,"digest":l.digest}));
-    let digest=sha256_hex(&serde_json::to_vec(&json!({"version":1,"manifest":manifest,"settings":effective,"selection":request,"instruction_files":digests,"setting_origins":setting_origins,"snapshot":snapshot})).map_err(|e|usage(e.to_string()))?);
+    let hash = |value: Value| -> Result<String> {
+        Ok(sha256_hex(
+            &serde_json::to_vec(&value).map_err(|e| usage(e.to_string()))?,
+        ))
+    };
+    let mut state_components = BTreeMap::from([
+        (
+            "identity".into(),
+            hash(json!({"root":root,"bundle":effective.bundle}))?,
+        ),
+        ("manifest".into(), hash(json!(manifest))?),
+        (
+            "settings".into(),
+            hash(json!({"effective":effective,"origins":setting_origins}))?,
+        ),
+        ("snapshot".into(), hash(json!(snapshot))?),
+    ]);
+    state_components.extend(
+        digests
+            .iter()
+            .map(|(p, d)| (format!("instruction:{p}"), d.clone())),
+    );
+    state_components.extend(
+        resource_digests
+            .into_iter()
+            .map(|(p, d)| (format!("resource:{p}"), d)),
+    );
+    let state_digest = hash(json!(state_components))?;
+    let digest = hash(json!({"version":2,"state":state_digest,"selection":request}))?;
     for record in &mut records {
         record["context_digest"] = json!(digest);
         if record["kind"] == "workflow" {
@@ -625,7 +694,9 @@ pub fn context(
         manifest,
         snapshot,
         context_digest: digest,
-        context_digest_version: 1,
+        context_digest_version: 2,
+        state_digest,
+        state_components,
         selection: request,
         effective_settings: effective,
         setting_origins,

@@ -113,7 +113,7 @@ it is known, and report mismatches separately from available current candidates.
 
 ```sh
 okf catalog --json
-okf bundle context --bundle-id acme.product --scope-bundle acme.finance --operation add --operation edit --json
+okf bundle context --bundle-id acme.product --scope-bundle acme.finance --operation add --operation edit --operation "bundle validate" --operation validate --operation links --operation resolve --operation backlinks --operation lint --json
 okf bundle validate --bundle-id acme.product
 okf bundle validate --bundle-id acme.finance
 okf validate --bundle-id acme.product --profile bundle

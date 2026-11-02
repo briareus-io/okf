@@ -108,6 +108,20 @@ Rename a uniquely matched heading with `okf edit <concept-id> <bundle> --rename-
 file unchanged. Use `okf show <concept-id> <bundle> --body` if a full body is needed for editing,
 without splitting display headers or frontmatter delimiters.
 
+## Small prose corrections
+
+For a one-sentence correction, load `show`, `edit`, `bundle validate`, `validate`, and `lint`
+context together with `--token --json`; include `format` only when formatting is requested or
+applicable guidance requires it. Read the affected passage, use the guarded literal `--replace`
+edit with `--context @/tmp/okf-context-token.json`, inspect the resulting diff, and run the applicable
+checks. Capture the actual returned token string; the temporary filename is illustrative.
+A concept-only edit can reuse that token for already covered checks.
+
+Backlinks and source-health analysis are useful when changing relationships, source assertions,
+identity, or meaning that consumers rely on. They are not automatic prerequisites for a spelling
+correction. Semantic changes still invalidate verification and require the review consequences
+above; do not treat a short edit as presentation-only merely because it changes few words.
+
 ## Source access
 
 `references/` is optional; Markdown files are concepts and other files are artifacts. Keep declaring

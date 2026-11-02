@@ -68,6 +68,11 @@ pub fn run() -> i32 {
                 {
                     "baseline-conflict"
                 }
+                okf_core::error::OkfError::Usage(message)
+                    if message.starts_with("context-invalid:") =>
+                {
+                    "context-invalid"
+                }
                 _ => match err.exit_code() {
                     1 => "policy-rejected",
                     2 => "usage-error",
