@@ -55,9 +55,11 @@ fn git_root_discovery_is_cached_per_bundle_including_failures() {
         assert!(output.status.success(), "{output:?}");
         let calls = std::fs::read_to_string(&log).unwrap();
         assert_eq!(calls.lines().count(), 2, "{calls}");
-        assert!(calls
-            .lines()
-            .all(|line| line.ends_with("rev-parse --show-toplevel")));
+        assert!(
+            calls
+                .lines()
+                .all(|line| line.ends_with("rev-parse --show-toplevel"))
+        );
         let records: Vec<serde_json::Value> = String::from_utf8(output.stdout)
             .unwrap()
             .lines()
@@ -70,9 +72,11 @@ fn git_root_discovery_is_cached_per_bundle_including_failures() {
         if !failed {
             assert_eq!(edges.len(), 8);
             assert!(edges.iter().all(|edge| edge["status"] == "resolved"));
-            assert!(edges
-                .iter()
-                .any(|edge| edge["source"]["bundle"] == "test.plans"));
+            assert!(
+                edges
+                    .iter()
+                    .any(|edge| edge["source"]["bundle"] == "test.plans")
+            );
         } else {
             assert!(edges.is_empty());
         }

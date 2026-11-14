@@ -2,7 +2,7 @@
 use okf_core::bundle::{
     catalog::load_catalog,
     context::{Context, SelectedBundle},
-    snapshot_context::{prepare, SnapshotSelection},
+    snapshot_context::{SnapshotSelection, prepare},
 };
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -27,7 +27,8 @@ fn workspace_history_reads_historical_config_and_bytes_from_an_object_snapshot()
     let repo = tempfile::tempdir().unwrap();
     let cache = tempfile::tempdir().unwrap();
     let prior = std::env::var_os("OKF_CACHE_DIR");
-    std::env::set_var("OKF_CACHE_DIR", cache.path());
+    // SAFETY: this is the only test in this binary, so no other thread touches the environment.
+    unsafe { std::env::set_var("OKF_CACHE_DIR", cache.path()) };
     git(repo.path(), &["init", "-q"]);
     std::fs::create_dir(repo.path().join("docs")).unwrap();
     std::fs::write(repo.path().join("okf-catalog.yaml"),"catalog_version: 2\ndefault_bundle: acme.docs\nbundles:\n  acme.docs:\n    location: {type: directory, path: docs}\n").unwrap();
@@ -118,8 +119,10 @@ fn workspace_history_reads_historical_config_and_bytes_from_an_object_snapshot()
     .unwrap();
     assert_eq!(resolved.primary.root, snapshot.context.primary.root);
     if let Some(prior) = prior {
-        std::env::set_var("OKF_CACHE_DIR", prior);
+        // SAFETY: this is the only test in this binary, so no other thread touches the environment.
+        unsafe { std::env::set_var("OKF_CACHE_DIR", prior) };
     } else {
-        std::env::remove_var("OKF_CACHE_DIR");
+        // SAFETY: this is the only test in this binary, so no other thread touches the environment.
+        unsafe { std::env::remove_var("OKF_CACHE_DIR") };
     }
 }

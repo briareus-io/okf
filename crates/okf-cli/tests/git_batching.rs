@@ -127,9 +127,11 @@ fn historical_bundle_and_repeated_snapshots_share_one_object_reader() {
             .filter(|r| r["kind"] == "bundle-edge")
             .collect();
         assert_eq!(edges.len(), 40);
-        assert!(edges
-            .iter()
-            .all(|edge| edge["fingerprint_status"] == "changed"));
+        assert!(
+            edges
+                .iter()
+                .all(|edge| edge["fingerprint_status"] == "changed")
+        );
         assert_eq!(
             edges
                 .iter()

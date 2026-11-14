@@ -1,11 +1,11 @@
 //! Scoped, qualified graph over explicitly selected locally available bundles.
-use crate::bundle::catalog::{absolute, normalize, CatalogEntry};
+use crate::bundle::catalog::{CatalogEntry, absolute, normalize};
 use crate::bundle::context::Context;
-use crate::bundle::loader::{load_bundle, Bundle};
+use crate::bundle::loader::{Bundle, load_bundle};
 use crate::error::{OkfError, Result};
 use crate::fingerprint::canonicalize::sha256_hex;
 use crate::model::concept::{Concept, ConceptId};
-use crate::model::link::{classify, is_logical_reference, raw_links, LinkKind, LogicalReference};
+use crate::model::link::{LinkKind, LogicalReference, classify, is_logical_reference, raw_links};
 use crate::model::source::Source;
 use crate::ontology::load::try_load;
 use crate::parse::parse_concept;
@@ -48,13 +48,58 @@ pub struct SnapshotResult {
     pub resolved: Option<Node>,
     pub candidate: Option<Node>,
 }
+/// Resolution status of a catalog edge; serialized as its kebab-case string.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum EdgeStatus {
+    Resolved,
+    UncheckedEquivalence,
+    InvalidBundleRef,
+    MissingTarget,
+    UnexaminedTarget,
+    InvalidReference,
+    UnknownBundleId,
+    Blocked,
+    ReferenceMismatch,
+    UnavailableRoot,
+    OutOfScope,
+    UnavailableRootOrRevision,
+    UnregisteredTarget,
+}
+
+impl EdgeStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Resolved => "resolved",
+            Self::UncheckedEquivalence => "unchecked-equivalence",
+            Self::InvalidBundleRef => "invalid-bundle-ref",
+            Self::MissingTarget => "missing-target",
+            Self::UnexaminedTarget => "unexamined-target",
+            Self::InvalidReference => "invalid-reference",
+            Self::UnknownBundleId => "unknown-bundle-id",
+            Self::Blocked => "blocked",
+            Self::ReferenceMismatch => "reference-mismatch",
+            Self::UnavailableRoot => "unavailable-root",
+            Self::OutOfScope => "out-of-scope",
+            Self::UnavailableRootOrRevision => "unavailable-root-or-revision",
+            Self::UnregisteredTarget => "unregistered-target",
+        }
+    }
+}
+
+impl std::fmt::Display for EdgeStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.pad(self.as_str())
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct Edge {
     pub source: Node,
     pub resource: String,
     pub location: String,
     pub target: Option<Node>,
-    pub status: String,
+    pub status: EdgeStatus,
     pub evidence: String,
     pub snapshot: Option<SnapshotResult>,
     pub fingerprint_status: Option<String>,
@@ -197,7 +242,7 @@ fn load_revision_selected(
         }
         let mut concepts = Vec::new();
         for path in paths.into_iter().take(limit.unwrap_or(usize::MAX)) {
-            let id = ConceptId::from_relative(path.to_string_lossy().strip_suffix(".md").unwrap());
+            let id = concept_id_from_md_path(&path);
             let bytes = std::fs::read_to_string(bundle_root.join(&path))?;
             concepts
                 .push(parse_concept(id, &bytes).map_err(|e| e.at_path(&bundle_root.join(&path)))?);
@@ -269,7 +314,7 @@ fn load_revision_selected(
                 continue;
             }
             let bytes = crate::ports::git_read::blob(&repo, &commit, &path)?;
-            let id = ConceptId::from_relative(rel.to_string_lossy().strip_suffix(".md").unwrap());
+            let id = concept_id_from_md_path(rel);
             let text = match std::str::from_utf8(&bytes) {
                 Ok(text) => text,
                 Err(error) => {
@@ -283,7 +328,7 @@ fn load_revision_selected(
             match parse_concept(id, text).map_err(|error| error.at_path(&repo.join(&path))) {
                 Ok(concept) => concepts.push(concept),
                 Err(OkfError::Yaml(message)) => {
-                    failures.push(format!("{message} (revision {commit})"))
+                    failures.push(format!("{message} (revision {commit})"));
                 }
                 Err(_) => return None,
             }
@@ -335,7 +380,10 @@ fn validate_scope_roots(
     for (index, a) in roots.iter().enumerate() {
         for b in &roots[index + 1..] {
             if a.root.starts_with(&b.root) || b.root.starts_with(&a.root) {
-                return Err(OkfError::Usage(format!("ambiguous examination roots: {} and {} overlap; select their registered root or examine the path independently",a.id,b.id)));
+                return Err(OkfError::Usage(format!(
+                    "ambiguous examination roots: {} and {} overlap; select their registered root or examine the path independently",
+                    a.id, b.id
+                )));
             }
         }
     }
@@ -345,26 +393,26 @@ impl CatalogGraph {
     /// Qualified targets accept `acme.finance:/policy`; unqualified IDs select the primary.
     pub fn target(&self, context: &Context, raw: &str) -> Node {
         let logical = LogicalReference::parse(raw).ok().flatten();
-        let (bundle, id) = logical
-            .as_ref()
-            .map(|r| {
+        let (bundle, id) = logical.as_ref().map_or_else(
+            || {
+                raw.split_once(":/").map_or_else(
+                    || (primary_id(context), ConceptId::from_relative(raw).0),
+                    |(bundle, id)| (bundle.to_string(), format!("/{id}")),
+                )
+            },
+            |r| {
                 (
                     r.bundle.clone(),
                     ConceptId::from_relative(r.path.strip_suffix(".md").unwrap_or(&r.path)).0,
                 )
-            })
-            .unwrap_or_else(|| {
-                raw.split_once(":/")
-                    .map(|(bundle, id)| (bundle.to_string(), format!("/{id}")))
-                    .unwrap_or_else(|| (primary_id(context), ConceptId::from_relative(raw).0))
-            });
+            },
+        );
         let version = self
             .scope
             .examined
             .iter()
             .find(|e| e.id == bundle)
-            .map(|e| e.version.clone())
-            .unwrap_or_else(|| "working-tree".into());
+            .map_or_else(|| "working-tree".into(), |e| e.version.clone());
         let id = crate::model::link::resolve_link(&ConceptId("/context".into()), &id).0;
         Node {
             bundle,
@@ -384,7 +432,10 @@ impl CatalogGraph {
             }
             for edge in self.edges.iter().filter(|e| {
                 e.target.as_ref() == Some(&node)
-                    && matches!(e.status.as_str(), "resolved" | "unchecked-equivalence")
+                    && matches!(
+                        e.status,
+                        EdgeStatus::Resolved | EdgeStatus::UncheckedEquivalence
+                    )
             }) {
                 if visited.insert(edge.source.clone()) {
                     if !seeds.contains(&edge.source) {
@@ -414,14 +465,15 @@ impl CatalogGraph {
         let mut paths = BTreeSet::new();
         for raw in changed {
             let logical = LogicalReference::parse(raw).ok().flatten();
-            let (bundle, resource) = logical
-                .as_ref()
-                .map(|r| (r.bundle.clone(), r.path.as_str()))
-                .unwrap_or_else(|| {
-                    raw.split_once(":/")
-                        .map(|(bundle, resource)| (bundle.to_string(), resource))
-                        .unwrap_or_else(|| (primary_id(context), raw.as_str()))
-                });
+            let (bundle, resource) = logical.as_ref().map_or_else(
+                || {
+                    raw.split_once(":/").map_or_else(
+                        || (primary_id(context), raw.as_str()),
+                        |(bundle, resource)| (bundle.to_string(), resource),
+                    )
+                },
+                |r| (r.bundle.clone(), r.path.as_str()),
+            );
             let Some(entry) = entries.get(&bundle) else {
                 continue;
             };
@@ -460,7 +512,10 @@ impl CatalogGraph {
             }
             for edge in self.edges.iter().filter(|edge| {
                 edge.target.as_ref() == Some(&node)
-                    && matches!(edge.status.as_str(), "resolved" | "unchecked-equivalence")
+                    && matches!(
+                        edge.status,
+                        EdgeStatus::Resolved | EdgeStatus::UncheckedEquivalence
+                    )
             }) {
                 if visited.insert(edge.source.clone()) {
                     out.insert(edge.source.clone());
@@ -491,12 +546,14 @@ impl CatalogGraph {
                 } else {
                     None
                 };
-                if let Some(next) = next {
-                    if visited.insert(next.clone())
-                        && matches!(edge.status.as_str(), "resolved" | "unchecked-equivalence")
-                    {
-                        queue.push_back((next, distance + 1));
-                    }
+                if let Some(next) = next
+                    && visited.insert(next.clone())
+                    && matches!(
+                        edge.status,
+                        EdgeStatus::Resolved | EdgeStatus::UncheckedEquivalence
+                    )
+                {
+                    queue.push_back((next, distance + 1));
                 }
             }
         }
@@ -530,8 +587,7 @@ pub fn resolve_scope(context: &Context, scope_ids: &[String], all: bool) -> Resu
                 root: entry.root.clone(),
                 version: crate::bundle::remote::origin(&entry.root)?
                     .and_then(|o| o.commit)
-                    .map(|c| format!("git:{c}"))
-                    .unwrap_or_else(|| "working-tree".into()),
+                    .map_or_else(|| "working-tree".into(), |c| format!("git:{c}")),
                 interpretation: crate::bundle::settings::for_context(context, &entry.root)?,
             });
         } else {
@@ -639,22 +695,21 @@ fn build_catalog_graph_impl(
     let mut bundles = BTreeMap::new();
     let mut ontologies = BTreeMap::new();
     let priority = source.map(|raw| CatalogGraph::default().target(context, raw));
-    if let Some(target) = &priority {
-        if !requested.contains(&target.bundle) {
-            return Err(OkfError::Usage(format!(
-                "outgoing anchor bundle is outside scope: {}",
-                target.bundle
-            )));
-        }
+    if let Some(target) = &priority
+        && !requested.contains(&target.bundle)
+    {
+        return Err(OkfError::Usage(format!(
+            "outgoing anchor bundle is outside scope: {}",
+            target.bundle
+        )));
     }
     let mut ordered = requested.iter().collect::<Vec<_>>();
     ordered.sort_by_key(|id| {
         (
-            priority
-                .as_ref()
-                .map(|p| p.bundle.as_str())
-                .unwrap_or_else(|| context.primary.id.as_deref().unwrap_or(""))
-                != id.as_str(),
+            priority.as_ref().map_or_else(
+                || context.primary.id.as_deref().unwrap_or(""),
+                |p| p.bundle.as_str(),
+            ) != id.as_str(),
             (*id).clone(),
         )
     });
@@ -690,8 +745,7 @@ fn build_catalog_graph_impl(
                 bundle,
                 crate::bundle::remote::origin(&entry.root)?
                     .and_then(|o| o.commit)
-                    .map(|c| format!("git:{c}"))
-                    .unwrap_or_else(|| "working-tree".into()),
+                    .map_or_else(|| "working-tree".into(), |c| format!("git:{c}")),
                 eligible,
             )
         };
@@ -740,8 +794,7 @@ fn build_catalog_graph_impl(
                 .frontmatter
                 .get("sources")
                 .and_then(Value::as_sequence)
-                .map(Vec::as_slice)
-                .unwrap_or(&[]);
+                .map_or(&[][..], Vec::as_slice);
             // Preserve each provenance occurrence, including URL declared mappings.
             for (index, value) in sources.iter().enumerate() {
                 let Some(resource) = value.get("resource").and_then(Value::as_str) else {
@@ -774,19 +827,18 @@ fn build_catalog_graph_impl(
                         source: source.clone(),
                     });
                 }
-                if let Ok(Some(reference)) = LogicalReference::parse(resource) {
-                    if let Some(entry) = entries
+                if let Ok(Some(reference)) = LogicalReference::parse(resource)
+                    && let Some(entry) = entries
                         .get(&reference.bundle)
                         .filter(|_| requested.contains(&reference.bundle))
-                    {
-                        let path = entry.root.join(&reference.path);
-                        let path = std::fs::canonicalize(&path).unwrap_or(path);
-                        if path.starts_with(&entry.root) {
-                            graph.resource_dependencies.push(ResourceDependency {
-                                path,
-                                source: source.clone(),
-                            });
-                        }
+                {
+                    let path = entry.root.join(&reference.path);
+                    let path = std::fs::canonicalize(&path).unwrap_or(path);
+                    if path.starts_with(&entry.root) {
+                        graph.resource_dependencies.push(ResourceDependency {
+                            path,
+                            source: source.clone(),
+                        });
                     }
                 }
                 // Producer-defined Git sources use repository-relative paths. Retain
@@ -842,30 +894,26 @@ fn build_catalog_graph_impl(
                     declared.as_ref().and_then(|r| r.as_ref().ok()),
                 );
                 edge.source = source.clone();
-                if declared.as_ref().is_some_and(|r| r.is_err()) {
-                    edge.status = "invalid-bundle-ref".into();
+                if declared.as_ref().is_some_and(std::result::Result::is_err) {
+                    edge.status = EdgeStatus::InvalidBundleRef;
                     edge.evidence =
                         "bundle_ref requires string id/path and correctly typed optional snapshot"
                             .into();
                 }
-                if edge.status == "resolved" {
-                    if let Some(source_value) = Source::from_value(value) {
-                        if !source_value.fingerprint.is_empty()
-                            && matches!(
-                                source_value.kind,
-                                crate::model::source::SourceKind::GitPath
-                                    | crate::model::source::SourceKind::GitCommit
-                            )
-                        {
-                            pending_git_fingerprints.push((graph.edges.len(), source_value));
-                        } else {
-                            edge.fingerprint_status = fingerprint_status(
-                                &source_value,
-                                &bundle.root,
-                                context,
-                                &requested,
-                            );
-                        }
+                if edge.status == EdgeStatus::Resolved
+                    && let Some(source_value) = Source::from_value(value)
+                {
+                    if !source_value.fingerprint.is_empty()
+                        && matches!(
+                            source_value.kind,
+                            crate::model::source::SourceKind::GitPath
+                                | crate::model::source::SourceKind::GitCommit
+                        )
+                    {
+                        pending_git_fingerprints.push((graph.edges.len(), source_value));
+                    } else {
+                        edge.fingerprint_status =
+                            fingerprint_status(&source_value, &bundle.root, context, &requested);
                     }
                 }
                 graph.edges.push(edge);
@@ -894,55 +942,52 @@ fn build_catalog_graph_impl(
                             vec![(occurrence.value, occurrence.path.clone())]
                         };
                         for (value, location) in values {
-                            if let Some(resource) = value.as_str() {
-                                if classify(resource) != LinkKind::External
-                                    || is_logical_reference(resource)
-                                {
-                                    let mut edge = resolve_edge(
-                                        ResolutionContext {
-                                            entries: &entries,
-                                            scope: &requested,
-                                            bundles: &bundles,
-                                        },
-                                        &source,
-                                        &bundle.root,
-                                        resource,
-                                        &location,
-                                        None,
-                                    );
-                                    edge.reference_rule = Some(key.clone());
-                                    graph.edges.push(edge);
-                                }
+                            if let Some(resource) = value.as_str()
+                                && (classify(resource) != LinkKind::External
+                                    || is_logical_reference(resource))
+                            {
+                                let mut edge = resolve_edge(
+                                    ResolutionContext {
+                                        entries: &entries,
+                                        scope: &requested,
+                                        bundles: &bundles,
+                                    },
+                                    &source,
+                                    &bundle.root,
+                                    resource,
+                                    &location,
+                                    None,
+                                );
+                                edge.reference_rule = Some(key.clone());
+                                graph.edges.push(edge);
                             }
                         }
                     }
                 }
             }
             for (event, range) in pulldown_cmark::Parser::new(&concept.body).into_offset_iter() {
-                if let pulldown_cmark::Event::Start(pulldown_cmark::Tag::Link {
-                    dest_url, ..
-                }) = event
+                if let pulldown_cmark::Event::Start(pulldown_cmark::Tag::Link { dest_url, .. }) =
+                    event
+                    && (classify(&dest_url) != LinkKind::External
+                        || is_logical_reference(&dest_url))
                 {
-                    if classify(&dest_url) != LinkKind::External || is_logical_reference(&dest_url)
-                    {
-                        let line = concept.body[..range.start]
-                            .bytes()
-                            .filter(|c| *c == b'\n')
-                            .count()
-                            + 1;
-                        graph.edges.push(resolve_edge(
-                            ResolutionContext {
-                                entries: &entries,
-                                scope: &requested,
-                                bundles: &bundles,
-                            },
-                            &source,
-                            &bundle.root,
-                            &dest_url,
-                            &format!("body:line:{line}"),
-                            None,
-                        ));
-                    }
+                    let line = concept.body[..range.start]
+                        .bytes()
+                        .filter(|c| *c == b'\n')
+                        .count()
+                        + 1;
+                    graph.edges.push(resolve_edge(
+                        ResolutionContext {
+                            entries: &entries,
+                            scope: &requested,
+                            bundles: &bundles,
+                        },
+                        &source,
+                        &bundle.root,
+                        &dest_url,
+                        &format!("body:line:{line}"),
+                        None,
+                    ));
                 }
             }
             if let Some(ontology) = &ontology {
@@ -1017,13 +1062,14 @@ fn build_catalog_graph_impl(
             }
         }
     }
+    let mut snapshot_seen: BTreeSet<Node> = graph.scope.snapshot_examined.iter().cloned().collect();
     for edge in &graph.edges {
-        if let Some(snapshot) = &edge.snapshot {
-            if let Some(node) = &snapshot.resolved {
-                graph.nodes.insert(node.clone());
-                if !graph.scope.snapshot_examined.contains(node) {
-                    graph.scope.snapshot_examined.push(node.clone());
-                }
+        if let Some(snapshot) = &edge.snapshot
+            && let Some(node) = &snapshot.resolved
+        {
+            graph.nodes.insert(node.clone());
+            if snapshot_seen.insert(node.clone()) {
+                graph.scope.snapshot_examined.push(node.clone());
             }
         }
     }
@@ -1033,13 +1079,13 @@ fn build_catalog_graph_impl(
             && graph.scope.unavailable.is_empty();
         if !examination.scan_complete {
             for edge in &mut graph.edges {
-                if edge.status == "missing-target"
+                if edge.status == EdgeStatus::MissingTarget
                     && edge
                         .target
                         .as_ref()
                         .is_some_and(|t| !graph.nodes.contains(t))
                 {
-                    edge.status = "unexamined-target".into();
+                    edge.status = EdgeStatus::UnexaminedTarget;
                     edge.evidence = "target metadata not examined within document budget".into();
                 }
             }
@@ -1057,7 +1103,7 @@ fn build_catalog_graph_impl(
                 relationship.target = relationship.raw_reference.clone();
             }
             if relationship.status != "unknown-kind" {
-                relationship.status = edge.status.clone();
+                relationship.status = edge.status.to_string();
             }
         }
     }
@@ -1169,6 +1215,13 @@ pub fn entry_for_path<'a>(
     entries: &'a BTreeMap<String, CatalogEntry>,
     path: &Path,
 ) -> Option<&'a CatalogEntry> {
+    entry_with_rel(entries, path).map(|(entry, _)| entry)
+}
+/// Owning catalog entry for `path`, together with the entry-root-relative path.
+pub(crate) fn entry_with_rel<'a, 'p>(
+    entries: &'a BTreeMap<String, CatalogEntry>,
+    path: &'p Path,
+) -> Option<(&'a CatalogEntry, &'p Path)> {
     let entry = if let Some(entry) = entries
         .values()
         .filter(|e| e.available && path.starts_with(&e.root))
@@ -1185,15 +1238,19 @@ pub fn entry_for_path<'a>(
         }
         candidates[0]
     };
-    Some(entry)
+    let rel = path.strip_prefix(&entry.root).ok()?;
+    Some((entry, rel))
+}
+fn concept_id_from_md_path(path: &Path) -> ConceptId {
+    let text = path.to_string_lossy();
+    ConceptId::from_relative(text.strip_suffix(".md").unwrap_or(&text))
 }
 fn target_for_path(
     entries: &BTreeMap<String, CatalogEntry>,
     path: &Path,
     bundles: &BTreeMap<String, (Bundle, String)>,
 ) -> Option<Node> {
-    let entry = entry_for_path(entries, path)?;
-    let rel = path.strip_prefix(&entry.root).ok()?;
+    let (entry, rel) = entry_with_rel(entries, path)?;
     if crate::bundle::walk::is_support_path(rel)
         || rel.extension().and_then(|s| s.to_str()) != Some("md")
         || matches!(
@@ -1205,11 +1262,10 @@ fn target_for_path(
     }
     Some(Node {
         bundle: entry.id.clone(),
-        id: ConceptId::from_relative(rel.to_string_lossy().strip_suffix(".md").unwrap()).0,
+        id: concept_id_from_md_path(rel).0,
         version: bundles
             .get(&entry.id)
-            .map(|(_, v)| v.clone())
-            .unwrap_or_else(|| "working-tree".into()),
+            .map_or_else(|| "working-tree".into(), |(_, v)| v.clone()),
     })
 }
 struct ResolutionContext<'a> {
@@ -1217,6 +1273,10 @@ struct ResolutionContext<'a> {
     scope: &'a BTreeSet<String>,
     bundles: &'a BTreeMap<String, (Bundle, String)>,
 }
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "a small context bundle destructured at the top; call sites build it inline"
+)]
 fn resolve_edge(
     context: ResolutionContext<'_>,
     source: &Node,
@@ -1248,8 +1308,8 @@ fn resolve_edge(
         source: source.clone(),
         resource: resource.into(),
         location: location.into(),
-        target: ordinary.clone(),
-        status: "missing-target".into(),
+        target: ordinary,
+        status: EdgeStatus::MissingTarget,
         evidence: "ordinary-path".into(),
         snapshot: None,
         fingerprint_status: None,
@@ -1260,27 +1320,27 @@ fn resolve_edge(
     };
     match &logical {
         Err(error) => {
-            edge.status = "invalid-reference".into();
+            edge.status = EdgeStatus::InvalidReference;
             edge.evidence = error.to_string();
             return edge;
         }
         Ok(Some(reference)) => {
             let Some(entry) = entries.get(&reference.bundle) else {
-                edge.status = "unknown-bundle-id".into();
+                edge.status = EdgeStatus::UnknownBundleId;
                 edge.evidence = "logical-reference".into();
                 return edge;
             };
             if path.as_ref().is_some_and(|p| !p.starts_with(&entry.root)) {
-                edge.status = "blocked".into();
+                edge.status = EdgeStatus::Blocked;
                 edge.evidence = "logical reference escapes registered root".into();
                 return edge;
             }
-            if let Some(declared) = declared {
-                if declared.id != reference.bundle || declared.path != reference.path {
-                    edge.status = "reference-mismatch".into();
-                    edge.evidence = "logical URI and bundle_ref disagree".into();
-                    return edge;
-                }
+            if let Some(declared) = declared
+                && (declared.id != reference.bundle || declared.path != reference.path)
+            {
+                edge.status = EdgeStatus::ReferenceMismatch;
+                edge.evidence = "logical URI and bundle_ref disagree".into();
+                return edge;
             }
             edge.evidence = "logical-reference".into();
         }
@@ -1288,7 +1348,7 @@ fn resolve_edge(
     }
     if let Some(declared) = declared {
         let Some(entry) = entries.get(&declared.id) else {
-            edge.status = "unknown-bundle-id".into();
+            edge.status = EdgeStatus::UnknownBundleId;
             return edge;
         };
         if Path::new(&declared.path).is_absolute()
@@ -1296,25 +1356,25 @@ fn resolve_edge(
                 .components()
                 .any(|p| matches!(p, std::path::Component::ParentDir))
         {
-            edge.status = "reference-mismatch".into();
+            edge.status = EdgeStatus::ReferenceMismatch;
             edge.evidence = "bundle_ref.path must stay relative to target bundle root".into();
             return edge;
         }
         if !entry.available {
-            edge.status = "unavailable-root".into();
+            edge.status = EdgeStatus::UnavailableRoot;
             return edge;
         }
         let declared_path = normalize(&entry.root.join(&declared.path));
         let declared_path = std::fs::canonicalize(&declared_path).unwrap_or(declared_path);
         if !declared_path.starts_with(&entry.root) {
-            edge.status = "reference-mismatch".into();
+            edge.status = EdgeStatus::ReferenceMismatch;
             edge.evidence = "bundle_ref target escapes registered root".into();
             return edge;
         }
         let declared_target = target_for_path(entries, &declared_path, bundles);
         if let Some(path) = &path {
             if path != &declared_path {
-                edge.status = "reference-mismatch".into();
+                edge.status = EdgeStatus::ReferenceMismatch;
                 edge.evidence =
                     "ordinary resource and bundle_ref address different local paths".into();
                 return edge;
@@ -1334,21 +1394,19 @@ fn resolve_edge(
                     edge.target.as_ref(),
                     path.is_some(),
                 ));
-                if logical.as_ref().ok().and_then(Option::as_ref).is_some() {
-                    if let (Some(expected), Some(selected)) = (
+                if logical.as_ref().ok().and_then(Option::as_ref).is_some()
+                    && let (Some(expected), Some(selected)) = (
                         snapshot.commit.as_deref(),
                         edge.target
                             .as_ref()
                             .and_then(|n| n.version.strip_prefix("git:")),
-                    ) {
-                        if expected != selected {
-                            if let Some(result) = &mut edge.snapshot {
-                                result.status = "mismatched".into();
-                                result.evidence = "source snapshot differs from selected catalog snapshot; historical evidence is not a substitute".into();
-                                result.candidate = edge.target.clone();
-                            }
-                        }
-                    }
+                    )
+                    && expected != selected
+                    && let Some(result) = &mut edge.snapshot
+                {
+                    result.status = "mismatched".into();
+                    result.evidence = "source snapshot differs from selected catalog snapshot; historical evidence is not a substitute".into();
+                    result.candidate = edge.target.clone();
                 }
             } else {
                 edge.snapshot = Some(SnapshotResult {
@@ -1368,47 +1426,43 @@ fn resolve_edge(
         && (location.starts_with("body:")
             || location.starts_with("sources[")
             || location == "argument")
+        && let Some(path) = &path
+        && let Some((entry, rel)) = entry_with_rel(entries, path)
     {
-        if let Some(path) = &path {
-            if let Some(entry) = entry_for_path(entries, path) {
-                let rel = path.strip_prefix(&entry.root).unwrap();
-                let kind = if crate::bundle::walk::is_support_path(rel) {
-                    Some("support")
-                } else if matches!(
-                    rel.file_name().and_then(|s| s.to_str()),
-                    Some("index.md" | "log.md")
-                ) {
-                    Some("reserved")
-                } else if rel.extension().and_then(|s| s.to_str()) != Some("md") {
-                    Some("artifact")
+        let kind = if crate::bundle::walk::is_support_path(rel) {
+            Some("support")
+        } else if matches!(
+            rel.file_name().and_then(|s| s.to_str()),
+            Some("index.md" | "log.md")
+        ) {
+            Some("reserved")
+        } else if rel.extension().and_then(|s| s.to_str()) != Some("md") {
+            Some("artifact")
+        } else {
+            None
+        };
+        if let Some(kind) = kind {
+            edge.resource_kind = Some(kind.into());
+            edge.resource_bundle = Some(entry.id.clone());
+            edge.evidence = format!("{kind}-resource");
+            edge.status = if !entry.available {
+                EdgeStatus::UnavailableRoot
+            } else if !scope.contains(&entry.id) {
+                EdgeStatus::OutOfScope
+            } else if let Some((_, version)) = bundles.get(&entry.id) {
+                let exists = version.strip_prefix("git:").map_or_else(
+                    || path.is_file(),
+                    |rev| historical_bytes(&entry.root, path, rev).is_some(),
+                );
+                if exists {
+                    EdgeStatus::Resolved
                 } else {
-                    None
-                };
-                if let Some(kind) = kind {
-                    edge.resource_kind = Some(kind.into());
-                    edge.resource_bundle = Some(entry.id.clone());
-                    edge.evidence = format!("{kind}-resource");
-                    edge.status = if !entry.available {
-                        "unavailable-root"
-                    } else if !scope.contains(&entry.id) {
-                        "out-of-scope"
-                    } else if let Some((_, version)) = bundles.get(&entry.id) {
-                        let exists = version
-                            .strip_prefix("git:")
-                            .map(|rev| historical_bytes(&entry.root, path, rev).is_some())
-                            .unwrap_or_else(|| path.is_file());
-                        if exists {
-                            "resolved"
-                        } else {
-                            "missing-target"
-                        }
-                    } else {
-                        "unavailable-root-or-revision"
-                    }
-                    .into();
-                    return edge;
+                    EdgeStatus::MissingTarget
                 }
-            }
+            } else {
+                EdgeStatus::UnavailableRootOrRevision
+            };
+            return edge;
         }
     }
     if let Some(target) = &edge.target {
@@ -1416,26 +1470,25 @@ fn resolve_edge(
             .get(&target.bundle)
             .is_some_and(|entry| !entry.available)
         {
-            edge.status = "unavailable-root".into();
+            edge.status = EdgeStatus::UnavailableRoot;
             edge.evidence =
                 "registered lexical location; root unavailable and canonical equivalence unchecked"
                     .into();
         } else if !scope.contains(&target.bundle) {
-            edge.status = "out-of-scope".into();
+            edge.status = EdgeStatus::OutOfScope;
         } else if let Some((bundle, _)) = bundles.get(&target.bundle) {
             if bundle.get(&target.id).is_some() {
                 edge.status = if path.is_some() {
-                    "resolved"
+                    EdgeStatus::Resolved
                 } else {
-                    "unchecked-equivalence"
-                }
-                .into();
+                    EdgeStatus::UncheckedEquivalence
+                };
             }
         } else {
-            edge.status = "unavailable-root-or-revision".into();
+            edge.status = EdgeStatus::UnavailableRootOrRevision;
         }
     } else if path.as_ref().is_some_and(|p| !p.starts_with(root)) {
-        edge.status = "unregistered-target".into();
+        edge.status = EdgeStatus::UnregisteredTarget;
     }
     edge
 }
@@ -1461,12 +1514,12 @@ pub(crate) fn resolve_snapshot(
         .digest
         .as_deref()
         .map(|s| s.strip_prefix("sha256:").unwrap_or(s));
-    if let Some(digest) = digest {
-        if digest.len() != 64 || !digest.chars().all(|c| c.is_ascii_hexdigit()) {
-            result.status = "mismatched".into();
-            result.evidence = "invalid SHA-256 file digest".into();
-            return result;
-        }
+    if let Some(digest) = digest
+        && (digest.len() != 64 || !digest.chars().all(|c| c.is_ascii_hexdigit()))
+    {
+        result.status = "mismatched".into();
+        result.evidence = "invalid SHA-256 file digest".into();
+        return result;
     }
     if let Some(requested) = request.commit.as_deref().or(request.ref_.as_deref()) {
         // A commit is an exact immutable object ID; ref names belong in the ref field.
@@ -1493,12 +1546,12 @@ pub(crate) fn resolve_snapshot(
                 "exact commit identifier resolves to a different commit object".into();
             return result;
         }
-        if let Some(digest) = digest {
-            if sha256_hex(&bytes) != digest.to_lowercase() {
-                result.status = "mismatched".into();
-                result.evidence = "historical file digest differs".into();
-                return result;
-            }
+        if let Some(digest) = digest
+            && sha256_hex(&bytes) != digest.to_lowercase()
+        {
+            result.status = "mismatched".into();
+            result.evidence = "historical file digest differs".into();
+            return result;
         }
         result.resolved = target.cloned().map(|mut n| {
             n.version = format!("git:{commit}");
@@ -1584,65 +1637,54 @@ pub fn resolve_reference(
         "argument",
         None,
     );
-    if source_root.is_none() {
-        edge.status = "unknown-bundle-id".into();
+    let Some(source_root) = source_root else {
+        edge.status = EdgeStatus::UnknownBundleId;
         edge.evidence = "source bundle is not registered".into();
         return edge;
-    }
+    };
     // Structural Markdown files are resolvable documents, but remain excluded from
     // the concept graph. Resolve them only for this explicit reference query.
-    if let Some(path) = ordinary_path(source_root.unwrap(), &source.id, resource) {
-        if matches!(
+    if let Some(path) = ordinary_path(source_root, &source.id, resource)
+        && matches!(
             path.file_name().and_then(|s| s.to_str()),
             Some("index.md" | "log.md")
-        ) {
-            if let Some(entry) = entry_for_path(&entries, &path) {
-                let id = ConceptId::from_relative(
-                    &path
-                        .strip_prefix(&entry.root)
-                        .unwrap()
-                        .with_extension("")
-                        .to_string_lossy(),
-                )
-                .0;
-                let examined = graph.scope.examined.iter().find(|e| e.id == entry.id);
-                let version = examined
-                    .map(|e| e.version.clone())
-                    .unwrap_or_else(|| "working-tree".into());
-                let exists = entry.available
-                    && graph.scope.requested.contains(&entry.id)
-                    && examined.is_some()
-                    && version
-                        .strip_prefix("git:")
-                        .map(|rev| historical_bytes(&entry.root, &path, rev).is_some())
-                        .unwrap_or_else(|| path.is_file());
-                edge.target = Some(Node {
-                    bundle: entry.id.clone(),
-                    id,
-                    version,
-                });
-                edge.status = if !entry.available {
-                    "unavailable-root"
-                } else if !graph.scope.requested.contains(&entry.id) {
-                    "out-of-scope"
-                } else if examined.is_none() {
-                    "unavailable-root-or-revision"
-                } else if exists {
-                    "resolved"
-                } else {
-                    "missing-target"
-                }
-                .into();
-            }
-        }
+        )
+        && let Some((entry, rel)) = entry_with_rel(&entries, &path)
+    {
+        let id = ConceptId::from_relative(&rel.with_extension("").to_string_lossy()).0;
+        let examined = graph.scope.examined.iter().find(|e| e.id == entry.id);
+        let version = examined.map_or_else(|| "working-tree".into(), |e| e.version.clone());
+        let exists = entry.available
+            && graph.scope.requested.contains(&entry.id)
+            && examined.is_some()
+            && version.strip_prefix("git:").map_or_else(
+                || path.is_file(),
+                |rev| historical_bytes(&entry.root, &path, rev).is_some(),
+            );
+        edge.target = Some(Node {
+            bundle: entry.id.clone(),
+            id,
+            version,
+        });
+        edge.status = if !entry.available {
+            EdgeStatus::UnavailableRoot
+        } else if !graph.scope.requested.contains(&entry.id) {
+            EdgeStatus::OutOfScope
+        } else if examined.is_none() {
+            EdgeStatus::UnavailableRootOrRevision
+        } else if exists {
+            EdgeStatus::Resolved
+        } else {
+            EdgeStatus::MissingTarget
+        };
     }
     if edge
         .target
         .as_ref()
         .is_some_and(|n| graph.nodes.contains(n))
-        && edge.status == "missing-target"
+        && edge.status == EdgeStatus::MissingTarget
     {
-        edge.status = "resolved".into();
+        edge.status = EdgeStatus::Resolved;
     }
     edge
 }
@@ -1701,13 +1743,13 @@ mod tests {
         std::fs::write(&path, text).unwrap();
         let graph = build_catalog_graph(&context(&dir), &[], true, None).unwrap();
         assert_eq!(graph.edges.len(), 2);
-        assert_eq!(graph.edges[0].status, "resolved");
+        assert_eq!(graph.edges[0].status, EdgeStatus::Resolved);
         assert_eq!(graph.edges[0].target.as_ref().unwrap().bundle, "acme.b");
         assert_eq!(
             graph.edges[0].target.as_ref().unwrap().id,
             "/policies/margin"
         );
-        assert_eq!(graph.edges[1].status, "missing-target");
+        assert_eq!(graph.edges[1].status, EdgeStatus::MissingTarget);
         assert_eq!(graph.edges[1].target.as_ref().unwrap().id, "/missing");
     }
 
@@ -1728,7 +1770,7 @@ mod tests {
             .replace("../b/policies/margin.md", "\"#section\"");
         std::fs::write(&path, text).unwrap();
         let graph = build_catalog_graph(&context(&dir), &[], true, None).unwrap();
-        assert_eq!(graph.edges[0].status, "reference-mismatch");
+        assert_eq!(graph.edges[0].status, EdgeStatus::ReferenceMismatch);
     }
     #[test]
     fn standalone_subdirectory_keeps_its_boundary_and_rejects_ambiguous_scope() {
@@ -1748,7 +1790,7 @@ mod tests {
             .iter()
             .find(|edge| edge.resource == "sibling.md")
             .unwrap();
-        assert_eq!(edge.status, "resolved");
+        assert_eq!(edge.status, EdgeStatus::Resolved);
         assert_eq!(edge.target.as_ref().unwrap().bundle, edge.source.bundle);
         assert_eq!(edge.target.as_ref().unwrap().id, "/sibling");
         assert!(build_catalog_graph(&ctx, &[], true, None).is_err());
@@ -1761,17 +1803,22 @@ mod tests {
         let ctx = context(&dir);
         let default = build_catalog_graph(&ctx, &[], false, None).unwrap();
         assert_eq!(default.scope.examined.len(), 1);
-        assert!(default.edges.iter().all(|e| e.status == "out-of-scope"));
+        assert!(
+            default
+                .edges
+                .iter()
+                .all(|e| e.status == EdgeStatus::OutOfScope)
+        );
         assert_eq!(
             default.edges[0].target.as_ref().unwrap().id,
             "/policies/margin"
         );
         let graph = build_catalog_graph(&ctx, &[], true, None).unwrap();
         assert_eq!(graph.scope.examined.len(), 2);
-        assert!(graph.edges.iter().all(|e| e.status == "resolved"));
+        assert!(graph.edges.iter().all(|e| e.status == EdgeStatus::Resolved));
         assert_eq!(graph.edges[0].target.as_ref().unwrap().bundle, "acme.b");
         let edge = resolve_reference(&ctx, &graph, "/metrics/revenue", "../../../outside.md");
-        assert_eq!(edge.status, "unregistered-target");
+        assert_eq!(edge.status, EdgeStatus::UnregisteredTarget);
         assert!(edge.target.is_none());
     }
     #[test]
@@ -1797,7 +1844,7 @@ mod tests {
         std::fs::write(&p, text).unwrap();
         let graph = build_catalog_graph(&context(&dir), &[], true, None).unwrap();
         let edge = &graph.edges[0];
-        assert_eq!(edge.status, "reference-mismatch");
+        assert_eq!(edge.status, EdgeStatus::ReferenceMismatch);
         assert_eq!(edge.target.as_ref().unwrap().id, "/policies/margin");
     }
     #[test]
@@ -1856,7 +1903,7 @@ mod tests {
         let graph = build_catalog_graph(&context(&dir), &[], true, None).unwrap();
         let edge = &graph.edges[0];
         let snapshot = edge.snapshot.as_ref().unwrap();
-        assert_eq!(edge.status, "resolved");
+        assert_eq!(edge.status, EdgeStatus::Resolved);
         assert_eq!(edge.target.as_ref().unwrap().version, "working-tree");
         assert_eq!(snapshot.status, "mismatched");
         assert_eq!(
@@ -1865,10 +1912,12 @@ mod tests {
         );
         assert_eq!(snapshot.candidate.as_ref().unwrap().version, "working-tree");
         let historical = build_catalog_graph(&context(&dir), &[], true, Some(&commit)).unwrap();
-        assert!(historical
-            .nodes
-            .iter()
-            .all(|n| n.version == format!("git:{commit}")));
+        assert!(
+            historical
+                .nodes
+                .iter()
+                .all(|n| n.version == format!("git:{commit}"))
+        );
         assert!(
             build_catalog_graph(&context(&dir), &[], true, Some("missing-revision"))
                 .unwrap()
@@ -1903,7 +1952,7 @@ mod tests {
         let ctx = context(&dir);
         let graph = build_catalog_graph(&ctx, &[], true, None).unwrap();
         let edge = resolve_reference(&ctx, &graph, "acme.b:/policies/context", "margin.md");
-        assert_eq!(edge.status, "resolved");
+        assert_eq!(edge.status, EdgeStatus::Resolved);
         let target = edge.target.unwrap();
         assert_eq!(target.bundle, "acme.b");
         assert_eq!(target.id, "/policies/margin");
@@ -1916,13 +1965,13 @@ mod tests {
         let ctx = context(&dir);
         let graph = build_catalog_graph(&ctx, &[], false, None).unwrap();
         let edge = resolve_reference(&ctx, &graph, "/context", "/index.md");
-        assert_eq!(edge.status, "resolved");
+        assert_eq!(edge.status, EdgeStatus::Resolved);
         let target = edge.target.unwrap();
         assert_eq!(target.id, "/index");
         assert!(!graph.nodes.contains(&target));
         assert_eq!(
             resolve_reference(&ctx, &graph, "/context", "/log.md").status,
-            "missing-target"
+            EdgeStatus::MissingTarget
         );
     }
     #[test]
@@ -1943,21 +1992,21 @@ mod tests {
         let historical = build_catalog_graph(&ctx, &[], true, Some("HEAD")).unwrap();
         assert_eq!(
             resolve_reference(&ctx, &historical, "acme.b:/context", "/index.md").status,
-            "resolved"
+            EdgeStatus::Resolved
         );
         assert_eq!(
             resolve_reference(&ctx, &historical, "acme.b:/context", "/log.md").status,
-            "missing-target"
+            EdgeStatus::MissingTarget
         );
         let scoped = build_catalog_graph(&ctx, &[], false, None).unwrap();
         assert_eq!(
             resolve_reference(&ctx, &scoped, "acme.b:/context", "/log.md").status,
-            "out-of-scope"
+            EdgeStatus::OutOfScope
         );
         let unavailable = build_catalog_graph(&ctx, &[], true, Some("missing-revision")).unwrap();
         assert_eq!(
             resolve_reference(&ctx, &unavailable, "acme.b:/context", "/log.md").status,
-            "unavailable-root-or-revision"
+            EdgeStatus::UnavailableRootOrRevision
         );
     }
     #[test]
@@ -1996,9 +2045,11 @@ mod tests {
             ids(graph.affected_resources(&ctx, &changed, true, Some(1))),
             direct
         );
-        assert!(graph
-            .affected_resources(&ctx, &changed, true, Some(0))
-            .is_empty());
+        assert!(
+            graph
+                .affected_resources(&ctx, &changed, true, Some(0))
+                .is_empty()
+        );
         assert_eq!(
             ids(graph.affected_resources(&ctx, &changed, true, Some(2))),
             vec![
@@ -2015,9 +2066,11 @@ mod tests {
             ids(graph.affected_resources(&ctx, &mixed, true, None)),
             vec!["acme.a:/metrics/dependent", "acme.b:/policies/consumer"]
         );
-        assert!(serde_json::to_value(&graph)
-            .unwrap()
-            .get("resource_dependencies")
-            .is_none());
+        assert!(
+            serde_json::to_value(&graph)
+                .unwrap()
+                .get("resource_dependencies")
+                .is_none()
+        );
     }
 }

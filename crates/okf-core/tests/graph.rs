@@ -4,10 +4,10 @@
 use std::path::PathBuf;
 
 use okf_core::bundle::loader::load_bundle;
-use okf_core::graph::affected::{affected, AffectedOptions};
+use okf_core::graph::affected::{AffectedOptions, affected};
 use okf_core::graph::backlinks::backlinks_of;
 use okf_core::graph::build::build_graph;
-use okf_core::graph::render::{render, RenderFormat};
+use okf_core::graph::render::{RenderFormat, render};
 use okf_core::ontology::load::parse_ontology;
 use okf_core::ontology::schema::Ontology;
 use okf_core::query::resolve::resolve;

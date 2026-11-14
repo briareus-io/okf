@@ -61,9 +61,11 @@ concepts:
     assert_eq!(edges[0]["edge"]["status"], "resolved");
     assert_eq!(edges[2]["edge"]["status"], "missing");
     assert_eq!(edges[3]["edge"]["status"], "unknown-kind");
-    assert!(records
-        .iter()
-        .any(|r| r["kind"] == "link" && r["target"] == "/plain" && r["exists"] == false));
+    assert!(
+        records
+            .iter()
+            .any(|r| r["kind"] == "link" && r["target"] == "/plain" && r["exists"] == false)
+    );
     let text = run(&["links", "a", "--details"]);
     assert!(text.contains("—implements→ /b (resolved)"));
     assert!(text.contains("inverse: implemented-by"));

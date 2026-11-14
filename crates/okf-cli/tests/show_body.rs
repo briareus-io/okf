@@ -1,9 +1,5 @@
-use assert_cmd::prelude::*;
-use std::process::Command;
-
-fn okf() -> Command {
-    Command::cargo_bin("okf").unwrap()
-}
+mod common;
+use common::okf;
 
 #[test]
 fn raw_body_and_document_numbers_do_not_include_display_header() {
@@ -22,7 +18,7 @@ fn raw_body_and_document_numbers_do_not_include_display_header() {
             .args(flags)
             .output()
             .unwrap();
-        assert!(out.status.success(), "{:?}", out);
+        assert!(out.status.success(), "{out:?}");
         String::from_utf8(out.stdout).unwrap()
     };
     assert_eq!(run(&["--body"]), body);

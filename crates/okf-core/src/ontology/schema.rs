@@ -75,7 +75,7 @@ pub struct ConceptType {
 }
 
 /// Advisory trust expectation for a concept type.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TrustExpectation {
     /// `lint` warns if the concept's derived tier is lower than this.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -110,7 +110,7 @@ pub struct Field {
 
     /// For `object` fields: nested sub-fields.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub fields: Option<IndexMap<String, Field>>,
+    pub fields: Option<IndexMap<String, Self>>,
 
     /// Any further constraints (`pattern`, `min`, `max`, …) preserved verbatim.
     #[serde(flatten)]
@@ -169,34 +169,34 @@ pub enum FieldType {
 impl FieldType {
     /// Parse a primitive keyword. Returns `None` for names that must resolve via
     /// `field_types`.
-    pub fn from_keyword(s: &str) -> Option<FieldType> {
+    pub fn from_keyword(s: &str) -> Option<Self> {
         Some(match s {
-            "string" => FieldType::String,
-            "text" => FieldType::Text,
-            "int" => FieldType::Int,
-            "bool" => FieldType::Bool,
-            "date" => FieldType::Date,
-            "datetime" => FieldType::Datetime,
-            "uri" => FieldType::Uri,
-            "enum" => FieldType::Enum,
-            "list" => FieldType::List,
-            "object" => FieldType::Object,
+            "string" => Self::String,
+            "text" => Self::Text,
+            "int" => Self::Int,
+            "bool" => Self::Bool,
+            "date" => Self::Date,
+            "datetime" => Self::Datetime,
+            "uri" => Self::Uri,
+            "enum" => Self::Enum,
+            "list" => Self::List,
+            "object" => Self::Object,
             _ => return None,
         })
     }
 
     pub fn as_keyword(self) -> &'static str {
         match self {
-            FieldType::String => "string",
-            FieldType::Text => "text",
-            FieldType::Int => "int",
-            FieldType::Bool => "bool",
-            FieldType::Date => "date",
-            FieldType::Datetime => "datetime",
-            FieldType::Uri => "uri",
-            FieldType::Enum => "enum",
-            FieldType::List => "list",
-            FieldType::Object => "object",
+            Self::String => "string",
+            Self::Text => "text",
+            Self::Int => "int",
+            Self::Bool => "bool",
+            Self::Date => "date",
+            Self::Datetime => "datetime",
+            Self::Uri => "uri",
+            Self::Enum => "enum",
+            Self::List => "list",
+            Self::Object => "object",
         }
     }
 }
@@ -209,7 +209,7 @@ impl fmt::Display for FieldType {
 
 /// A typed reference rule: a frontmatter key on the source concept constrained to link at
 /// certain target type(s) with a cardinality.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ReferenceRule {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selector: Option<String>,
@@ -226,7 +226,7 @@ pub struct ReferenceRule {
 }
 
 /// A reference rule's target: one type or a union of types.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum Target {
     One(String),
@@ -237,8 +237,8 @@ impl Target {
     /// The target type names as a flat slice-like vector.
     pub fn types(&self) -> Vec<&str> {
         match self {
-            Target::One(s) => vec![s.as_str()],
-            Target::Many(v) => v.iter().map(String::as_str).collect(),
+            Self::One(s) => vec![s.as_str()],
+            Self::Many(v) => v.iter().map(String::as_str).collect(),
         }
     }
 
@@ -265,16 +265,16 @@ impl Cardinality {
     /// Minimum number of links required.
     pub fn min(self) -> usize {
         match self {
-            Cardinality::ZeroOne | Cardinality::ZeroN => 0,
-            Cardinality::OneOne | Cardinality::OneN => 1,
+            Self::ZeroOne | Self::ZeroN => 0,
+            Self::OneOne | Self::OneN => 1,
         }
     }
 
     /// Maximum number of links allowed (`None` == unbounded `n`).
     pub fn max(self) -> Option<usize> {
         match self {
-            Cardinality::ZeroOne | Cardinality::OneOne => Some(1),
-            Cardinality::ZeroN | Cardinality::OneN => None,
+            Self::ZeroOne | Self::OneOne => Some(1),
+            Self::ZeroN | Self::OneN => None,
         }
     }
 
@@ -285,10 +285,10 @@ impl Cardinality {
 
     pub fn as_str(self) -> &'static str {
         match self {
-            Cardinality::ZeroOne => "0..1",
-            Cardinality::OneOne => "1..1",
-            Cardinality::ZeroN => "0..n",
-            Cardinality::OneN => "1..n",
+            Self::ZeroOne => "0..1",
+            Self::OneOne => "1..1",
+            Self::ZeroN => "0..n",
+            Self::OneN => "1..n",
         }
     }
 }
@@ -298,10 +298,10 @@ impl FromStr for Cardinality {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.trim() {
-            "0..1" => Ok(Cardinality::ZeroOne),
-            "1..1" => Ok(Cardinality::OneOne),
-            "0..n" => Ok(Cardinality::ZeroN),
-            "1..n" => Ok(Cardinality::OneN),
+            "0..1" => Ok(Self::ZeroOne),
+            "1..1" => Ok(Self::OneOne),
+            "0..n" => Ok(Self::ZeroN),
+            "1..n" => Ok(Self::OneN),
             other => Err(OkfError::Usage(format!(
                 "invalid cardinality {other:?}: expected one of 0..1, 1..1, 0..n, 1..n"
             ))),
@@ -333,7 +333,7 @@ fn is_false(b: &bool) -> bool {
 }
 
 /// Semantic edge mapping over a declared reference, paired within each list occurrence.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RelationshipRule {
     pub reference: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -349,7 +349,7 @@ pub struct RelationshipRule {
     #[serde(flatten)]
     pub extra: IndexMap<String, Value>,
 }
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RelationshipKind {
     pub inverse: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]

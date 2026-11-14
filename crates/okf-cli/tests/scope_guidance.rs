@@ -38,12 +38,16 @@ fn scoped_list_delivers_each_bundles_guidance_with_origin() {
         .iter()
         .filter(|r| r["kind"] == "guidance")
         .collect::<Vec<_>>();
-    assert!(guidance
-        .iter()
-        .any(|r| r["bundle"] == "test.a" && r["id"] == "read-rule"));
-    assert!(guidance
-        .iter()
-        .any(|r| r["bundle"] == "test.b" && r["id"] == "read-rule"));
+    assert!(
+        guidance
+            .iter()
+            .any(|r| r["bundle"] == "test.a" && r["id"] == "read-rule")
+    );
+    assert!(
+        guidance
+            .iter()
+            .any(|r| r["bundle"] == "test.b" && r["id"] == "read-rule")
+    );
     assert!(guidance.iter().all(|r| r["origin"]["root"].is_string()));
     assert!(!guidance.iter().any(|r| r["bundle"] == "test.missing"));
 }
@@ -138,8 +142,9 @@ fn scope_inspection_never_activates_secondary_workflows() {
         .stdout
         .clone();
     let r = rows(&out);
-    assert!(r
-        .iter()
-        .filter(|r| r["kind"] == "guidance")
-        .all(|r| r["instruction_role"] == "inspected"));
+    assert!(
+        r.iter()
+            .filter(|r| r["kind"] == "guidance")
+            .all(|r| r["instruction_role"] == "inspected")
+    );
 }

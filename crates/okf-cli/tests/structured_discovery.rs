@@ -72,9 +72,20 @@ fn catalog_selection_supports_new_ontology_commands_and_previews() {
             String::from_utf8_lossy(&output.stderr)
         );
     };
-    run(&["ontology", "apply", "--from", "{field_types: {Label: {base: string}}, concepts: {Note: {fields: {label: {type: Label}}}}}", "--dry-run"]);
+    run(&[
+        "ontology",
+        "apply",
+        "--from",
+        "{field_types: {Label: {base: string}}, concepts: {Note: {fields: {label: {type: Label}}}}}",
+        "--dry-run",
+    ]);
     assert!(!bundle.join("ontology.yaml").exists());
-    run(&["ontology", "apply", "--from", "{field_types: {Label: {base: string}}, concepts: {Note: {fields: {label: {type: Label}}}}}"]);
+    run(&[
+        "ontology",
+        "apply",
+        "--from",
+        "{field_types: {Label: {base: string}}, concepts: {Note: {fields: {label: {type: Label}}}}}",
+    ]);
     let baseline = std::fs::read(bundle.join("ontology.yaml")).unwrap();
     run(&[
         "ontology",

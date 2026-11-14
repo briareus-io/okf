@@ -4,7 +4,7 @@ use crate::parse::writer::needs_order_normalization;
 
 pub const RULE: &str = "frontmatter-order";
 
-pub fn run(ctx: &RuleContext) -> Vec<Finding> {
+pub fn run(ctx: &RuleContext<'_>) -> Vec<Finding> {
     let Some(severity) = ctx.config.frontmatter_order else {
         return Vec::new();
     };

@@ -33,7 +33,7 @@ fn catalog_graph_artifacts_keep_scope_and_reference_diagnostics_on_stderr() {
             .args(["graph", "--format", format])
             .output()
             .unwrap();
-        assert!(result.status.success(), "{:?}", result);
+        assert!(result.status.success(), "{result:?}");
         let stdout = String::from_utf8(result.stdout).unwrap();
         let stderr = String::from_utf8(result.stderr).unwrap();
         assert!(stdout.starts_with(prefix), "{stdout}");
@@ -53,14 +53,16 @@ fn catalog_graph_artifacts_keep_scope_and_reference_diagnostics_on_stderr() {
         .args(["graph", "--json", "--format", "graphml"])
         .output()
         .unwrap();
-    assert!(json.status.success(), "{:?}", json);
+    assert!(json.status.success(), "{json:?}");
     let records = String::from_utf8(json.stdout)
         .unwrap()
         .lines()
         .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
         .collect::<Vec<_>>();
     assert!(records.iter().any(|record| record["kind"] == "scope"));
-    assert!(records
-        .iter()
-        .any(|record| { record["kind"] == "bundle-edge" && record["status"] == "missing-target" }));
+    assert!(
+        records.iter().any(|record| {
+            record["kind"] == "bundle-edge" && record["status"] == "missing-target"
+        })
+    );
 }

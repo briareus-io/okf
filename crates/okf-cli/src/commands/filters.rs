@@ -179,12 +179,12 @@ pub fn apply_primary(
         if json_output {
             output::print_line(
                 &json!({"kind":"query-filters","query":q,"preset":args.preset,"origin":"explicit-preset-and-arguments"}),
-            )?
+            )?;
         } else {
             eprintln!(
                 "primary filters: {}",
                 serde_json::to_string(&q).unwrap_or_default()
-            )
+            );
         }
     }
     args.type_ = q.type_;

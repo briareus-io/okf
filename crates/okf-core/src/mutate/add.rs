@@ -168,10 +168,11 @@ pub fn add(
         }
         // Required custom fields, with a type-appropriate placeholder.
         for (key, field) in &ct.fields {
-            if field.required && !map.contains_key(key) {
-                if let Some(value) = field_placeholder(ont, field) {
-                    map.insert(key.clone(), value);
-                }
+            if field.required
+                && !map.contains_key(key)
+                && let Some(value) = field_placeholder(ont, field)
+            {
+                map.insert(key.clone(), value);
             }
         }
         // Required reference keys (cardinality lower bound ≥ 1).
@@ -250,7 +251,7 @@ pub fn add(
             .ok_or_else(|| {
                 OkfError::Usage("add --attested requires --runtime <name>".to_string())
             })?;
-        map.insert("runtime".to_string(), Value::String(runtime.clone()));
+        map.insert("runtime".to_string(), Value::String(runtime));
         if opts.computation.is_none()
             && opts.inline_computation.is_none()
             && !map
@@ -382,13 +383,13 @@ pub fn add(
 /// uses exact `Attested Computation`. Errors if neither a type nor `--attested` is supplied.
 fn resolve_type_name(ontology: Option<&Ontology>, opts: &AddOptions) -> Result<String> {
     if opts.attested {
-        if let Some(t) = &opts.concept_type {
-            if t != "Attested Computation" {
-                return Err(OkfError::Usage(
-                    "--attested requires exact --type 'Attested Computation' (or omit --type)"
-                        .to_string(),
-                ));
-            }
+        if let Some(t) = &opts.concept_type
+            && t != "Attested Computation"
+        {
+            return Err(OkfError::Usage(
+                "--attested requires exact --type 'Attested Computation' (or omit --type)"
+                    .to_string(),
+            ));
         }
         return Ok("Attested Computation".to_string());
     }

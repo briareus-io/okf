@@ -13,6 +13,10 @@ fn run(root: &std::path::Path, args: &[&str]) -> Output {
         .unwrap()
 }
 
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "test helper consumes the output at each call site"
+)]
 fn record(output: Output) -> Value {
     std::str::from_utf8(&output.stdout)
         .unwrap()
@@ -59,18 +63,45 @@ fn human_projection_heading_matches_the_fields_rendered() {
 fn malformed_computation_contracts_fail_inspection() {
     let root = tempfile::tempdir().unwrap();
     for (metadata, body, expected) in [
-        ("executor: nope\n", "# Computation\n```sql\nselect 1\n```\n", "executor"),
-        ("attester: {}\n", "# Computation\n```sql\nselect 1\n```\n", "attester.resource"),
-        ("parameters:\n- {name: x, type: string, required: true}\n- {name: x, type: string, required: false}\n", "# Computation\n```sql\nselect 1\n```\n", "duplicate"),
+        (
+            "executor: nope\n",
+            "# Computation\n```sql\nselect 1\n```\n",
+            "executor",
+        ),
+        (
+            "attester: {}\n",
+            "# Computation\n```sql\nselect 1\n```\n",
+            "attester.resource",
+        ),
+        (
+            "parameters:\n- {name: x, type: string, required: true}\n- {name: x, type: string, required: false}\n",
+            "# Computation\n```sql\nselect 1\n```\n",
+            "duplicate",
+        ),
         ("", "# Computation\n```sql\n```\n", "empty"),
-        ("", "# Computation\n```sql\nselect 1\n```\n```sql\nselect 2\n```\n", "single"),
+        (
+            "",
+            "# Computation\n```sql\nselect 1\n```\n```sql\nselect 2\n```\n",
+            "single",
+        ),
     ] {
-        std::fs::write(root.path().join("job.md"), format!("---\ntype: Attested Computation\nruntime: sql\n{metadata}---\n{body}")).unwrap();
+        std::fs::write(
+            root.path().join("job.md"),
+            format!("---\ntype: Attested Computation\nruntime: sql\n{metadata}---\n{body}"),
+        )
+        .unwrap();
         let output = run(root.path(), &["computation", "check", "job", "--json"]);
         assert_eq!(output.status.code(), Some(1), "{output:?}");
         let value = record(output);
         assert_eq!(value["valid"], false);
-        assert!(value["issues"].as_array().unwrap().iter().any(|v| v.as_str().unwrap().contains(expected)), "{value}");
+        assert!(
+            value["issues"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|v| v.as_str().unwrap().contains(expected)),
+            "{value}"
+        );
     }
 }
 
@@ -152,7 +183,7 @@ fn fetched_artifact_honors_line_selection() {
                     if e.kind() == std::io::ErrorKind::WouldBlock
                         && std::time::Instant::now() < deadline =>
                 {
-                    std::thread::sleep(std::time::Duration::from_millis(10))
+                    std::thread::sleep(std::time::Duration::from_millis(10));
                 }
                 Err(e) => panic!("test HTTP client did not connect: {e}"),
             }
@@ -163,8 +194,15 @@ fn fetched_artifact_honors_line_selection() {
         stream
             .set_read_timeout(Some(std::time::Duration::from_secs(5)))
             .unwrap();
-        let mut request = [0u8; 4096];
-        stream.read(&mut request).unwrap();
+        let mut request = Vec::new();
+        let mut chunk = [0u8; 512];
+        while !request.windows(4).any(|w| w == b"\r\n\r\n") && request.len() < 16 * 1024 {
+            let n = stream.read(&mut chunk).unwrap();
+            if n == 0 {
+                break;
+            }
+            request.extend_from_slice(&chunk[..n]);
+        }
         stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 14\r\nConnection: close\r\n\r\none\ntwo\nthree\n").unwrap();
     });
     let root = tempfile::tempdir().unwrap();

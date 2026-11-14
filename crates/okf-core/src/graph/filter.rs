@@ -5,7 +5,7 @@ use crate::{
     error::{OkfError, Result},
     graph::{
         build::LinkGraph,
-        relationships::{relationships, Relationship},
+        relationships::{Relationship, relationships},
     },
     model::{
         concept::{Concept, ConceptId},
@@ -384,8 +384,7 @@ pub fn query_local(
     let total = matches.len();
     let end = options
         .limit
-        .map(|n| options.offset.saturating_add(n))
-        .unwrap_or(total)
+        .map_or(total, |n| options.offset.saturating_add(n))
         .min(total);
     evidence.delivery_complete = options.offset == 0 && end == total;
     let occurrences = matches
@@ -616,12 +615,23 @@ concepts:
 "#,
         )
         .unwrap();
-        let bundle = Bundle { root: ".".into(), concepts: vec![
-            concept("defects/a", "type: Defect\nstatus: stable\nrelations:\n- target: /features/a\n  state: open\n  severity: low\n- target: /features/a\n  state: closed\n  severity: high\n- target: /features/missing\n  state: open\n  severity: high\n", ""),
-            concept("defects/b", "type: Defect\nrelations:\n- target: /features/a\n  state: open\n  severity: high\n", ""),
-            concept("features/a", "type: Feature", ""),
-            concept("notes/a", "type: Note", "[feature](/features/a.md)"),
-        ]};
+        let bundle = Bundle {
+            root: ".".into(),
+            concepts: vec![
+                concept(
+                    "defects/a",
+                    "type: Defect\nstatus: stable\nrelations:\n- target: /features/a\n  state: open\n  severity: low\n- target: /features/a\n  state: closed\n  severity: high\n- target: /features/missing\n  state: open\n  severity: high\n",
+                    "",
+                ),
+                concept(
+                    "defects/b",
+                    "type: Defect\nrelations:\n- target: /features/a\n  state: open\n  severity: high\n",
+                    "",
+                ),
+                concept("features/a", "type: Feature", ""),
+                concept("notes/a", "type: Note", "[feature](/features/a.md)"),
+            ],
+        };
         (bundle, ontology)
     }
     #[test]
@@ -649,10 +659,12 @@ concepts:
         .unwrap();
         assert_eq!(detailed.evidence.matched_occurrences, 3);
         assert_eq!(detailed.evidence.matched_concepts, 2);
-        assert!(detailed
-            .occurrences
-            .iter()
-            .all(|r| r.relationship.is_some()));
+        assert!(
+            detailed
+                .occurrences
+                .iter()
+                .all(|r| r.relationship.is_some())
+        );
         let compact = query_local(
             &b,
             Some(&o),
@@ -745,9 +757,10 @@ concepts:
         assert_eq!(merged.kind, vec!["depends-on"]);
         assert!(merged.related_type.is_empty());
         assert!(base.overlay(&explicit, &["kind".into()]).is_err());
-        assert!(base
-            .overlay(&EdgeFilters::default(), &["typo".into()])
-            .is_err());
+        assert!(
+            base.overlay(&EdgeFilters::default(), &["typo".into()])
+                .is_err()
+        );
         assert!(serde_yaml::from_str::<EdgeFilters>("kinds: [blocks]").is_err());
     }
     #[test]

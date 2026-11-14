@@ -37,14 +37,18 @@ fn complement_includes_absent_only_when_requested() {
             "{metadata}"
         );
     }
-    assert!(Condition::parse("status absent OR status is null")
-        .unwrap()
-        .matches(&concept("status: null"))
-        .unwrap());
-    assert!(!Condition::parse("status not in [\"implemented\"]")
-        .unwrap()
-        .matches(&concept("type: Note"))
-        .unwrap());
+    assert!(
+        Condition::parse("status absent OR status is null")
+            .unwrap()
+            .matches(&concept("status: null"))
+            .unwrap()
+    );
+    assert!(
+        !Condition::parse("status not in [\"implemented\"]")
+            .unwrap()
+            .matches(&concept("type: Note"))
+            .unwrap()
+    );
 }
 
 #[test]
@@ -158,10 +162,12 @@ concepts:
         concept("type: Note\ninherited: foo\nchild: bar\nown: baz\nrecord: {name: example}");
     assert!(check_concept(&ontology, &metadata.frontmatter, |_| None).is_empty());
     let invalid = yaml.replace("description: Field meaning", "unknown_constraint: ignored");
-    assert!(!check_concept(
-        &parse_ontology(&invalid).unwrap(),
-        &metadata.frontmatter,
-        |_| None
-    )
-    .is_empty());
+    assert!(
+        !check_concept(
+            &parse_ontology(&invalid).unwrap(),
+            &metadata.frontmatter,
+            |_| None
+        )
+        .is_empty()
+    );
 }

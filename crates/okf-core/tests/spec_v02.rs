@@ -4,7 +4,7 @@
 //! remain consumable and lint-only; §11 hard failures are validation failures.
 
 use okf_core::bundle::loader::load_bundle;
-use okf_core::check::lint::{lint_bundle, LintConfig};
+use okf_core::check::lint::{LintConfig, lint_bundle};
 use okf_core::check::validate::validate_bundle;
 use okf_core::model::trust::TrustTier;
 
@@ -64,9 +64,11 @@ fn section_5_optional_family_errors_are_lint_only() {
     assert!(validate_bundle(root.path()).unwrap().is_conformant());
     let loaded = load_bundle(root.path()).unwrap();
     assert_eq!(loaded.concepts[0].trust_tier(), TrustTier::Unverified);
-    assert!(lint_bundle(&loaded, None, &LintConfig::default())
-        .iter()
-        .any(|finding| finding.rule == "okf-v02"));
+    assert!(
+        lint_bundle(&loaded, None, &LintConfig::default())
+            .iter()
+            .any(|finding| finding.rule == "okf-v02")
+    );
 }
 
 #[test]
@@ -116,7 +118,9 @@ fn section_10_attested_runtime_is_advisory_to_bundle_conformance() {
     )]);
     assert!(validate_bundle(root.path()).unwrap().is_conformant());
     let loaded = load_bundle(root.path()).unwrap();
-    assert!(lint_bundle(&loaded, None, &LintConfig::default())
-        .iter()
-        .any(|finding| finding.message.contains("runtime")));
+    assert!(
+        lint_bundle(&loaded, None, &LintConfig::default())
+            .iter()
+            .any(|finding| finding.message.contains("runtime"))
+    );
 }

@@ -335,12 +335,11 @@ pub fn fingerprint_bundle_resource(
         .and_then(|v| v.get("snapshot"))
         .and_then(|v| v.get("digest"))
         .and_then(serde_yaml::Value::as_str)
+        && expected.strip_prefix("sha256:").unwrap_or(expected) != digest
     {
-        if expected.strip_prefix("sha256:").unwrap_or(expected) != digest {
-            return Err(OkfError::Usage(
-                "source snapshot digest does not match; refresh cannot accept a mismatch".into(),
-            ));
-        }
+        return Err(OkfError::Usage(
+            "source snapshot digest does not match; refresh cannot accept a mismatch".into(),
+        ));
     }
     let mut fields = vec![
         ("fingerprint_version".into(), "1".into()),
@@ -470,9 +469,10 @@ mod tests {
         let fs = FakeFs::new();
         let git = FakeGit::new();
         let eng = Engine::new(Path::new(""), &fs, &git, None);
-        assert!(eng
-            .fingerprint(&src("x", SourceKind::Other("sql".to_string())))
-            .is_err());
+        assert!(
+            eng.fingerprint(&src("x", SourceKind::Other("sql".to_string())))
+                .is_err()
+        );
     }
 
     #[test]
@@ -484,8 +484,8 @@ mod tests {
         let first = eng.fingerprint(&source).unwrap_err();
         let cached = eng.fingerprint(&source).unwrap_err();
         assert_eq!(first.to_string(), cached.to_string());
-        assert!(matches!(first, OkfError::Io(_)));
-        assert!(matches!(cached, OkfError::Io(_)));
+        assert!(matches!(first, OkfError::Io { .. }));
+        assert!(matches!(cached, OkfError::Io { .. }));
         assert_eq!(first.to_string().matches("I/O error:").count(), 1);
     }
 

@@ -1,10 +1,10 @@
 //! Structured authoring semantics, lifecycle behavior and atomic failure boundaries.
 use okf_core::model::concept::ConceptId;
 use okf_core::model::frontmatter::Frontmatter;
-use okf_core::mutate::add::{add, AddOptions};
-use okf_core::mutate::edit::{edit, EditSpec};
+use okf_core::mutate::add::{AddOptions, add};
+use okf_core::mutate::edit::{EditSpec, edit};
 use okf_core::mutate::structured::{
-    object_path, parse_path_assignment, pointer, PatchOperation, StructuredEdits,
+    PatchOperation, StructuredEdits, object_path, parse_path_assignment, pointer,
 };
 use okf_core::parse::parse_concept;
 use serde_yaml::Value;
@@ -131,13 +131,15 @@ fn conflicting_assignments_rejected_without_restricting_siblings() {
     let mut overlap = siblings.clone();
     overlap.sets.push(("deadline".into(), yaml("{}")));
     assert!(overlap.validate_conflicts(&[]).is_err());
-    assert!(StructuredEdits {
-        set_paths: vec![("a".into(), yaml("1"))],
-        unset_paths: vec!["a".into()],
-        ..Default::default()
-    }
-    .validate_conflicts(&[])
-    .is_err());
+    assert!(
+        StructuredEdits {
+            set_paths: vec![("a".into(), yaml("1"))],
+            unset_paths: vec!["a".into()],
+            ..Default::default()
+        }
+        .validate_conflicts(&[])
+        .is_err()
+    );
     let mut overlap = patch("[{op: replace, path: /deadline/within, value: 48}]");
     overlap.set_paths = siblings.set_paths;
     assert!(overlap.validate_conflicts(&[]).is_err());
@@ -239,16 +241,18 @@ fn structured_edit_lifecycle_preview_and_standard_validation_match_writes() {
     assert_eq!(persisted.after, std::fs::read_to_string(&path).unwrap());
     let original = std::fs::read_to_string(&path).unwrap();
     for dry_run in [true, false] {
-        assert!(edit(
-            dir.path(),
-            "onboarding",
-            &EditSpec {
-                structured: patch("[{op: remove, path: /type}]"),
-                dry_run,
-                ..Default::default()
-            }
-        )
-        .is_err());
+        assert!(
+            edit(
+                dir.path(),
+                "onboarding",
+                &EditSpec {
+                    structured: patch("[{op: remove, path: /type}]"),
+                    dry_run,
+                    ..Default::default()
+                }
+            )
+            .is_err()
+        );
         assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
     }
 }
@@ -359,7 +363,9 @@ fn patch_operations_require_all_standard_members() {
 
 #[test]
 fn patch_tests_compare_numbers_exactly_and_objects_without_order() {
-    let mut document = fm("type: Procedure\nobject: {first: 1, second: [1.0]}\nlarge: 9007199254740993\nmaximum: 18446744073709551615\n");
+    let mut document = fm(
+        "type: Procedure\nobject: {first: 1, second: [1.0]}\nlarge: 9007199254740993\nmaximum: 18446744073709551615\n",
+    );
     patch("[{op: test, path: /object, value: {second: [1], first: 1.0}}]")
         .apply(&mut document)
         .unwrap();

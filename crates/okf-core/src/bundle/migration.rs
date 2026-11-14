@@ -55,7 +55,7 @@ fn read(path: &Path) -> Result<Option<Vec<u8>>> {
     match std::fs::read(path) {
         Ok(v) => Ok(Some(v)),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(OkfError::Io(format!("{}: {e}", path.display()))),
+        Err(e) => Err(OkfError::io_with(format!("{}: {e}", path.display()), e)),
     }
 }
 fn digest(path: &Path) -> Result<Option<String>> {
@@ -73,7 +73,7 @@ fn no_symlinks(path: &Path) -> Result<()> {
                 return Err(usage(format!(
                     "migration path contains a symlink: {}",
                     current.display()
-                )))
+                )));
             }
             Ok(_) => {}
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
@@ -140,7 +140,7 @@ fn yaml_at(path: &Path) -> Result<Value> {
 fn stage(plan: &mut MigrationPlan, path: PathBuf, after: Option<String>) -> Result<()> {
     add_input(plan, &path)?;
     no_symlinks(&path)?;
-    if read(&path)?.as_deref() != after.as_ref().map(|s| s.as_bytes()) {
+    if read(&path)?.as_deref() != after.as_ref().map(std::string::String::as_bytes) {
         plan.changes.push(MigrationChange {
             before_digest: digest(&path)?,
             path,
@@ -152,6 +152,10 @@ fn stage(plan: &mut MigrationPlan, path: PathBuf, after: Option<String>) -> Resu
 pub fn plan(config: &Path) -> Result<MigrationPlan> {
     plan_with_options(config, MigrationOptions::default())
 }
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "public API takes options by value"
+)]
 pub fn plan_with_options(config: &Path, options: MigrationOptions) -> Result<MigrationPlan> {
     let config = absolute(config)?;
     let parent = config
@@ -171,7 +175,7 @@ pub fn plan_with_options(config: &Path, options: MigrationOptions) -> Result<Mig
         ))
     })?;
     let text = std::str::from_utf8(&bytes).map_err(|e| usage(e.to_string()))?;
-    let parsed: super::config::Config =
+    let mut parsed: super::config::Config =
         toml::from_str(text).map_err(|e| usage(format!("invalid legacy configuration: {e}")))?;
     let base = config
         .parent()
@@ -247,11 +251,15 @@ pub fn plan_with_options(config: &Path, options: MigrationOptions) -> Result<Mig
     let default_path = parsed
         .default_bundle
         .as_ref()
-        .and_then(|s| s.path.as_ref())
-        .or(parsed.bundle.as_ref())
+        .and_then(|s| s.path())
+        .or(parsed.bundle.as_deref())
         .map(|s| absolute(&base.join(s)))
         .transpose()?;
-    let mut default_id = parsed.default_bundle.as_ref().and_then(|s| s.id.clone());
+    let mut default_id = parsed
+        .default_bundle
+        .as_ref()
+        .and_then(|s| s.id())
+        .map(str::to_owned);
     if let Some(path) = &default_path {
         default_id = roots
             .iter()
@@ -288,11 +296,11 @@ pub fn plan_with_options(config: &Path, options: MigrationOptions) -> Result<Mig
             out.unresolved
                 .push(format!("default bundle ID {id} is not registered"));
         }
-        if let Some(old) = cm.get(key("default_bundle")) {
-            if old != &key(id) {
-                out.unresolved
-                    .push("catalog and TOML default_bundle conflict".into());
-            }
+        if let Some(old) = cm.get(key("default_bundle"))
+            && old != &key(id)
+        {
+            out.unresolved
+                .push("catalog and TOML default_bundle conflict".into());
         }
         cm.insert(key("default_bundle"), key(id));
     }
@@ -354,12 +362,10 @@ pub fn plan_with_options(config: &Path, options: MigrationOptions) -> Result<Mig
                     .get_mut("settings")
                     .and_then(|s| s.get_mut("ontology")),
                 value.get("ontology"),
-            ) {
-                if let (Some(old), Some(new)) = (existing.as_str(), incoming.as_str()) {
-                    if absolute(&root.join(old))? == absolute(&root.join(new))? {
-                        *existing = incoming.clone();
-                    }
-                }
+            ) && let (Some(old), Some(new)) = (existing.as_str(), incoming.as_str())
+                && absolute(&root.join(old))? == absolute(&root.join(new))?
+            {
+                *existing = incoming.clone();
             }
             let map = manifest
                 .as_mapping_mut()
@@ -529,20 +535,17 @@ pub fn apply(plan: &MigrationPlan) -> Result<MigrationReport> {
                 )));
             }
             if let Some(after) = &change.after {
-                let parent = change.path.parent().unwrap();
-                std::fs::create_dir_all(parent)?;
-                let staging = parent.join(format!(".okf-migrate-{}-{i}", &plan.digest[..12]));
-                let mut file = std::fs::OpenOptions::new()
-                    .write(true)
-                    .create_new(true)
-                    .open(&staging)?;
-                use std::io::Write;
-                file.write_all(after.as_bytes())?;
-                file.sync_all()?;
-                drop(file);
-                std::fs::rename(staging, &change.path)?;
-            } else if change.path.exists() {
-                std::fs::remove_file(&change.path)?;
+                crate::mutate::edit::durable_write(
+                    &change.path,
+                    after.as_bytes(),
+                    crate::mutate::edit::WriteMode::Replace,
+                )?;
+            } else {
+                match std::fs::remove_file(&change.path) {
+                    Ok(()) => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => return Err(e.into()),
+                }
             }
             applied = i + 1;
             std::fs::write(backup.join("state"), format!("applied {applied}\n"))?;
@@ -554,22 +557,32 @@ pub fn apply(plan: &MigrationPlan) -> Result<MigrationReport> {
         for i in (0..applied).rev() {
             let path = &plan.changes[i].path;
             let r = if let Some(bytes) = &originals[i] {
-                std::fs::write(path, bytes)
+                crate::mutate::edit::durable_write(
+                    path,
+                    bytes,
+                    crate::mutate::edit::WriteMode::Replace,
+                )
+                .map_err(|e| e.to_string())
             } else {
-                std::fs::remove_file(path)
+                match std::fs::remove_file(path) {
+                    Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.to_string()),
+                    _ => Ok(()),
+                }
             };
             if let Err(e) = r {
-                rollback_errors.push(e.to_string());
+                rollback_errors.push(format!("{}: {e}", path.display()));
             }
         }
-        std::fs::write(
+        if let Err(e) = std::fs::write(
             backup.join("state"),
             if rollback_errors.is_empty() {
                 "rolled-back\n"
             } else {
                 "recovery-required\n"
             },
-        )?;
+        ) {
+            rollback_errors.push(format!("state write failed: {e}"));
+        }
         return Err(OkfError::Environment(format!(
             "migration failed: {error}; backup {}; rollback errors: {}",
             backup.display(),
@@ -605,7 +618,7 @@ mod tests {
     #[test]
     fn migration_preserves_exact_original_and_rebases_ontology() {
         let dir = fixture();
-        let original="# preserved in backup\ndefault_bundle={path='knowledge'}\n[bundle_settings.default]\nontology='knowledge/ontology.yaml'\n[bundle_settings.default.lint]\nsource_unrecorded='off'\n";
+        let original = "# preserved in backup\ndefault_bundle={path='knowledge'}\n[bundle_settings.default]\nontology='knowledge/ontology.yaml'\n[bundle_settings.default.lint]\nsource_unrecorded='off'\n";
         std::fs::write(dir.path().join("okf.toml"), original).unwrap();
         let p = plan_with_options(
             &dir.path().join("okf.toml"),
@@ -692,8 +705,10 @@ mod tests {
         )
         .unwrap();
         apply(&p).unwrap();
-        assert!(std::fs::read_to_string(dir.path().join("okf.toml"))
-            .unwrap()
-            .contains("keep"));
+        assert!(
+            std::fs::read_to_string(dir.path().join("okf.toml"))
+                .unwrap()
+                .contains("keep")
+        );
     }
 }

@@ -20,6 +20,7 @@
 mod local_signing;
 
 use serde_json::Value;
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -52,7 +53,7 @@ fn main() {
             let mut cargo_args = vec!["build"];
             cargo_args.extend(args[1..].iter().map(String::as_str));
             if local_signing::enabled() {
-                local_signing::build(&root, &cargo_args);
+                or_exit(local_signing::build(&root, &cargo_args));
             } else {
                 cargo(&root, &cargo_args);
             }
@@ -60,7 +61,7 @@ fn main() {
         }
         Some("install") => {
             eprintln!(
-                "OKF CLI/plugin 0.6.3 adds scoped context delivery and optional freshness tokens. Review releases/0.6.3.md and knowledge/reference/migrations/0.6.0.md before installing."
+                "OKF CLI/plugin 0.6.4 fixes mv link rewriting and pipe exit status and hardens writes and Git handling. Review releases/0.6.4.md and knowledge/reference/migrations/0.6.0.md before installing."
             );
             if local_signing::enabled() {
                 let install_root = local_signing::install_root(&root);
@@ -76,7 +77,7 @@ fn main() {
                         install_root.to_str().expect("UTF-8 install root"),
                     ],
                 );
-                local_signing::sign(&install_root.join("bin/okf"));
+                or_exit(local_signing::sign(&install_root.join("bin/okf")));
             } else {
                 cargo(
                     &root,
@@ -89,6 +90,14 @@ fn main() {
             eprintln!("usage: cargo xtask <docs [--check] | skills | build [args…] | install>");
             std::process::exit(2);
         }
+    }
+}
+
+/// Report a failed task step and exit non-zero.
+fn or_exit(result: Result<(), String>) {
+    if let Err(message) = result {
+        eprintln!("xtask: {message}");
+        std::process::exit(1);
     }
 }
 
@@ -155,9 +164,11 @@ fn run_docs(check: bool) {
         // These fields drive the manual's structured command queries, so they
         // must track the same schema as the visible argument reference.
         assert!(frontmatter.lines().any(|line| line.starts_with("group: ")));
-        assert!(frontmatter
-            .lines()
-            .any(|line| line.starts_with("mutates: ")));
+        assert!(
+            frontmatter
+                .lines()
+                .any(|line| line.starts_with("mutates: "))
+        );
         let frontmatter = frontmatter
             .lines()
             .map(|line| {
@@ -369,13 +380,9 @@ fn arg_desc(a: &Value) -> String {
         _ => None,
     };
     if let Some(default) = default {
-        d.push_str(&format!(" (default: `{default}`)"));
+        let _ = write!(d, " (default: `{default}`)");
     }
-    if d.is_empty() {
-        "—".into()
-    } else {
-        d
-    }
+    if d.is_empty() { "—".into() } else { d }
 }
 
 fn args_table(cmd: &Value) -> String {
@@ -407,10 +414,11 @@ fn args_table(cmd: &Value) -> String {
 fn cli_reference(header: &Value, commands: &[&Value], skill: Option<&str>) -> String {
     let mut out = String::new();
     match skill {
-        Some(name) => out.push_str(&format!("# okf CLI — {name} command reference\n\n")),
+        Some(name) => _ = writeln!(out, "# okf CLI — {name} command reference\n"),
         None => out.push_str("# okf CLI — complete argument reference\n\n"),
     }
-    out.push_str(&format!(
+    let _ = write!(
+        out,
         "> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool {}, OKF spec {}). \
          Do not hand-edit; regenerate instead.\n\n",
         header["tool_version"].as_str().unwrap_or("?"),
@@ -422,14 +430,15 @@ fn cli_reference(header: &Value, commands: &[&Value], skill: Option<&str>) -> St
                 .collect::<Vec<_>>()
                 .join(", "))
             .unwrap_or_default()
-    ));
+    );
     if let Some(name) = skill {
-        out.push_str(&format!(
+        let _ = write!(
+            out,
             "This focused reference contains only commands selected for the `{name}` workflow. \
              First pass the skill CLI compatibility preflight. Consult this reference when exact arguments \
              or output shapes are needed. For a compatible CLI that rejects documented \
              syntax, use that command's `--help` output as the runtime authority.\n\n"
-        ));
+        );
     } else {
         out.push_str(
             "This complete reference is for developers and general CLI lookup. Skills carry \
@@ -502,7 +511,7 @@ fn cli_reference(header: &Value, commands: &[&Value], skill: Option<&str>) -> St
             continue;
         }
         in_group.sort_by_key(|c| c["name"].as_str().unwrap_or(""));
-        out.push_str(&format!("## {g}\n\n"));
+        let _ = writeln!(out, "## {g}\n");
         for c in in_group {
             let mutates = if !c["mutates_when"].is_null() {
                 " · _conditionally mutates_"
@@ -511,30 +520,25 @@ fn cli_reference(header: &Value, commands: &[&Value], skill: Option<&str>) -> St
             } else {
                 ""
             };
-            out.push_str(&format!(
-                "### `okf {}`{mutates}\n\n",
-                c["name"].as_str().unwrap()
-            ));
-            if let Some(s) = c["summary"].as_str() {
-                if !s.is_empty() {
-                    out.push_str(&format!("{}.\n\n", s.trim_end_matches('.')));
-                }
+            let _ = writeln!(out, "### `okf {}`{mutates}\n", c["name"].as_str().unwrap());
+            if let Some(s) = c["summary"].as_str()
+                && !s.is_empty()
+            {
+                let _ = writeln!(out, "{}.\n", s.trim_end_matches('.'));
             }
             out.push_str(&args_table(c));
-            out.push_str(&format!(
-                "\n\nOutput stream: `{}`.\n\n",
+            let _ = writeln!(
+                out,
+                "\n\nOutput stream: `{}`.\n",
                 c["output"]["stream"].as_str().unwrap_or("")
-            ));
+            );
             if let Some(globals) = c["supported_globals"].as_object() {
                 let names = globals
                     .iter()
                     .filter(|(_, enabled)| enabled.as_bool() == Some(true))
                     .map(|(name, _)| format!("`--{name}`"))
                     .collect::<Vec<_>>();
-                out.push_str(&format!(
-                    "Supported global options: {}.\n\n",
-                    names.join(", ")
-                ));
+                let _ = writeln!(out, "Supported global options: {}.\n", names.join(", "));
             }
             let notes = command_guidance(c["name"].as_str().unwrap_or(""));
             if !notes.is_empty() {
@@ -550,23 +554,34 @@ fn cli_reference(header: &Value, commands: &[&Value], skill: Option<&str>) -> St
 /// observable behavior that cannot be inferred from the argument table.
 fn command_guidance(name: &str) -> &'static str {
     match name {
-        "bundle context" => "Batch known operations in the initial request to load global and mandatory scoped instructions together. \
+        "bundle context" => {
+            "Batch known operations in the initial request to load global and mandatory scoped instructions together. \
             Reference-tier rules expand with --rule; --all and historical context are inspection only. \
             --settings-detail compact explicitly projects settings; full JSON remains the default. --stats reports delivered instruction bytes. \
             --token emits a stateless receipt after delivery; pass it with --context (or @file) on covered commands, or check with --check-token. \
             A stale supplied token fails before execution; tokens are optional and are not authorization or concept-content guards. \
             Context digest version 2 covers loaded instructions and selected workflow resources as well as settings, ontology and snapshot identity. \
-            Incidental guidance never replaces pre-action loading.",
-        "bundle validate" => "Validate the optional manifest's structure and supported schema without treating prose instructions as executable checks. \
-            Manifest validation is distinct from core concept conformance and bundle-profile knowledge validation.",
-        "bundle resource list" | "bundle resource show" => "Support files are excluded from ordinary knowledge discovery. \
-            Explicit inspection is bounded, preserves containment, and never executes scripts or treats support Markdown as concepts.",
-        "catalog sync" => "Materialize exact accepted revisions only; a missing lock does not authorize resolving a moving branch. \
-            --check is offline and cannot prove upstream reachability. Sync does not refresh fingerprints or execute upstream procedures.",
-        "catalog update" => "Planning obtains and reports an exact candidate without accepting it. Apply rechecks plan inputs and accepts that reviewed commit \
+            Incidental guidance never replaces pre-action loading."
+        }
+        "bundle validate" => {
+            "Validate the optional manifest's structure and supported schema without treating prose instructions as executable checks. \
+            Manifest validation is distinct from core concept conformance and bundle-profile knowledge validation."
+        }
+        "bundle resource list" | "bundle resource show" => {
+            "Support files are excluded from ordinary knowledge discovery. \
+            Explicit inspection is bounded, preserves containment, and never executes scripts or treats support Markdown as concepts."
+        }
+        "catalog sync" => {
+            "Materialize exact accepted revisions only; a missing lock does not authorize resolving a moving branch. \
+            --check is offline and cannot prove upstream reachability. Sync does not refresh fingerprints or execute upstream procedures."
+        }
+        "catalog update" => {
+            "Planning obtains and reports an exact candidate without accepting it. Apply rechecks plan inputs and accepts that reviewed commit \
             without re-resolving the upstream ref. Dependency update scope and consumer impact scope are distinct. \
-            Incomplete-impact acceptance never overrides compatibility, integrity, or stale-input failures.",
-        "changeset plan" | "changeset apply" => "Supply a version 1 YAML/JSON document with an ordered `operations` list. \
+            Incomplete-impact acceptance never overrides compatibility, integrity, or stale-input failures."
+        }
+        "changeset plan" | "changeset apply" => {
+            "Supply a version 1 YAML/JSON document with an ordered `operations` list. \
             Supported operations: `create`/`replace` with `path` and complete Markdown `content`; \
             `edit` with `concept`, optional frontmatter RFC 6902 `patch` and optional `body`; \
             `move` with `from`/`to` concept IDs; `retarget` with `from`/`to` and optional `within` concept-ID list; \
@@ -587,18 +602,28 @@ fn command_guidance(name: &str) -> &'static str {
             Managed immutable snapshots need no coordination writes; a read-only root without an existing lock is readable \
             without a coordination guarantee against privileged or external writers. \
             Cooperating CLI writers refuse a pending transaction. Cross-bundle writes and configuration changes are unsupported. \
-            On interrupted publication use `changeset recover`; do not remove the journal manually.",
-        "changeset recover" => "Roll back an interrupted uncommitted publication, or finish cleanup of a committed one. \
+            On interrupted publication use `changeset recover`; do not remove the journal manually."
+        }
+        "changeset recover" => {
+            "Roll back an interrupted uncommitted publication, or finish cleanup of a committed one. \
             Recovery refuses an active publisher and refuses to overwrite intervening edits. \
-            Preserve the journal if recovery reports a conflict; reconcile those files before retrying.",
-        "mv" => "Moves rewrite inline/reference-style Markdown, self-links, declared simple/nested references, and curated index/log links within the selected bundle. \
+            Preserve the journal if recovery reports a conflict; reconcile those files before retrying."
+        }
+        "mv" => {
+            "Moves rewrite inline/reference-style Markdown, self-links, declared simple/nested references, and curated index/log links within the selected bundle. \
             File/text fingerprint sources retain bundle-root semantics; Git sources retain worktree-root semantics. \
             Destinations must be absent. The complete write set is prevalidated and journaled for rollback. \
-            Use changeset plan/apply for coordinated moves, replacement, splits, or cleanup. Cross-bundle referrers are not rewritten.",
-        "rm" => "The backlink guard includes curated index/log navigation, declared structured references, and standard internal resources. \
-            --force deliberately permits dangling references. For coordinated cleanup, remove references and records in one changeset.",
-        "ontology field-type list" | "ontology field-type show" => "Inspect authored reusable definitions and resolved inherited constraints. JSON includes both definition and effective fields.",
-        "show" => "Without `--json`, show includes the serialized frontmatter and full Markdown body. \
+            Use changeset plan/apply for coordinated moves, replacement, splits, or cleanup. Cross-bundle referrers are not rewritten."
+        }
+        "rm" => {
+            "The backlink guard includes curated index/log navigation, declared structured references, and standard internal resources. \
+            --force deliberately permits dangling references. For coordinated cleanup, remove references and records in one changeset."
+        }
+        "ontology field-type list" | "ontology field-type show" => {
+            "Inspect authored reusable definitions and resolved inherited constraints. JSON includes both definition and effective fields."
+        }
+        "show" => {
+            "Without `--json`, show includes the serialized frontmatter and full Markdown body. \
             Plain `show --json` returns metadata only: frontmatter plus `id`, `trust_tier`, \
             `effective_status`, `effective_generated_at`, `latest_verified_at`, and \
             `verification_current`. It does not include the body. `--outline --json` returns \
@@ -611,8 +636,10 @@ fn command_guidance(name: &str) -> &'static str {
             does not establish complete document-review coverage. Unprojected `id` is the computed path; \
             an authored frontmatter `id` is preserved in `frontmatter_conflicts.id`. \
             `verification_current` compares a valid latest verification timestamp with the effective generation timestamp; \
-            null means the comparison is unavailable, not necessarily that the concept has never been reviewed.",
-        "list" => "JSON records contain frontmatter and computed lifecycle/trust metadata, not bodies. \
+            null means the comparison is unavailable, not necessarily that the concept has never been reviewed."
+        }
+        "list" => {
+            "JSON records contain frontmatter and computed lifecycle/trust metadata, not bodies. \
             Aggregate field occurrence counts only after checking scan completeness and output warnings. \
             The default scan budget is 1,000 eligible documents across scope; --limit bounds output, \
             not scan work. For exhaustive inventory use a sufficient --scan-limit or deliberate \
@@ -621,8 +648,10 @@ fn command_guidance(name: &str) -> &'static str {
             Unprojected `id` is the computed path and `frontmatter_conflicts.id` preserves an authored ID; \
             `--project '$id' --project id` selects these separately in projection records. \
             Machine consumers can pass `--guidance off` or configure `guidance.display.json: off`; \
-            require both supported operation envelopes and successful process exit, not just a valid trailer when present.",
-        "search" => "The positional argument is the bundle, never query text. Text requires `--text`; \
+            require both supported operation envelopes and successful process exit, not just a valid trailer when present."
+        }
+        "search" => {
+            "The positional argument is the bundle, never query text. Text requires `--text`; \
             structured filters work without it. No filters means inventory. Text-search JSON \
             adds `search.score` and bounded `search.matches` to metadata records, not full bodies. \
             Structured-only search has no text-match evidence. `--in title,description` narrows \
@@ -632,21 +661,29 @@ fn command_guidance(name: &str) -> &'static str {
             --limit does not reduce scan work; offset requests rescan without shared query caches. \
             Separate nested filters may match different list records; inspect concrete occurrences \
             before attributing their combined conditions to one relationship. Expansion completeness \
-            and facet truncation are independent of primary scan completeness.",
-        "artifact list" => "The positional path selects a bundle root relative to the current directory. \
+            and facet truncation are independent of primary scan completeness."
+        }
+        "artifact list" => {
+            "The positional path selects a bundle root relative to the current directory. \
             To filter within the selected bundle, use `--directory contracts/x`; printed paths remain \
             relative to the bundle root. Use `--directory .` for the entire bundle and \
-            `--exclude-concepts` to retain only opaque artifacts and reserved files.",
-        "artifact put" => "Write bytes from `@file` to a bundle-relative opaque or reserved artifact. \
+            `--exclude-concepts` to retain only opaque artifacts and reserved files."
+        }
+        "artifact put" => {
+            "Write bytes from `@file` to a bundle-relative opaque or reserved artifact. \
             The default (and `--create-only`) refuses an existing destination; `--replace` permits \
             replacement. Parent directories are created as needed. Concept and configuration files \
             are protected, and paths must remain inside the bundle. Recorded source fingerprints \
-            are preserved so `stale` detects changes; review citing concepts before `refresh`.",
-        "stale" => "Sources with fingerprint kinds but no recorded fingerprint are reported as \
+            are preserved so `stale` detects changes; review citing concepts before `refresh`."
+        }
+        "stale" => {
+            "Sources with fingerprint kinds but no recorded fingerprint are reported as \
             `unrecorded`; unreadable sources are reported even without a baseline. Standard sources \
             without a fingerprint kind are provenance only. Use `--fail-on any` for a failing exit status \
-            when findings exist. `validate` checks conformance, not source health.",
-        "lint" => "For sources with a fingerprint kind, `source-unrecorded` warns when no baseline exists. \
+            when findings exist. `validate` checks conformance, not source health."
+        }
+        "lint" => {
+            "For sources with a fingerprint kind, `source-unrecorded` warns when no baseline exists. \
             `source-missing` errors when file, line-range, or markdown-heading sources cannot be \
             fingerprinted, even without a baseline. Lint does not fetch URLs or inspect Git sources. \
             Configure `source_unrecorded: off` (or `info`, `warn`, `error`; default `warn`) under \
@@ -659,8 +696,10 @@ fn command_guidance(name: &str) -> &'static str {
             `off` suppresses the selected lint rule only; validation and stale checks remain independent. \
             `index_exclude` controls index coverage exclusions and `finding_budget` limits ontology \
             findings (positive, default 1,000 per concept). \
-            Use `--fail-on warn` to fail on warnings as well as errors.",
-        "doctor" => "Inspect migration findings without changing files by default. Catalog-aware source checks require \
+            Use `--fail-on warn` to fail on warnings as well as errors."
+        }
+        "doctor" => {
+            "Inspect migration findings without changing files by default. Catalog-aware source checks require \
             explicit `--scope-bundle` or `--catalog-scope` for other registered bundles. File, line-range, and \
             markdown-heading source paths use the bundle root, consistently with fingerprinting and graph resolution; \
             kind-less provenance and body links use document-relative paths. A leading slash in a typed file source \
@@ -672,8 +711,10 @@ fn command_guidance(name: &str) -> &'static str {
             targets are normalized; missing, blocked, and unrecognized or ambiguous destination syntax remain for review. \
             Destination-only rewrites preserve frontmatter, source entries, labels, titles, and query/fragment suffixes. \
             Normalization is published before any requested safe repairs, in a separate transaction; the two are not \
-            one atomic operation. Review completion evidence if later checks or repairs fail.",
-        "artifact resolve" => "**Path namespaces:** a leading `/` means bundle-root-relative, not an \
+            one atomic operation. Review completion evidence if later checks or repairs fail."
+        }
+        "artifact resolve" => {
+            "**Path namespaces:** a leading `/` means bundle-root-relative, not an \
             operating-system absolute path. Other local paths resolve against the declaring concept's \
             directory when `--from` is supplied, otherwise the bundle root. Keep `--from` on the \
             subsequent read too. JSON uses `artifact_kind` (concept, artifact, reserved, support, external, \
@@ -692,8 +733,10 @@ fn command_guidance(name: &str) -> &'static str {
             actual source location and convention; do not assume fingerprint and artifact paths coincide. \
             Inspect external repository evidence with normal source tools within existing read \
             authorization. Do not rewrite provenance, bypass containment, or mirror files merely \
-            to make artifact resolution succeed.",
-        "artifact show" => "For document-relative paths, pass the same `--from` used during resolution. \
+            to make artifact resolution succeed."
+        }
+        "artifact show" => {
+            "For document-relative paths, pass the same `--from` used during resolution. \
             For bundle-root-relative file/line-range/markdown-heading source resources, omit `--from`; \
             this generic reader does not infer the source kind. \
             JSON includes `text`, `binary`, `truncated`, `size`, `sha256`, and `path`. Binary files \
@@ -706,13 +749,17 @@ fn command_guidance(name: &str) -> &'static str {
             A user request to inspect a named source can supply that authorization; no separate \
             OKF policy file is specified by this command. If unavailable, use an authorized external \
             retrieval tool or report the evidence gap. Do not send ambient credentials. \
-            Reading computation, executor, or attester code never authorizes execution.",
-        "docs" => "`--format index` writes indexes throughout the bundle, replacing their bodies; \
+            Reading computation, executor, or attester code never authorizes execution."
+        }
+        "docs" => {
+            "`--format index` writes indexes throughout the bundle, replacing their bodies; \
             it does not merge curated prose. Use it only when all affected index bodies are generated \
             or replacement is already authorized. Preserve curated indexes and edit only necessary \
             links otherwise. Validate after writes. Other formats emit output rather than updating \
-            indexes; the default is `md`.",
-        "ontology add" | "ontology update" => "Built-in field types: `string`, `text`, `int`, `bool`, \
+            indexes; the default is `md`."
+        }
+        "ontology add" | "ontology update" => {
+            "Built-in field types: `string`, `text`, `int`, `bool`, \
             `date`, `datetime`, `uri`, `enum`, `list`, `object`; custom type names must resolve in \
             the existing sidecar's `field_types`. Reference cardinalities are `0..1` (optional one), \
             `1..1` (exactly one), `0..n` (optional many), and `1..n` (at least one). For example, \
@@ -722,17 +769,22 @@ fn command_guidance(name: &str) -> &'static str {
             and `--relationship-yaml` inputs replace complete named declarations. `--from` merges \
             supplied declarations, retaining omitted ones; overlaps with flags fail. `--remove-relationship` \
             deletes a named rule. YAML inputs accept inline values, `@file`, or `-`; JSON syntax works. \
-            Preview with `--dry-run`. These are advisory local rules, not conformance requirements.",
-        "ontology field-type add" | "ontology field-type update" | "ontology field-type remove" =>
+            Preview with `--dry-run`. These are advisory local rules, not conformance requirements."
+        }
+        "ontology field-type add" | "ontology field-type update" | "ontology field-type remove" => {
             "Reusable field types are ontology-wide definitions. Add/update `--from` accepts a whole \
             definition; update replaces it completely. Inspect consumers before removal or tightening. \
-            `--dry-run` validates the proposed ontology without publishing the sidecar; coordination state may be created.",
-        "ontology apply" => "`--from` accepts `field_types` and `concepts` maps, merging named \
+            `--dry-run` validates the proposed ontology without publishing the sidecar; coordination state may be created."
+        }
+        "ontology apply" => {
+            "`--from` accepts `field_types` and `concepts` maps, merging named \
             declarations and preserving omitted ones. Top-level `remove` has `field_types` and \
             `concepts` lists; per-concept `remove` has `fields`, `references`, and `relationships` \
             lists. Conflicting operations fail. The complete result validates before a single write. \
-            Use `--dry-run` for a preview; null and omission do not request deletion.",
-        "add" => "Creation scaffolds a concept; `--body @file` supplies Markdown in the same write \
+            Use `--dry-run` for a preview; null and omission do not request deletion."
+        }
+        "add" => {
+            "Creation scaffolds a concept; `--body @file` supplies Markdown in the same write \
             (literal text and `-` for stdin also work). `--set-yaml key=value` sets structured YAML/JSON \
             values, with `@file` or `-` input; `--set-path path=value` sets an object property and creates \
             missing maps. Existing `--set` remains literal/scalar. `--dry-run` previews without writes. \
@@ -742,16 +794,20 @@ fn command_guidance(name: &str) -> &'static str {
             `--attested --runtime <runtime>` selects exact `Attested Computation`; declare actual \
             parameters with repeatable `--parameter name:type:required` (omit `:required` when optional). \
             Choose `--computation <resource>` or `--inline-computation @file`, then add reviewed \
-            executor/receipt/attester fields as needed. These describe a contract and authorize no execution.",
-        "format" => "Presentation-only formatting preserves verification and generation metadata. \
+            executor/receipt/attester fields as needed. These describe a contract and authorize no execution."
+        }
+        "format" => {
+            "Presentation-only formatting preserves verification and generation metadata. \
             `--check` does not publish and exits 1 for formatting drift; `--dry-run` previews the diff. \
             Omit the concept ID for the whole selected bundle. YAML uses `settings.formatting.yaml` \
             (readable by default, target width 100; legacy retains the previous serializer). Markdown \
             wrapping is disabled by default and runs only here when `settings.formatting.markdown.wrap_prose` \
             is true. A width of 0 disables wrapping. Unsupported Markdown structures remain unchanged. \
             YAML comments and scalar styles may normalize; file fingerprints may change. \
-            Formatting is not conformance repair, fingerprint refresh, or claim verification.",
-        "edit" => "`--set` keeps literal scalar keys; a dotted key is not traversal. `--set-yaml` \
+            Formatting is not conformance repair, fingerprint refresh, or claim verification."
+        }
+        "edit" => {
+            "`--set` keeps literal scalar keys; a dotted key is not traversal. `--set-yaml` \
             replaces a complete named value. `--set-path` parses YAML and creates intermediate maps \
             for object-only paths; `--unset-path` removes an object property. `--patch` accepts an \
             RFC 6902 array with concrete JSON Pointer paths, including list edits and `test` guards. \
@@ -763,16 +819,21 @@ fn command_guidance(name: &str) -> &'static str {
             separate values. `--replace OLD NEW` replaces exactly one literal body match; `--all` \
             replaces every match and still fails if none exist. `--rename-section OLD NEW` \
             changes a uniquely matched heading without replacing its content. Malformed YAML \
-            must be repaired before this command can load it.",
-        "refresh" => "Refresh updates supported source fingerprints across the concept, not content or \
+            must be repaired before this command can load it."
+        }
+        "refresh" => {
+            "Refresh updates supported source fingerprints across the concept, not content or \
             standard source modification dates. Review those sources against the final content first, \
             whether or not the content needed rewriting. JSON reports `updated`/`unchanged` counts and \
             `skipped` entries with reasons. Missing, unavailable, unsupported, or malformed \
             required sources block the entire refresh before publication. `--fail-on skipped` \
             rejects provenance-only skips before publication as well. Report unresolved \
-            sources instead of treating refresh as proof of complete synchronization.",
-        "computation check" => "Inspect-only: `execution: not-run` is not a passing runtime attestation. \
-            Document verification and inspection of executable resources never establish a run verdict.",
+            sources instead of treating refresh as proof of complete synchronization."
+        }
+        "computation check" => {
+            "Inspect-only: `execution: not-run` is not a passing runtime attestation. \
+            Document verification and inspection of executable resources never establish a run verdict."
+        }
         _ => "",
     }
 }
@@ -846,12 +907,12 @@ fn run_skill_checks() {
             words.next() == Some("okf") && words.next().is_some()
         }) {
             validate_command(&snippet, &commands, &rel_path, &mut errors);
-            if let Some(command) = command_name(&snippet, &commands) {
-                if !reference_commands.contains(&command) {
-                    errors.push(format!(
-                        "{rel_path}: command `{command}` is not included in reference_commands"
-                    ));
-                }
+            if let Some(command) = command_name(&snippet, &commands)
+                && !reference_commands.contains(&command)
+            {
+                errors.push(format!(
+                    "{rel_path}: command `{command}` is not included in reference_commands"
+                ));
             }
         }
 
@@ -1089,8 +1150,7 @@ fn validate_frontmatter(dir: &Path, body: &str, path: &str, errors: &mut Vec<Str
     let expected = dir.file_name().and_then(|n| n.to_str()).unwrap_or("");
     if name != Some(expected) {
         errors.push(format!(
-            "{path}: frontmatter name {:?} does not match directory {expected}",
-            name
+            "{path}: frontmatter name {name:?} does not match directory {expected}"
         ));
     }
     if description.is_none_or(str::is_empty) {
@@ -1384,9 +1444,11 @@ mod tests {
         validate_command("okf backlinks", &[&command], "skill", &mut errors);
         assert!(errors.is_empty());
         validate_command("okf backlinks --json", &[&command], "skill", &mut errors);
-        assert!(errors
-            .iter()
-            .any(|error| error.contains("too few positional")));
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.contains("too few positional"))
+        );
     }
 
     #[test]
@@ -1492,12 +1554,16 @@ mod tests {
             "reference_commands": ["missing"]
         }]);
 
-        assert!(commands_for_skill("retrieval", &duplicate, &commands)
-            .unwrap_err()
-            .contains("duplicate"));
-        assert!(commands_for_skill("retrieval", &unknown, &commands)
-            .unwrap_err()
-            .contains("unknown"));
+        assert!(
+            commands_for_skill("retrieval", &duplicate, &commands)
+                .unwrap_err()
+                .contains("duplicate")
+        );
+        assert!(
+            commands_for_skill("retrieval", &unknown, &commands)
+                .unwrap_err()
+                .contains("unknown")
+        );
     }
 
     #[test]

@@ -9,7 +9,7 @@ use super::{
 use crate::{
     error::{OkfError, Result},
     fingerprint::canonicalize::sha256_hex,
-    graph::catalog::{build_catalog_graph, CatalogGraph},
+    graph::catalog::{CatalogGraph, build_catalog_graph},
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -140,7 +140,7 @@ fn delta(id: &str, old: Option<&Path>, new: Option<&Path>) -> Result<BundleDelta
         let value = if is_concept {
             format!("/{}", path.trim_end_matches(".md"))
         } else {
-            path.to_string()
+            path.clone()
         };
         if !before.contains_key(path) {
             category.added.push(value);
@@ -395,7 +395,7 @@ fn links(graph: &CatalogGraph, id: &str) -> Vec<LinkEvidence> {
             location: e.location.clone(),
             target_bundle: e.target.as_ref().map(|n| n.bundle.clone()),
             target: e.target.as_ref().map(|n| n.id.clone()),
-            status: e.status.clone(),
+            status: e.status.to_string(),
             snapshot_status: e.snapshot.as_ref().map(|s| s.status.clone()),
             fingerprint_status: e.fingerprint_status.clone(),
         })
@@ -420,7 +420,7 @@ fn lint(
     id: &str,
     root: &Path,
 ) -> Result<Vec<LintEvidence>> {
-    use crate::check::lint::{lint_bundle, LintConfig, Severity};
+    use crate::check::lint::{LintConfig, Severity, lint_bundle};
     let effective = super::settings::for_context(context, root)?;
     let s = &effective.settings.lint;
     let ontology = effective
@@ -585,7 +585,11 @@ mod tests {
     }
     fn fixture() -> tempfile::TempDir {
         let d = tempfile::tempdir().unwrap();
-        write(d.path(),"okf-catalog.yaml","catalog_version: 2\nbundles:\n  app.local:\n    location: {type: directory, path: consumer}\n  acme.remote:\n    location: {type: git, url: 'https://example.invalid/repo', ref: refs/heads/main, path: knowledge}\n");
+        write(
+            d.path(),
+            "okf-catalog.yaml",
+            "catalog_version: 2\nbundles:\n  app.local:\n    location: {type: directory, path: consumer}\n  acme.remote:\n    location: {type: git, url: 'https://example.invalid/repo', ref: refs/heads/main, path: knowledge}\n",
+        );
         write(
             d.path(),
             "consumer/a.md",
@@ -624,10 +628,12 @@ mod tests {
         assert_eq!(impact.affected_concepts, vec!["/a"]);
         assert_eq!(impact.before_links[0].status, "resolved");
         assert_eq!(impact.after_links[0].status, "missing-target");
-        assert!(impact
-            .after_lint
-            .iter()
-            .any(|f| f.rule == "catalog-reference" && f.message.contains("missing-target")));
+        assert!(
+            impact
+                .after_lint
+                .iter()
+                .any(|f| f.rule == "catalog-reference" && f.message.contains("missing-target"))
+        );
         assert_eq!(std::fs::read(&catalog).unwrap(), bytes);
         assert!(!d.path().join("okf-catalog.lock").exists());
     }
@@ -657,7 +663,11 @@ mod tests {
     #[test]
     fn compares_ontology_target_types_across_candidate_snapshot() {
         let d = fixture();
-        write(d.path(),"consumer/ontology.yaml","okf_ontology: '0.1'\nconcepts:\n  Note:\n    references:\n      product: {target: Feature, cardinality: '1..1'}\n  Feature: {}\n  Defect: {}\n");
+        write(
+            d.path(),
+            "consumer/ontology.yaml",
+            "okf_ontology: '0.1'\nconcepts:\n  Note:\n    references:\n      product: {target: Feature, cardinality: '1..1'}\n  Feature: {}\n  Defect: {}\n",
+        );
         write(
             d.path(),
             "consumer/a.md",
@@ -675,13 +685,17 @@ mod tests {
         )
         .unwrap();
         assert!(report.complete);
-        assert!(!report.consumers[0]
-            .before_lint
-            .iter()
-            .any(|f| f.rule == "ontology-violation"));
-        assert!(report.consumers[0]
-            .after_lint
-            .iter()
-            .any(|f| f.rule == "ontology-violation"));
+        assert!(
+            !report.consumers[0]
+                .before_lint
+                .iter()
+                .any(|f| f.rule == "ontology-violation")
+        );
+        assert!(
+            report.consumers[0]
+                .after_lint
+                .iter()
+                .any(|f| f.rule == "ontology-violation")
+        );
     }
 }

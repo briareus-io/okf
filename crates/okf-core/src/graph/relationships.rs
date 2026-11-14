@@ -3,7 +3,7 @@ use crate::{
     error::{OkfError, Result},
     model::{
         concept::Concept,
-        link::{classify, resolve_link, LinkKind},
+        link::{LinkKind, classify, resolve_link},
     },
     ontology::schema::Ontology,
     query::selector::{Occurrence, Selector},
@@ -65,16 +65,16 @@ pub fn validate_relationships(ontology: &Ontology) -> Result<()> {
                 return Err(error("inverse names must be nonempty"));
             }
             for mapped in rule.kinds.values() {
-                if let Some(targets) = &mapped.target {
-                    if targets.types().iter().any(|t| {
+                if let Some(targets) = &mapped.target
+                    && targets.types().iter().any(|t| {
                         !reference.target.types().iter().any(|parent| {
                             crate::ontology::field_types::concept_is_a(ontology, t, parent)
                         })
-                    }) {
-                        return Err(error(
-                            "kind-specific targets must narrow reference target types",
-                        ));
-                    }
+                    })
+                {
+                    return Err(error(
+                        "kind-specific targets must narrow reference target types",
+                    ));
                 }
             }
             if let Some(kind_selector) = &rule.kind_selector {

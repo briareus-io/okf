@@ -72,9 +72,11 @@ concepts:
     );
     let after = lint(root, true);
     assert!(after.iter().any(|v| v["kind"] == "fix" && v["fixed"] == 2));
-    assert!(!after
-        .iter()
-        .any(|v| v["kind"] == "finding" && v["rule"] == "frontmatter-order"));
+    assert!(
+        !after
+            .iter()
+            .any(|v| v["kind"] == "finding" && v["rule"] == "frontmatter-order")
+    );
     let text = std::fs::read_to_string(root.join("note.md")).unwrap();
     assert!(text.starts_with("---\ntype: Note\ntitle: Test\ndetails:\n  second: B\n  first: A\n  extra: keep\nentries:\n- name: N\n  code: C\n  extra: keep\ncustom: retain\n"), "{text}");
     let id = okf_core::model::concept::ConceptId::from_relative("note");
@@ -85,12 +87,16 @@ concepts:
         old.frontmatter.get("verified"),
         new.frontmatter.get("verified")
     );
-    assert!(std::fs::read_to_string(root.join("other.md"))
-        .unwrap()
-        .starts_with("---\ntype: Unknown\nz: 1\na: 2\n"));
-    assert!(lint(root, true)
-        .iter()
-        .any(|v| v["kind"] == "fix" && v["fixed"] == 0));
+    assert!(
+        std::fs::read_to_string(root.join("other.md"))
+            .unwrap()
+            .starts_with("---\ntype: Unknown\nz: 1\na: 2\n")
+    );
+    assert!(
+        lint(root, true)
+            .iter()
+            .any(|v| v["kind"] == "fix" && v["fixed"] == 0)
+    );
     assert_eq!(std::fs::read_to_string(root.join("note.md")).unwrap(), text);
 }
 
@@ -105,9 +111,11 @@ fn ordinary_edit_normalizes_and_rule_can_be_disabled() {
     .unwrap();
     let original = "---\ncustom: keep\ntype: Note\n---\nBody\n";
     std::fs::write(root.join("note.md"), original).unwrap();
-    assert!(!lint(root, true)
-        .iter()
-        .any(|v| v["rule"] == "frontmatter-order"));
+    assert!(
+        !lint(root, true)
+            .iter()
+            .any(|v| v["rule"] == "frontmatter-order")
+    );
     assert_eq!(
         std::fs::read_to_string(root.join("note.md")).unwrap(),
         original
@@ -215,12 +223,16 @@ fn catalog_lint_fix_respects_scope_and_each_bundles_ontology_and_settings() {
         original
     );
     let selected = run(&["--fix"]);
-    assert!(selected
-        .iter()
-        .any(|r| r["kind"] == "fix" && r["bundle"] == "test.a" && r["fixed"] == 1));
-    assert!(!selected
-        .iter()
-        .any(|r| r["kind"] == "finding" && r["rule"] == "frontmatter-order"));
+    assert!(
+        selected
+            .iter()
+            .any(|r| r["kind"] == "fix" && r["bundle"] == "test.a" && r["fixed"] == 1)
+    );
+    assert!(
+        !selected
+            .iter()
+            .any(|r| r["kind"] == "finding" && r["rule"] == "frontmatter-order")
+    );
     let a = std::fs::read_to_string(root.join("a/note.md")).unwrap();
     assert!(a.starts_with("---\ntype: Note\nfirst: A\nsecond: B\ncustom: keep\n"));
     assert_eq!(

@@ -44,7 +44,11 @@ fn resolve_target_with(arg: Option<&str>, env: Option<&str>, cwd: &Path) -> Resu
             if let Some(bundle) = config::config_bundle(cwd)? {
                 return Ok(bundle);
             }
-            if cfg.default_bundle.as_ref().is_some_and(|s| s.id.is_some()) {
+            if cfg
+                .default_bundle
+                .as_ref()
+                .is_some_and(|s| s.id().is_some())
+            {
                 return Err(OkfError::Usage("bundle ID requires a catalog".into()));
             }
             return Ok(cwd.to_path_buf());

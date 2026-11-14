@@ -23,6 +23,10 @@ fn task(reference: &str) -> String {
     format!("---\ntype: Task\nconcepts: ['{reference}']\n---\n[target]({reference})\n")
 }
 
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "test helper takes ownership of the operations"
+)]
 fn command(dir: &tempfile::TempDir, verb: &str, operations: serde_json::Value) -> Command {
     let mut command = Command::new(assert_cmd::cargo::cargo_bin!("okf"));
     command.current_dir(dir.path()).args([
@@ -45,9 +49,11 @@ fn new_registered_sibling_reference_is_previewed_and_applied_without_sibling_wri
     command(&dir, "plan", operations.clone()).assert().success();
     assert!(!dir.path().join("planning/new.md").exists());
     command(&dir, "apply", operations).assert().success();
-    assert!(fs::read_to_string(dir.path().join("planning/new.md"))
-        .unwrap()
-        .contains("../knowledge/target.md"));
+    assert!(
+        fs::read_to_string(dir.path().join("planning/new.md"))
+            .unwrap()
+            .contains("../knowledge/target.md")
+    );
     assert_eq!(
         fs::read(dir.path().join("knowledge/target.md")).unwrap(),
         target

@@ -7,7 +7,7 @@ use indexmap::IndexMap;
 use serde_yaml::Value;
 
 /// Lossless frontmatter: an ordered map of YAML values. Never discards keys.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Frontmatter {
     /// Insertion-ordered key/value pairs, preserving the on-disk order and any
     /// unknown keys and values. YAML comments/scalar presentation are not represented.

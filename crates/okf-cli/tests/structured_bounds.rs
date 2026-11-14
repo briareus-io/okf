@@ -45,14 +45,18 @@ fn expansion_bounds_stop_unrequested_target_parsing() {
             .find(|r| r["kind"] == "expansion-summary")
             .unwrap();
         assert_eq!(summary["truncated"], true);
-        assert!(summary["reasons"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|v| v == reason));
-        assert!(records
-            .iter()
-            .any(|r| r["kind"] == "warning" && r["reason"] == reason));
+        assert!(
+            summary["reasons"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|v| v == reason)
+        );
+        assert!(
+            records
+                .iter()
+                .any(|r| r["kind"] == "warning" && r["reason"] == reason)
+        );
     }
 }
 
@@ -97,9 +101,11 @@ fn expansion_resolves_bundle_root_fragments_and_query_suffixes() {
         .filter(|record| record["kind"] == "relationship")
         .collect::<Vec<_>>();
     assert_eq!(edges.len(), 2);
-    assert!(edges
-        .iter()
-        .all(|record| record["edge"]["status"] == "resolved"));
+    assert!(
+        edges
+            .iter()
+            .all(|record| record["edge"]["status"] == "resolved")
+    );
     assert_eq!(
         records
             .iter()
@@ -159,7 +165,9 @@ fn expansion_retains_registered_unavailable_target_status() {
         .unwrap();
     assert_eq!(edge["edge"]["status"], "unavailable");
     assert_eq!(edge["edge"]["raw_reference"], "../missing/peer.md");
-    assert!(!records
-        .iter()
-        .any(|record| record["kind"] == "related-concept"));
+    assert!(
+        !records
+            .iter()
+            .any(|record| record["kind"] == "related-concept")
+    );
 }

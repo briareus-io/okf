@@ -15,10 +15,12 @@ pub fn format(root: &Path, concept: Option<&str>, apply: bool) -> Result<Vec<Fil
     let settings = &effective.settings.formatting;
     let paths = if let Some(id) = concept {
         let id = ConceptId::parse(id)?;
-        vec![super::edit::id_to_path(root, &id)?
-            .strip_prefix(root)
-            .map_err(|e| OkfError::Internal(e.to_string()))?
-            .to_path_buf()]
+        vec![
+            super::edit::id_to_path(root, &id)?
+                .strip_prefix(root)
+                .map_err(|e| OkfError::Internal(e.to_string()))?
+                .to_path_buf(),
+        ]
     } else {
         walk_markdown(root)?
     };
@@ -60,7 +62,10 @@ pub fn format_document(input: &str, settings: &settings::FormattingSettings) -> 
         if crlf_only(&prefix) {
             formatted = formatted.replace('\n', "\r\n");
         }
-        let start = input.find('\n').unwrap() + 1;
+        let start = input
+            .find('\n')
+            .ok_or_else(|| OkfError::Internal("frontmatter without newline".into()))?
+            + 1;
         prefix.replace_range(start..start + fm.len(), &formatted);
     }
     let body = if settings.markdown.wrap_prose && settings.markdown.line_width > 0 {

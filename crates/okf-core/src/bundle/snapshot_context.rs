@@ -25,7 +25,9 @@ impl SnapshotSelection {
                 OkfError::Usage("bundle revision must be <bundle-id>=<full-commit>".into())
             })?;
             if !super::catalog::valid_id(id) || !full_commit(commit) {
-                return Err(OkfError::Usage(format!("invalid bundle revision {value:?}; expected namespaced ID and full hexadecimal commit")));
+                return Err(OkfError::Usage(format!(
+                    "invalid bundle revision {value:?}; expected namespaced ID and full hexadecimal commit"
+                )));
             }
             if bundle_revisions
                 .insert(id.to_owned(), commit.to_ascii_lowercase())
@@ -119,8 +121,7 @@ fn source_path(path: &Path) -> Result<PathBuf> {
 
 fn mapped(path: &Path, tree: &SnapshotTree) -> PathBuf {
     path.strip_prefix(&tree.original_repository)
-        .map(|rel| tree.root.join(rel))
-        .unwrap_or_else(|_| path.to_path_buf())
+        .map_or_else(|_| path.to_path_buf(), |rel| tree.root.join(rel))
 }
 
 fn historical_config(
@@ -137,7 +138,7 @@ fn historical_config(
     if let Some(value) = &mut config.bundle {
         rebase(value);
     }
-    if let Some(value) = config.default_bundle.as_mut().and_then(|s| s.path.as_mut()) {
+    if let Some(super::config::BundleSelector::Path(value)) = &mut config.default_bundle {
         rebase(value);
     }
     if let Some(value) = &mut config.catalog {
@@ -152,12 +153,12 @@ fn historical_config(
         .and_then(toml::Value::as_table_mut)
     {
         for (_, group) in groups.iter_mut() {
-            if let Some(value) = group.as_table_mut().and_then(|t| t.get_mut("ontology")) {
-                if let Some(text) = value.as_str() {
-                    let mut text = text.to_owned();
-                    rebase(&mut text);
-                    *value = toml::Value::String(text);
-                }
+            if let Some(value) = group.as_table_mut().and_then(|t| t.get_mut("ontology"))
+                && let Some(text) = value.as_str()
+            {
+                let mut text = text.to_owned();
+                rebase(&mut text);
+                *value = toml::Value::String(text);
             }
         }
     }
@@ -220,6 +221,10 @@ pub fn prepare_primary_revision(current: &Context, revision: &str) -> Result<Sna
 
 /// Resolve selected snapshots without consulting a cached upstream repository's config.
 /// `examined_ids` is the explicit consumer scope, not all registered bundles.
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "public API takes the selection by value"
+)]
 pub fn prepare_with(
     current: &Context,
     selection: SnapshotSelection,
@@ -340,12 +345,11 @@ pub fn prepare_with(
         let tree = backend.materialize(&entry.root, commit)?;
         if let Some(previous) =
             repositories.insert(tree.repository_identity.clone(), tree.commit.clone())
+            && previous != tree.commit
         {
-            if previous != tree.commit {
-                return Err(OkfError::Usage(
-                    "bundle revision selectors for one repository must agree".into(),
-                ));
-            }
+            return Err(OkfError::Usage(
+                "bundle revision selectors for one repository must agree".into(),
+            ));
         }
         // One inspection commit per repository: remap already-authorized siblings,
         // without widening the examination scope to other registrations.
@@ -518,14 +522,16 @@ mod tests {
     fn selectors_require_full_commit_and_unique_names() {
         assert!(SnapshotSelection::parse(None, &["acme.docs=main".into()]).is_err());
         assert!(SnapshotSelection::parse(None, &[format!("plain={}", "a".repeat(40))]).is_err());
-        assert!(SnapshotSelection::parse(
-            None,
-            &[
-                format!("acme.docs={}", "a".repeat(40)),
-                format!("acme.docs={}", "b".repeat(40))
-            ]
-        )
-        .is_err());
+        assert!(
+            SnapshotSelection::parse(
+                None,
+                &[
+                    format!("acme.docs={}", "a".repeat(40)),
+                    format!("acme.docs={}", "b".repeat(40))
+                ]
+            )
+            .is_err()
+        );
         assert!(SnapshotSelection::parse(Some("-bad".into()), &[]).is_err());
         assert!(SnapshotSelection::parse(None, &[format!("acme.docs={}", "a".repeat(40))]).is_ok());
     }

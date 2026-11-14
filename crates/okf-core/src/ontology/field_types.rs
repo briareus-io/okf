@@ -25,7 +25,7 @@ pub struct ResolvedType {
     /// Enum values (empty unless `base == Enum`).
     pub values: Vec<String>,
     /// List element type (present only when `base == List`).
-    pub item: Option<Box<ResolvedType>>,
+    pub item: Option<Box<Self>>,
     /// Object sub-fields (present only when `base == Object`).
     pub fields: IndexMap<String, ResolvedField>,
     /// Merged constraints (`pattern`, `min`, `max`, …).
@@ -98,14 +98,14 @@ pub fn resolve_type_name(
     };
 
     // A `base` given alongside `extends` overrides the inherited base kind.
-    if def.extends.is_some() {
-        if let Some(base_name) = &def.base {
-            let base = resolve_type_name(ontology, base_name, chain)?.base;
-            if resolved.base != base {
-                return Err(OkfError::Usage(format!(
-                    "field type {name:?} changes inherited base"
-                )));
-            }
+    if def.extends.is_some()
+        && let Some(base_name) = &def.base
+    {
+        let base = resolve_type_name(ontology, base_name, chain)?.base;
+        if resolved.base != base {
+            return Err(OkfError::Usage(format!(
+                "field type {name:?} changes inherited base"
+            )));
         }
     }
 
@@ -234,14 +234,14 @@ pub fn validate_field_types(ontology: &Ontology) -> Result<()> {
 // ---------------------------------------------------------------------------
 
 /// A single advisory ontology violation found on a concept.
-#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct OntologyViolation {
     pub kind: ViolationKind,
     pub message: String,
 }
 
 /// The category of an [`OntologyViolation`].
-#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub enum ViolationKind {
     /// The concept's `type` is not defined in the ontology (permissive — advisory only).
     UnknownType,
@@ -287,9 +287,9 @@ where
 {
     let mut out = Vec::new();
 
-    let ty = match frontmatter.get_str("type") {
-        Some(t) => t,
-        None => return out, // no type: `validate` covers this, not the ontology check
+    // No type: `validate` covers this, not the ontology check.
+    let Some(ty) = frontmatter.get_str("type") else {
+        return out;
     };
     let ct: &ConceptType = match ontology.concepts.get(ty) {
         Some(c) => c,
@@ -369,25 +369,22 @@ where
             .get(&edge.rule)
             .and_then(|r| edge.authored_kind.as_ref().and_then(|k| r.kinds.get(k)))
             .and_then(|k| k.target.as_ref())
+            && let Some(actual) = resolve_link_type(&edge.raw_reference)
+            && !targets
+                .types()
+                .iter()
+                .any(|expected| concept_is_a(ontology, &actual, expected))
         {
-            if let Some(actual) = resolve_link_type(&edge.raw_reference) {
-                if !targets
-                    .types()
-                    .iter()
-                    .any(|expected| concept_is_a(ontology, &actual, expected))
-                {
-                    metadata(
-                        &mut out,
-                        budget,
-                        "metadata-reference-target",
-                        &edge.field_path,
-                        format!(
-                            "{}: target type {actual:?} not allowed by relationship kind",
-                            edge.field_path
-                        ),
-                    );
-                }
-            }
+            metadata(
+                &mut out,
+                budget,
+                "metadata-reference-target",
+                &edge.field_path,
+                format!(
+                    "{}: target type {actual:?} not allowed by relationship kind",
+                    edge.field_path
+                ),
+            );
         }
     }
     out
@@ -443,7 +440,21 @@ fn check_reference<F>(
         let root = serde_yaml::to_value(&frontmatter.map).unwrap_or_default();
         if let Ok(selector) = crate::query::selector::Selector::parse(selector) {
             for o in selector.select(&root).leaves {
-                if !o.value.as_str().is_some_and(|s| !s.trim().is_empty()) {
+                let reference = o.value.as_str().filter(|s| !s.trim().is_empty());
+                if let Some(reference) = reference {
+                    if crate::model::link::classify(reference)
+                        != crate::model::link::LinkKind::External
+                        && resolve_link_type(reference).is_none()
+                    {
+                        metadata(
+                            out,
+                            budget,
+                            "metadata-reference-missing",
+                            &o.path,
+                            format!("{}: missing reference target {:?}", o.path, reference),
+                        );
+                    }
+                } else {
                     metadata(
                         out,
                         budget,
@@ -451,46 +462,30 @@ fn check_reference<F>(
                         &o.path,
                         format!("{}: reference target must be a nonempty string", o.path),
                     );
-                } else if crate::model::link::classify(o.value.as_str().unwrap())
-                    != crate::model::link::LinkKind::External
-                    && resolve_link_type(o.value.as_str().unwrap()).is_none()
-                {
-                    metadata(
-                        out,
-                        budget,
-                        "metadata-reference-missing",
-                        &o.path,
-                        format!(
-                            "{}: missing reference target {:?}",
-                            o.path,
-                            o.value.as_str().unwrap()
-                        ),
-                    );
                 }
             }
         }
     }
     for link in &links {
-        if let Some(target_ty) = resolve_link_type(link) {
-            if !rule
+        if let Some(target_ty) = resolve_link_type(link)
+            && !rule
                 .target
                 .types()
                 .iter()
                 .any(|expected| concept_is_a(ontology, &target_ty, expected))
-            {
-                push_violation(
-                    out,
-                    budget,
-                    OntologyViolation {
-                        kind: ViolationKind::WrongReferenceTarget(key.to_string()),
-                        message: format!(
-                            "{ty}: reference {key:?} -> {link:?} targets type {target_ty:?}, \
+        {
+            push_violation(
+                out,
+                budget,
+                OntologyViolation {
+                    kind: ViolationKind::WrongReferenceTarget(key.to_string()),
+                    message: format!(
+                        "{ty}: reference {key:?} -> {link:?} targets type {target_ty:?}, \
                          but the rule allows {:?}",
-                            rule.target.types()
-                        ),
-                    },
-                );
-            }
+                        rule.target.types()
+                    ),
+                },
+            );
         }
     }
 }
@@ -585,10 +580,9 @@ pub fn validate_effective(ty: &ResolvedType) -> Result<()> {
     if let (Some(min), Some(max)) = (
         ty.constraints.get("min").and_then(Value::as_i64),
         ty.constraints.get("max").and_then(Value::as_i64),
-    ) {
-        if min > max {
-            return Err(bad("min exceeds max"));
-        }
+    ) && min > max
+    {
+        return Err(bad("min exceeds max"));
     }
     if let Some(item) = &ty.item {
         validate_effective(item)?;
@@ -721,19 +715,28 @@ fn check_value(
         );
     }
     if let Some(pattern) = ty.constraints.get("pattern").and_then(Value::as_str) {
-        if let Ok(regex) = regex::Regex::new(pattern) {
-            if !regex.is_match(value.as_str().unwrap_or_default()) {
-                metadata(
-                    out,
-                    budget,
-                    "metadata-pattern",
-                    path,
-                    format!(
-                        "{path}: expected pattern {pattern:?}; found {}",
-                        bounded(value)
-                    ),
-                );
+        match cached_regex(pattern) {
+            Ok(regex) => {
+                if !regex.is_match(value.as_str().unwrap_or_default()) {
+                    metadata(
+                        out,
+                        budget,
+                        "metadata-pattern",
+                        path,
+                        format!(
+                            "{path}: expected pattern {pattern:?}; found {}",
+                            bounded(value)
+                        ),
+                    );
+                }
             }
+            Err(error) => metadata(
+                out,
+                budget,
+                "metadata-unenforced",
+                path,
+                format!("{path}: pattern {pattern:?} is invalid and unenforced: {error}"),
+            ),
         }
     }
     let measure = match ty.base {
@@ -744,16 +747,16 @@ fn check_value(
     };
     if let Some(actual) = measure {
         for key in ["min", "max"] {
-            if let Some(bound) = ty.constraints.get(key).and_then(Value::as_i64) {
-                if (key == "min" && actual < bound) || (key == "max" && actual > bound) {
-                    metadata(
-                        out,
-                        budget,
-                        "metadata-range",
-                        path,
-                        format!("{path}: expected {key} {bound}; found {actual}"),
-                    );
-                }
+            if let Some(bound) = ty.constraints.get(key).and_then(Value::as_i64)
+                && ((key == "min" && actual < bound) || (key == "max" && actual > bound))
+            {
+                metadata(
+                    out,
+                    budget,
+                    "metadata-range",
+                    path,
+                    format!("{path}: expected {key} {bound}; found {actual}"),
+                );
             }
         }
     }
@@ -868,9 +871,29 @@ fn valid_date(s: &str) -> bool {
     };
     year > 0 && day > 0 && day <= days
 }
+fn cached_regex(pattern: &str) -> std::result::Result<regex::Regex, regex::Error> {
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+    thread_local! {
+        static CACHE: RefCell<HashMap<String, std::result::Result<regex::Regex, regex::Error>>> =
+            RefCell::new(HashMap::new());
+    }
+    CACHE.with(|cache| {
+        cache
+            .borrow_mut()
+            .entry(pattern.to_string())
+            .or_insert_with(|| regex::Regex::new(pattern))
+            .clone()
+    })
+}
 fn valid_datetime(s: &str) -> bool {
-    let regex=regex::Regex::new(r"^([0-9]{4}-[0-9]{2}-[0-9]{2})[Tt]([0-9]{2}):([0-9]{2}):([0-9]{2})(\.[0-9]+)?([Zz]|[+-][0-9]{2}:[0-9]{2})$").unwrap();
-    let Some(c) = regex.captures(s) else {
+    static DATETIME: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(
+            r"^([0-9]{4}-[0-9]{2}-[0-9]{2})[Tt]([0-9]{2}):([0-9]{2}):([0-9]{2})(\.[0-9]+)?([Zz]|[+-][0-9]{2}:[0-9]{2})$",
+        )
+        .expect("invariant: datetime regex literal is valid")
+    });
+    let Some(c) = DATETIME.captures(s) else {
         return false;
     };
     if !valid_date(&c[1]) {
@@ -880,7 +903,7 @@ fn valid_datetime(s: &str) -> bool {
     if n(2) > 23 || n(3) > 59 || n(4) > 60 {
         return false;
     }
-    let zone = c.get(6).unwrap().as_str();
+    let zone = c.get(6).map_or("Z", |m| m.as_str());
     zone.len() == 1
         || (zone[1..3].parse::<u32>().unwrap_or(99) <= 23
             && zone[4..].parse::<u32>().unwrap_or(99) <= 59)
@@ -968,8 +991,7 @@ fn valid_uri(s: &str) -> bool {
         } else {
             let (host, port) = hostport
                 .split_once(':')
-                .map(|(h, p)| (h, Some(p)))
-                .unwrap_or((hostport, None));
+                .map_or((hostport, None), |(h, p)| (h, Some(p)));
             if !component(host, b"") || port.is_some_and(|p| !p.bytes().all(|c| c.is_ascii_digit()))
             {
                 return false;
@@ -978,15 +1000,13 @@ fn valid_uri(s: &str) -> bool {
     }
     let (without_fragment, fragment) = rest
         .split_once('#')
-        .map(|(p, f)| (p, Some(f)))
-        .unwrap_or((rest, None));
+        .map_or((rest, None), |(p, f)| (p, Some(f)));
     if fragment.is_some_and(|f| !component(f, b":@/?")) {
         return false;
     }
     let (path, query) = without_fragment
         .split_once('?')
-        .map(|(p, q)| (p, Some(q)))
-        .unwrap_or((without_fragment, None));
+        .map_or((without_fragment, None), |(p, q)| (p, Some(q)));
     component(path, b":@/") && query.is_none_or(|q| component(q, b":@/?"))
 }
 

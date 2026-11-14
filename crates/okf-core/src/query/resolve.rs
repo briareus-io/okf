@@ -40,9 +40,7 @@ pub fn resolve_at(root: &Path, from: Option<&str>, link: &str) -> Resolved {
 }
 
 fn resolve_parts(from: Option<&str>, link: &str) -> (ConceptId, PathBuf) {
-    let from_id = from
-        .map(ConceptId::from_relative)
-        .unwrap_or_else(|| ConceptId("/".to_string()));
+    let from_id = from.map_or_else(|| ConceptId("/".to_string()), ConceptId::from_relative);
     let id = resolve_link(&from_id, link);
     let rel = id.0.trim_start_matches('/');
     let path = PathBuf::from(format!("{rel}.md"));

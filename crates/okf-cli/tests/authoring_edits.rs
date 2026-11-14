@@ -1,10 +1,6 @@
 //! Regression coverage for creation-time bodies and focused body edits.
-use assert_cmd::prelude::*;
-use std::process::Command;
-
-fn okf() -> Command {
-    Command::cargo_bin("okf").unwrap()
-}
+mod common;
+use common::okf;
 
 #[test]
 fn add_body_and_edit_replace_and_rename_section() {
@@ -98,9 +94,11 @@ fn replace_requires_a_match_and_exactly_one_by_default() {
         .args(["edit", "note", bundle, "--replace", "unique", "changed"])
         .assert()
         .success();
-    assert!(std::fs::read_to_string(dir.path().join("note.md"))
-        .unwrap()
-        .contains("changed"));
+    assert!(
+        std::fs::read_to_string(dir.path().join("note.md"))
+            .unwrap()
+            .contains("changed")
+    );
 }
 
 #[test]

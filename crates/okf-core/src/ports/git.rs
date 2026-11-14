@@ -85,14 +85,14 @@ impl RealGit {
     fn run(cmd: &mut Command) -> Result<std::process::Output> {
         match cmd.output() {
             Ok(out) if out.status.success() => Ok(out),
-            Ok(out) => Err(OkfError::Io(format!(
+            Ok(out) => Err(OkfError::io(format!(
                 "git failed: {}",
                 String::from_utf8_lossy(&out.stderr).trim()
             ))),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(OkfError::Environment(
                 "`git` executable not found on PATH".to_string(),
             )),
-            Err(e) => Err(OkfError::Io(e.to_string())),
+            Err(e) => Err(OkfError::from(e)),
         }
     }
 
@@ -145,12 +145,12 @@ impl Git for RealGit {
                 if error.kind() == std::io::ErrorKind::NotFound {
                     OkfError::Environment("`git` executable not found on PATH".into())
                 } else {
-                    OkfError::Io(error.to_string())
+                    OkfError::io(error.to_string())
                 }
             },
         )?;
         if !out.status.success() {
-            return Err(OkfError::Io(format!(
+            return Err(OkfError::io(format!(
                 "git failed: {}",
                 String::from_utf8_lossy(&out.stderr).trim()
             )));
@@ -190,10 +190,10 @@ impl Git for RealGit {
                         .any(|component| matches!(component, std::path::Component::ParentDir))
                         && path.is_file() =>
                 {
-                    relative.push((index, rel))
+                    relative.push((index, rel));
                 }
                 Ok(_) => {
-                    results[index] = Some(Err(OkfError::Io(format!(
+                    results[index] = Some(Err(OkfError::io(format!(
                         "cannot hash missing or out-of-worktree path {}",
                         path.display()
                     ))));
@@ -216,12 +216,21 @@ impl Git for RealGit {
             Ok(child) => child,
             Err(error) => {
                 for (index, _) in relative {
-                    results[index] = Some(Err(OkfError::Io(error.to_string())));
+                    results[index] = Some(Err(OkfError::io(error.to_string())));
                 }
                 return results.into_iter().map(Option::unwrap).collect();
             }
         };
-        let mut stdin = child.stdin.take().expect("piped git stdin");
+        let Some(mut stdin) = child.stdin.take() else {
+            let _ = child.kill();
+            let _ = child.wait();
+            for (index, _) in relative {
+                results[index] = Some(Err(OkfError::Internal(
+                    "git hash-object stdin unavailable".to_string(),
+                )));
+            }
+            return results.into_iter().map(Option::unwrap).collect();
+        };
         let requests: Vec<String> = relative
             .iter()
             .map(|(_, path)| format!("{}\n", path.to_string_lossy()))
@@ -237,13 +246,13 @@ impl Git for RealGit {
             Ok(output) => {
                 let error = String::from_utf8_lossy(&output.stderr).trim().to_string();
                 for (index, _) in relative {
-                    results[index] = Some(Err(OkfError::Io(format!("git failed: {error}"))));
+                    results[index] = Some(Err(OkfError::io(format!("git failed: {error}"))));
                 }
                 return results.into_iter().map(Option::unwrap).collect();
             }
             Err(error) => {
                 for (index, _) in relative {
-                    results[index] = Some(Err(OkfError::Io(error.to_string())));
+                    results[index] = Some(Err(OkfError::io(error.to_string())));
                 }
                 return results.into_iter().map(Option::unwrap).collect();
             }
@@ -252,7 +261,7 @@ impl Git for RealGit {
             Ok(Ok(())) => {}
             Ok(Err(error)) => {
                 for (index, _) in relative {
-                    results[index] = Some(Err(OkfError::Io(error.to_string())));
+                    results[index] = Some(Err(OkfError::io(error.to_string())));
                 }
                 return results.into_iter().map(Option::unwrap).collect();
             }
@@ -316,7 +325,7 @@ impl Git for RealGit {
                         .components()
                         .any(|component| matches!(component, std::path::Component::ParentDir)) =>
                 {
-                    relative.push((index, rel))
+                    relative.push((index, rel));
                 }
                 Ok(_) => results[index] = Some(self.last_commit_in(root, path)),
                 Err(error) => results[index] = Some(Err(error)),
@@ -342,7 +351,7 @@ impl Git for RealGit {
             Ok(output) => output,
             Err(error) => {
                 for (index, _) in relative {
-                    results[index] = Some(Err(OkfError::Io(error.to_string())));
+                    results[index] = Some(Err(OkfError::io(error.to_string())));
                 }
                 return results.into_iter().map(Option::unwrap).collect();
             }
@@ -365,11 +374,11 @@ impl Git for RealGit {
         for line in text.lines() {
             if let Some(hash) = line.strip_prefix('\u{1e}') {
                 commit = hash.trim();
-            } else if !commit.is_empty() {
-                if let Some(indices) = wanted.get(line.trim()) {
-                    for index in indices {
-                        commits.entry(*index).or_insert_with(|| commit.to_string());
-                    }
+            } else if !commit.is_empty()
+                && let Some(indices) = wanted.get(line.trim())
+            {
+                for index in indices {
+                    commits.entry(*index).or_insert_with(|| commit.to_string());
                 }
             }
         }
@@ -389,73 +398,32 @@ impl Git for RealGit {
         if paths.is_empty() {
             return Ok(Vec::new());
         }
-        let mut child = Self::local_command()
-            .arg("-C")
-            .arg(root)
-            .args(["cat-file", "--batch"])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|error| OkfError::Io(error.to_string()))?;
-        let mut stdin = child
-            .stdin
-            .take()
-            .ok_or_else(|| OkfError::Internal("git cat-file stdin unavailable".to_string()))?;
-        let requests: Vec<String> = paths
-            .iter()
-            .map(|path| format!("{rev}:{}\n", path.to_string_lossy()))
-            .collect();
-        let writer = std::thread::spawn(move || -> std::io::Result<()> {
-            for request in requests {
-                stdin.write_all(request.as_bytes())?;
-            }
-            Ok(())
-        });
-
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| OkfError::Internal("git cat-file stdout unavailable".to_string()))?;
-        let mut reader = std::io::BufReader::new(stdout);
+        // One request at a time: no writer thread, and the reader (and its process) is
+        // killed and reaped on every early return.
+        let mut reader: Option<super::git_read::Batch> = None;
         let mut blobs = Vec::with_capacity(paths.len());
         for path in paths {
-            let mut header = String::new();
-            reader.read_line(&mut header)?;
-            if header.trim_end().ends_with(" missing") {
-                return Err(OkfError::Io(format!(
-                    "git object missing at {rev}:{}",
-                    path.display()
-                )));
-            }
-            let size = header
-                .split_whitespace()
-                .nth(2)
-                .and_then(|size| size.parse::<usize>().ok())
-                .ok_or_else(|| {
-                    OkfError::Io(format!(
-                        "unexpected git cat-file response: {}",
-                        header.trim()
-                    ))
-                })?;
-            let mut bytes = vec![0; size];
-            reader.read_exact(&mut bytes)?;
-            let mut newline = [0; 1];
-            reader.read_exact(&mut newline)?;
-            blobs.push(bytes);
-        }
-        writer
-            .join()
-            .map_err(|_| OkfError::Internal("git cat-file writer panicked".to_string()))??;
-        let status = child
-            .wait()
-            .map_err(|error| OkfError::Io(error.to_string()))?;
-        if !status.success() {
-            let mut stderr = String::new();
-            if let Some(mut pipe) = child.stderr.take() {
-                let _ = pipe.read_to_string(&mut stderr);
-            }
-            return Err(OkfError::Io(format!("git failed: {}", stderr.trim())));
+            let spec = format!("{rev}:{}", path.to_string_lossy());
+            let bytes = if super::git_read::Batch::representable(&spec) {
+                let batch = match reader.as_mut() {
+                    Some(batch) => batch,
+                    None => reader.insert(super::git_read::Batch::new(root).map_err(|error| {
+                        if error.kind() == std::io::ErrorKind::NotFound {
+                            OkfError::Environment("`git` executable not found on PATH".into())
+                        } else {
+                            OkfError::io(error.to_string())
+                        }
+                    })?),
+                };
+                batch.read(&spec).map_err(|error| {
+                    OkfError::io_with(format!("git cat-file failed: {error}"), error)
+                })?
+            } else {
+                super::git_read::show(root, &spec)
+            };
+            blobs.push(bytes.ok_or_else(|| {
+                OkfError::io(format!("git object missing at {rev}:{}", path.display()))
+            })?);
         }
         Ok(blobs)
     }
@@ -573,24 +541,74 @@ impl Git for FakeGit {
         self.hash_objects
             .get(path)
             .cloned()
-            .ok_or_else(|| OkfError::Io(format!("no fake hash-object for {}", path.display())))
+            .ok_or_else(|| OkfError::io(format!("no fake hash-object for {}", path.display())))
     }
 
     fn last_commit(&self, path: &Path) -> Result<String> {
         self.last_commits
             .get(path)
             .cloned()
-            .ok_or_else(|| OkfError::Io(format!("no fake last-commit for {}", path.display())))
+            .ok_or_else(|| OkfError::io(format!("no fake last-commit for {}", path.display())))
     }
 
     fn show(&self, rev: &str, path: &Path) -> Result<Vec<u8>> {
         self.shows
             .get(&(rev.to_string(), path.to_path_buf()))
             .cloned()
-            .ok_or_else(|| OkfError::Io(format!("no fake show for {rev}:{}", path.display())))
+            .ok_or_else(|| OkfError::io(format!("no fake show for {rev}:{}", path.display())))
     }
 
     fn ls_tree(&self, rev: &str) -> Result<Vec<String>> {
         Ok(self.trees.get(rev).cloned().unwrap_or_default())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn git(root: &Path, args: &[&str]) -> String {
+        let out = Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{out:?}");
+        String::from_utf8(out.stdout).unwrap().trim().to_string()
+    }
+
+    fn commit(root: &Path, message: &str) -> String {
+        git(root, &["add", "."]);
+        git(
+            root,
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.test",
+                "commit",
+                "-qm",
+                message,
+            ],
+        );
+        git(root, &["rev-parse", "HEAD"])
+    }
+
+    #[test]
+    fn show_many_preserves_order_and_names_the_batch_protocol_cannot_carry() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(temp.path()).unwrap();
+        git(&root, &["init", "-q"]);
+        std::fs::write(root.join("café.md"), "accent").unwrap();
+        std::fs::write(root.join("new\nline"), "newline").unwrap();
+        commit(&root, "fixture");
+        let paths = [PathBuf::from("new\nline"), PathBuf::from("café.md")];
+        let blobs = RealGit.show_many_in(&root, "HEAD", &paths).unwrap();
+        assert_eq!(blobs, vec![b"newline".to_vec(), b"accent".to_vec()]);
+        let error = RealGit
+            .show_many_in(&root, "HEAD", &[PathBuf::from("absent")])
+            .unwrap_err();
+        assert!(error.to_string().contains("missing"), "{error}");
     }
 }

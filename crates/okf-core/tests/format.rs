@@ -8,10 +8,28 @@ use okf_core::{
 fn yaml_roundtrip_wrapping_and_idempotence() {
     let strings = [
         "REFINEMENT 2026-11-01 (package P6 wave; coordinator applied): refiner proposed readiness 'ready'; held at needs-refinement pending advisor review and independent verification.",
-        "true", "null", "007", "123", "a: b", "a # b", "", " leading", "trailing ",
+        "true",
+        "null",
+        "007",
+        "123",
+        "a: b",
+        "a # b",
+        "",
+        " leading",
+        "trailing ",
         "two  spaces are retained even when wrapping very long descriptions of a concept",
-        "line one\nline two", "  indented\n  code\n", "one\n\n", "tab\there", "a\rb", "a\0b", "emoji 🦀 and 中文 and more words to wrap across several lines",
-        "https://example.com/a/very/long/unbroken/url/with/no/space", "x\u{a0}y", "---", "!tag", "&alias",
+        "line one\nline two",
+        "  indented\n  code\n",
+        "one\n\n",
+        "tab\there",
+        "a\rb",
+        "a\0b",
+        "emoji 🦀 and 中文 and more words to wrap across several lines",
+        "https://example.com/a/very/long/unbroken/url/with/no/space",
+        "x\u{a0}y",
+        "---",
+        "!tag",
+        "&alias",
     ];
     let mut settings = FormattingSettings::default();
     settings.yaml.line_width = 35;
@@ -96,7 +114,8 @@ fn opt_in_crlf_and_missing_final_newline() {
 #[test]
 fn unknown_block_dialects_preserve_the_entire_markdown_body() {
     for body in [
-        "+++ some long tab title that should be kept on the same line +++\n",        "!!! note \"A very long directive title that must stay on the directive line\"\n\n    A long admonition paragraph which must stay exactly as authored.\n",
+        "+++ some long tab title that should be kept on the same line +++\n",
+        "!!! note \"A very long directive title that must stay on the directive line\"\n\n    A long admonition paragraph which must stay exactly as authored.\n",
         "??? note \"A very long collapsible title that must stay on the directive line\"\n",
         "::: warning A long title with many words which should stay in its directive\n\nA long paragraph inside the directive with many words which must remain untouched.\n:::\n",
         "% A long pandoc title with many words\n% Author\n% Date\n\nA long paragraph following the metadata which is conservatively preserved.\n",

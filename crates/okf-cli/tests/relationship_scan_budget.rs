@@ -55,12 +55,14 @@ fn local_budget_bounds_parsing_and_counts_nonmatching_documents() {
     assert_eq!(summary["eligible_documents"], 2);
     assert_eq!(summary["evidence"]["scan_complete"], false);
     assert!(summary["total_matches"].is_null());
-    assert!(!run(
-        d.path(),
-        &["backlinks", "target", ".", "--full-scan", "--json"]
-    )
-    .status
-    .success());
+    assert!(
+        !run(
+            d.path(),
+            &["backlinks", "target", ".", "--full-scan", "--json"]
+        )
+        .status
+        .success()
+    );
     let out = records(&run(
         d.path(),
         &[
@@ -87,20 +89,22 @@ fn outgoing_filtered_anchor_must_exist_and_is_prioritized() {
         d.path(),
         &["links", "a", ".", "--scan-limit", "1", "--json"],
     ));
-    assert!(!run(
-        d.path(),
-        &[
-            "links",
-            "absent",
-            ".",
-            "--kind",
-            "blocks",
-            "--scan-limit",
-            "1"
-        ]
-    )
-    .status
-    .success());
+    assert!(
+        !run(
+            d.path(),
+            &[
+                "links",
+                "absent",
+                ".",
+                "--kind",
+                "blocks",
+                "--scan-limit",
+                "1"
+            ]
+        )
+        .status
+        .success()
+    );
     // A malformed unrelated filename sorting before the named source is not examined first.
     write(d.path(), "0.md", "---\ntype: [broken\n---\n");
     records(&run(
@@ -112,7 +116,11 @@ fn outgoing_filtered_anchor_must_exist_and_is_prioritized() {
 fn catalog_budget_bounds_parsing_before_graph_construction() {
     let d = tempfile::tempdir().unwrap();
     fixture(d.path(), "bundle/");
-    write(d.path(),"okf-catalog.yaml","catalog_version: 2\ndefault_bundle: app.docs\nbundles:\n  app.docs:\n    location: {type: directory, path: bundle}\n");
+    write(
+        d.path(),
+        "okf-catalog.yaml",
+        "catalog_version: 2\ndefault_bundle: app.docs\nbundles:\n  app.docs:\n    location: {type: directory, path: bundle}\n",
+    );
     let out = records(&run(
         d.path(),
         &[
@@ -145,31 +153,35 @@ fn catalog_budget_bounds_parsing_before_graph_construction() {
             "--json",
         ],
     ));
-    assert!(!run(
-        d.path(),
-        &[
-            "links",
-            "absent",
-            "--bundle-id",
-            "app.docs",
-            "--scan-limit",
-            "1",
-            "--kind",
-            "blocks"
-        ]
-    )
-    .status
-    .success());
-    assert!(!run(
-        d.path(),
-        &[
-            "backlinks",
-            "unreferenced",
-            "--bundle-id",
-            "app.docs",
-            "--full-scan"
-        ]
-    )
-    .status
-    .success());
+    assert!(
+        !run(
+            d.path(),
+            &[
+                "links",
+                "absent",
+                "--bundle-id",
+                "app.docs",
+                "--scan-limit",
+                "1",
+                "--kind",
+                "blocks"
+            ]
+        )
+        .status
+        .success()
+    );
+    assert!(
+        !run(
+            d.path(),
+            &[
+                "backlinks",
+                "unreferenced",
+                "--bundle-id",
+                "app.docs",
+                "--full-scan"
+            ]
+        )
+        .status
+        .success()
+    );
 }

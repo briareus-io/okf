@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use okf_core::model::frontmatter::Frontmatter;
 use okf_core::ontology::edit::{add_concept_type, save_ontology};
-use okf_core::ontology::field_types::{check_concept, resolve_type_name, ViolationKind};
+use okf_core::ontology::field_types::{ViolationKind, check_concept, resolve_type_name};
 use okf_core::ontology::load::{load_ontology, parse_ontology, try_load};
 use okf_core::ontology::schema::{
     Cardinality, ConceptType, Field, FieldType, ReferenceRule, Target,
@@ -78,7 +78,12 @@ fn field_types_extends_and_object_composition() {
     let pm = resolve_type_name(&ont, "positive_money", &mut chain).unwrap();
     assert_eq!(pm.base, FieldType::String);
     assert!(pm.constraints.contains_key("pattern")); // inherited from `money`
-    assert_eq!(pm.constraints.get("min").and_then(|v| v.as_i64()), Some(0)); // added by derived def
+    assert_eq!(
+        pm.constraints
+            .get("min")
+            .and_then(serde_yaml::Value::as_i64),
+        Some(0)
+    ); // added by derived def
 
     // `contact` object composes sub-fields.
     let mut chain = Vec::new();
@@ -217,9 +222,11 @@ fn check_concept_flags_missing_and_cardinality_and_target() {
     let violations = check_concept(&ont, &fm, resolve);
     let kinds: Vec<&ViolationKind> = violations.iter().map(|v| &v.kind).collect();
 
-    assert!(kinds
-        .iter()
-        .any(|k| matches!(k, ViolationKind::MissingRequiredBuiltin(f) if f == "description")));
+    assert!(
+        kinds
+            .iter()
+            .any(|k| matches!(k, ViolationKind::MissingRequiredBuiltin(f) if f == "description"))
+    );
     assert!(kinds
         .iter()
         .any(|k| matches!(k, ViolationKind::Metadata {code,path} if code == "metadata-required" && path == "owner")));
@@ -227,9 +234,11 @@ fn check_concept_flags_missing_and_cardinality_and_target() {
         .iter()
         .any(|k| matches!(k, ViolationKind::Metadata {code,path} if code == "metadata-required" && path == "effective_date")));
     // computations rule allows Computation; a Metric link is a wrong target.
-    assert!(kinds
-        .iter()
-        .any(|k| matches!(k, ViolationKind::WrongReferenceTarget(key) if key == "computations")));
+    assert!(
+        kinds.iter().any(
+            |k| matches!(k, ViolationKind::WrongReferenceTarget(key) if key == "computations")
+        )
+    );
 }
 
 #[test]

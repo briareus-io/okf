@@ -274,10 +274,12 @@ fn browse_reads_existing_index_and_synthesizes_missing_index() {
     assert_eq!(records[0]["kind"], "index");
     assert_eq!(records[0]["directory"], "/tables");
     assert_eq!(records[0]["source"], "synthesized");
-    assert!(records[0]["content"]
-        .as_str()
-        .unwrap()
-        .contains("[Customers](customers.md)"));
+    assert!(
+        records[0]["content"]
+            .as_str()
+            .unwrap()
+            .contains("[Customers](customers.md)")
+    );
 }
 
 #[test]
@@ -431,10 +433,12 @@ fn search_supports_modes_scopes_evidence_ranking_and_limits() {
     assert_eq!(markdown[0]["id"], "/a-body");
     assert_eq!(markdown[0]["search"]["matches"][0]["field"], "body");
     assert_eq!(markdown[0]["search"]["matches"][0]["line"], 8);
-    assert!(markdown[0]["search"]["matches"][0]["snippet"]
-        .as_str()
-        .unwrap()
-        .contains("Needle search"));
+    assert!(
+        markdown[0]["search"]["matches"][0]["snippet"]
+            .as_str()
+            .unwrap()
+            .contains("Needle search")
+    );
     assert_eq!(markdown[0]["frontmatter_conflicts"]["search"], "authored");
     let shown = okf()
         .args([
@@ -451,9 +455,11 @@ fn search_supports_modes_scopes_evidence_ranking_and_limits() {
         "8: Needle **search** includes [gamma](https://example.test).\n"
     );
 
-    assert!(run(&["--text", "needle search", "--match", "literal"])
-        .iter()
-        .all(|record| record["id"] != "/a-body"));
+    assert!(
+        run(&["--text", "needle search", "--match", "literal"])
+            .iter()
+            .all(|record| record["id"] != "/a-body")
+    );
     assert_eq!(
         run(&["--text", "needle **search**", "--match", "literal"])[0]["id"],
         "/a-body"
@@ -603,10 +609,12 @@ fn graph_and_docs_honor_json_output() {
     let graph = ndjson(&graph.stdout);
     assert_eq!(graph[0]["kind"], "graph");
     assert_eq!(graph[0]["root"], "policies/travel");
-    assert!(graph[0]["content"]
-        .as_str()
-        .unwrap()
-        .starts_with("graph LR\n"));
+    assert!(
+        graph[0]["content"]
+            .as_str()
+            .unwrap()
+            .starts_with("graph LR\n")
+    );
 
     let docs = okf()
         .args([
@@ -842,11 +850,13 @@ fn schema_is_valid_ndjson_with_all_commands() {
         .iter()
         .find(|record| record["name"] == "graph")
         .expect("graph command");
-    assert!(graph["args"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|argument| argument["name"] == "root"));
+    assert!(
+        graph["args"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|argument| argument["name"] == "root")
+    );
     let docs = records
         .iter()
         .find(|record| record["name"] == "docs")
@@ -860,12 +870,16 @@ fn schema_is_valid_ndjson_with_all_commands() {
         .find(|record| record["name"] == "lint")
         .expect("lint command");
     let lint_args = lint["args"].as_array().unwrap();
-    assert!(lint_args
-        .iter()
-        .any(|argument| argument["name"] == "fail-on" && argument["default"] == "error"));
-    assert!(!lint_args
-        .iter()
-        .any(|argument| argument["name"] == "fail_on"));
+    assert!(
+        lint_args
+            .iter()
+            .any(|argument| argument["name"] == "fail-on" && argument["default"] == "error")
+    );
+    assert!(
+        !lint_args
+            .iter()
+            .any(|argument| argument["name"] == "fail_on")
+    );
 }
 
 #[test]
@@ -945,9 +959,11 @@ fn doctor_safe_fix_repairs_empty_index_only_when_confirmed() {
         ])
         .assert()
         .success();
-    assert!(std::fs::read_to_string(root.path().join("index.md"))
-        .unwrap()
-        .starts_with("# Concepts"));
+    assert!(
+        std::fs::read_to_string(root.path().join("index.md"))
+            .unwrap()
+            .starts_with("# Concepts")
+    );
 }
 
 #[test]

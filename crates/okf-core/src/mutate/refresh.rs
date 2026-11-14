@@ -44,14 +44,19 @@ pub struct RefreshResult {
 
 /// Recompute and rewrite eligible `sources[]` fingerprints of the concept `id`.
 /// `engine`'s `root` is the base that source resource paths resolve against.
-pub fn refresh(root: &Path, id: &str, engine: &Engine, clock: &dyn Clock) -> Result<RefreshResult> {
+pub fn refresh(
+    root: &Path,
+    id: &str,
+    engine: &Engine<'_>,
+    clock: &dyn Clock,
+) -> Result<RefreshResult> {
     refresh_with_policy(root, id, engine, clock, false)
 }
 
 pub fn refresh_with_policy(
     root: &Path,
     id: &str,
-    engine: &Engine,
+    engine: &Engine<'_>,
     clock: &dyn Clock,
     reject_provenance_skips: bool,
 ) -> Result<RefreshResult> {

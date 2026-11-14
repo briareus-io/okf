@@ -19,9 +19,7 @@ pub fn yaml_to_json(value: &Yaml) -> Json {
             } else if let Some(u) = n.as_u64() {
                 Json::from(u)
             } else if let Some(f) = n.as_f64() {
-                serde_json::Number::from_f64(f)
-                    .map(Json::Number)
-                    .unwrap_or(Json::Null)
+                serde_json::Number::from_f64(f).map_or(Json::Null, Json::Number)
             } else {
                 Json::Null
             }
@@ -88,22 +86,19 @@ pub fn concept_record(concept: &Concept) -> Json {
         "effective_generated_at".to_string(),
         concept
             .generated_at()
-            .map(|s| Json::String(s.to_string()))
-            .unwrap_or(Json::Null),
+            .map_or(Json::Null, |s| Json::String(s.to_string())),
     );
     obj.insert(
         "latest_verified_at".to_string(),
         concept
             .latest_verified_at()
-            .map(|s| Json::String(s.to_string()))
-            .unwrap_or(Json::Null),
+            .map_or(Json::Null, |s| Json::String(s.to_string())),
     );
     obj.insert(
         "verification_current".to_string(),
         concept
             .verification_current()
-            .map(Json::Bool)
-            .unwrap_or(Json::Null),
+            .map_or(Json::Null, Json::Bool),
     );
     if !conflicts.is_empty() {
         obj.insert("frontmatter_conflicts".to_string(), Json::Object(conflicts));

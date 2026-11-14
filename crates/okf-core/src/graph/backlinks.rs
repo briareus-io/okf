@@ -1,6 +1,6 @@
 //! Concepts linking to a given concept.
 use crate::bundle::loader::Bundle;
-use crate::graph::build::{build_graph, LinkGraph};
+use crate::graph::build::{LinkGraph, build_graph};
 use crate::model::concept::ConceptId;
 use crate::ontology::schema::Ontology;
 

@@ -4,11 +4,10 @@
 //! parsed [`crate::cli::Cli`] `Command`, and for each leaf command emits one NDJSON line whose
 //! args come straight from clap introspection. A small static table supplies each command's
 //! `group`, `mutates` flag and output `stream` (things clap does not model).
-use crate::cli::Cli;
 use crate::output;
-use clap::{ArgAction, Command as ClapCommand, CommandFactory};
+use clap::{ArgAction, Command as ClapCommand};
 use okf_core::error::Result;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// OKF spec version(s) this CLI targets.
 const OKF_SPEC: &[&str] = &["0.2"];
@@ -25,7 +24,7 @@ pub fn run_version(json: bool) -> Result<i32> {
             "manifest_versions": [1], "catalog_versions": [1,2], "lock_versions": [1],
         }))?;
     } else {
-        println!("okf {ver} (OKF spec {})", OKF_SPEC.join(", "));
+        output::print_text_line(format_args!("okf {ver} (OKF spec {})", OKF_SPEC.join(", ")))?;
     }
     Ok(0)
 }
@@ -160,7 +159,10 @@ fn output_record_contracts() -> Value {
 /// Build the `{"kind":"command",...}` record for one leaf command.
 fn command_record(full_name: &str, cmd: &ClapCommand) -> Value {
     let (group, mutates, stream) = meta(full_name);
-    let summary = cmd.get_about().map(|s| s.to_string()).unwrap_or_default();
+    let summary = cmd
+        .get_about()
+        .map(std::string::ToString::to_string)
+        .unwrap_or_default();
 
     let args: Vec<Value> = cmd
         .get_arguments()
@@ -171,11 +173,12 @@ fn command_record(full_name: &str, cmd: &ClapCommand) -> Value {
         })
         .map(|arg| {
             let mut record = arg_record(full_name, arg);
-            record["conflicts_with"] = json!(cmd
-                .get_arg_conflicts_with(arg)
-                .iter()
-                .map(|a| a.get_long().unwrap_or(a.get_id().as_str()))
-                .collect::<Vec<_>>());
+            record["conflicts_with"] = json!(
+                cmd.get_arg_conflicts_with(arg)
+                    .iter()
+                    .map(|a| a.get_long().unwrap_or(a.get_id().as_str()))
+                    .collect::<Vec<_>>()
+            );
             record
         })
         .collect();
@@ -362,18 +365,16 @@ fn arg_record(command: &str, arg: &clap::Arg) -> Value {
     } else {
         arg.get_default_values()
             .first()
-            .map(|value| {
+            .map_or(Value::Null, |value| {
                 let value = value.to_string_lossy();
                 if ty == "int" {
                     value
                         .parse::<u64>()
-                        .map(Value::from)
-                        .unwrap_or_else(|_| Value::String(value.into_owned()))
+                        .map_or_else(|_| Value::String(value.into_owned()), Value::from)
                 } else {
                     Value::String(value.into_owned())
                 }
             })
-            .unwrap_or(Value::Null)
     };
     if default.is_null() {
         default = match (command, id) {
@@ -427,11 +428,11 @@ fn arg_record(command: &str, arg: &clap::Arg) -> Value {
     });
 
     // The doc-comment help text, so consumers can document an arg without a `--help` round-trip.
-    let help = arg.get_help().map(|s| s.to_string());
+    let help = arg.get_help().map(std::string::ToString::to_string);
     // Multi-value args (e.g. `--set-section <HEADING> <TEXT>`) advertise their value names.
     let value_names: Vec<String> = arg
         .get_value_names()
-        .map(|names| names.iter().map(|n| n.to_string()).collect())
+        .map(|names| names.iter().map(std::string::ToString::to_string).collect())
         .filter(|v: &Vec<String>| v.len() > 1)
         .unwrap_or_default();
 
@@ -462,15 +463,31 @@ fn meta(name: &str) -> (&'static str, bool, &'static str) {
         "version" => ("meta", false, "version"),
         "catalog" => ("meta", false, "bundle-registration,effective-settings"),
         "catalog sync" => ("meta", true, "catalog-sync"),
-        "catalog update" => ("meta", true, "catalog-update-plan,catalog-update-applied,plan-file"),
-        "bundle context" => ("query", false, "context-scope,bundle-context,guidance,workflow,effective-query,context-stats,context-token,context-check"),
+        "catalog update" => (
+            "meta",
+            true,
+            "catalog-update-plan,catalog-update-applied,plan-file",
+        ),
+        "bundle context" => (
+            "query",
+            false,
+            "context-scope,bundle-context,guidance,workflow,effective-query,context-stats,context-token,context-check",
+        ),
         "bundle validate" => ("check", false, "manifest-validation"),
-        "bundle resource list"|"bundle resource show" => ("query", false, "bundle-resource"),
+        "bundle resource list" | "bundle resource show" => ("query", false, "bundle-resource"),
 
-        "list" | "search" => ("query", false, "concept,concept-identity,scope,projection,query-summary,facet,facet-excluded,relationship,related-concept,expansion-summary,warning"),
+        "list" | "search" => (
+            "query",
+            false,
+            "concept,concept-identity,scope,projection,query-summary,facet,facet-excluded,relationship,related-concept,expansion-summary,warning",
+        ),
         "show" => ("query", false, "concept,projection"),
         "browse" => ("query", false, "index"),
-        "backlinks" => ("query", false, "concept,relationship,scope,bundle-backlink,bundle-edge"),
+        "backlinks" => (
+            "query",
+            false,
+            "concept,relationship,scope,bundle-backlink,bundle-edge",
+        ),
         "links" => ("query", false, "link,relationship,scope,bundle-edge"),
         "graph" => ("query", false, "graph,scope,bundle-node,bundle-edge"),
         "resolve" => ("query", false, "resolved,scope,bundle-edge"),
@@ -481,7 +498,9 @@ fn meta(name: &str) -> (&'static str, bool, &'static str) {
         "computation check" => ("check", false, "computation-contract"),
         "ontology list" => ("query", false, "ontology_type"),
         "ontology show" => ("query", false, "ontology_type"),
-        "ontology field-type list" | "ontology field-type show" => ("query", false, "ontology_field_type"),
+        "ontology field-type list" | "ontology field-type show" => {
+            ("query", false, "ontology_field_type")
+        }
         "changeset plan" => ("query", false, "changeset-file,changeset-summary"),
         "changeset digest" => ("query", false, "baseline"),
         "changeset apply" => ("mutate", true, "changeset-file,changeset-summary"),
@@ -495,7 +514,11 @@ fn meta(name: &str) -> (&'static str, bool, &'static str) {
         "affected" => ("check", false, "affected,scope,bundle-affected"),
         "diff" => ("check", false, "diff"),
         "stats" => ("check", false, "stats"),
-        "doctor" => ("check", true, "doctor-finding,doctor-summary,doctor-normalization,migration-plan,migration-applied"),
+        "doctor" => (
+            "check",
+            true,
+            "doctor-finding,doctor-summary,doctor-normalization,migration-plan,migration-applied",
+        ),
 
         "init" => ("mutate", true, "change"),
         "add" => ("mutate", true, "change"),
@@ -508,7 +531,10 @@ fn meta(name: &str) -> (&'static str, bool, &'static str) {
         "ontology add" => ("mutate", true, "change"),
         "ontology update" => ("mutate", true, "change"),
         "ontology remove" => ("mutate", true, "change"),
-        "ontology apply" | "ontology field-type add" | "ontology field-type update" | "ontology field-type remove" => ("mutate", true, "change"),
+        "ontology apply"
+        | "ontology field-type add"
+        | "ontology field-type update"
+        | "ontology field-type remove" => ("mutate", true, "change"),
 
         "docs" => ("render", true, "docs,change"),
 

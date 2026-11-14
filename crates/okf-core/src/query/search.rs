@@ -460,21 +460,20 @@ fn body_line_offset(concept: &Concept) -> usize {
         2
     } else {
         serde_yaml::to_string(&concept.frontmatter.map)
-            .map(|frontmatter| frontmatter.lines().count() + 2)
-            .unwrap_or(2)
+            .map_or(2, |frontmatter| frontmatter.lines().count() + 2)
     }
 }
 
 fn structured_match(concept: &Concept, filter: &SearchFilter) -> bool {
-    if let Some(ty) = &filter.type_ {
-        if concept.concept_type() != Some(ty.as_str()) {
-            return false;
-        }
+    if let Some(ty) = &filter.type_
+        && concept.concept_type() != Some(ty.as_str())
+    {
+        return false;
     }
-    if let Some(tag) = &filter.tag {
-        if !concept.has_tag(tag) {
-            return false;
-        }
+    if let Some(tag) = &filter.tag
+        && !concept.has_tag(tag)
+    {
+        return false;
     }
     true
 }
@@ -542,8 +541,8 @@ pub fn list(bundle: &Bundle) -> Vec<&Concept> {
 #[cfg(test)]
 mod tests {
     use super::{
-        markdown_text, normalize_prose, search_detailed, MappedText, SearchField, SearchFilter,
-        SearchSort, TextMatchMode,
+        MappedText, SearchField, SearchFilter, SearchSort, TextMatchMode, markdown_text,
+        normalize_prose, search_detailed,
     };
     use crate::bundle::loader::load_bundle;
     use std::path::PathBuf;
@@ -614,8 +613,10 @@ mod tests {
                 ..Default::default()
             },
         );
-        assert!(by_id
-            .windows(2)
-            .all(|pair| pair[0].concept.id.0 < pair[1].concept.id.0));
+        assert!(
+            by_id
+                .windows(2)
+                .all(|pair| pair[0].concept.id.0 < pair[1].concept.id.0)
+        );
     }
 }

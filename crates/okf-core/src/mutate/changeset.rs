@@ -122,7 +122,7 @@ impl<'de> Deserialize<'de> for Operation {
             OperationInput::Create { .. } => {
                 return Err(D::Error::custom(
                     "create requires either content or frontmatter and optional body",
-                ))
+                ));
             }
             OperationInput::Replace { path, content } => Self::Replace { path, content },
             OperationInput::Edit {
@@ -213,15 +213,22 @@ fn snapshot_bundle(
             continue;
         }
         let relative = path.to_string_lossy();
-        let id = ConceptId::from_relative(relative.strip_suffix(".md").unwrap());
-        if old_files.is_some_and(|files| files.get(path) == Some(bytes)) {
-            if let Some(concept) = old_concepts.remove(&id.0) {
-                concepts.push(concept);
-                continue;
-            }
+        let Some(stem) = relative.strip_suffix(".md") else {
+            continue;
+        };
+        let id = ConceptId::from_relative(stem);
+        if old_files.is_some_and(|files| files.get(path) == Some(bytes))
+            && let Some(concept) = old_concepts.remove(&id.0)
+        {
+            concepts.push(concept);
+            continue;
         }
-        let text = std::str::from_utf8(bytes)
-            .map_err(|e| OkfError::Io(format!("{}: {e}", root.join(path).display())))?;
+        let text = std::str::from_utf8(bytes).map_err(|e| {
+            OkfError::io(format!(
+                "invalid UTF-8 in {}: {e}",
+                root.join(path).display()
+            ))
+        })?;
         match crate::parse::parse_concept_file(id, text, &root.join(path)) {
             Ok(concept) => concepts.push(concept),
             Err(OkfError::Yaml(message)) => failures.push(message),
@@ -392,8 +399,7 @@ fn registered_reference(
     } else {
         root.join(from.trim_start_matches('/'))
             .parent()
-            .unwrap()
-            .to_path_buf()
+            .map_or_else(|| root.clone(), Path::to_path_buf)
     };
     let mut target = crate::bundle::catalog::normalize(&base.join(clean.trim_start_matches('/')));
     if !bundle_relative && target.extension().is_none() {
@@ -406,7 +412,9 @@ fn registered_reference(
     else {
         return false;
     };
-    let relative = target.strip_prefix(&entry.root).unwrap();
+    let Ok(relative) = target.strip_prefix(&entry.root) else {
+        return false;
+    };
     let resolved = crate::query::artifact::ArtifactResolver::new(&entry.root)
         .resolve(None, &relative.to_string_lossy());
     resolved.exists && resolved.kind != crate::query::artifact::ArtifactKind::Blocked
@@ -481,13 +489,13 @@ fn missing(
                 }
             }
             for (key, rule) in &definition.references {
-                if rule.selector.is_none() {
-                    if let Some(value) = concept.frontmatter.get(key) {
-                        let mut values = Vec::new();
-                        strings(value, &mut values);
-                        for raw in values {
-                            check(&concept.id.0, raw, false);
-                        }
+                if rule.selector.is_none()
+                    && let Some(value) = concept.frontmatter.get(key)
+                {
+                    let mut values = Vec::new();
+                    strings(value, &mut values);
+                    for raw in values {
+                        check(&concept.id.0, raw, false);
                     }
                 }
             }
@@ -509,7 +517,7 @@ fn missing(
                 };
                 match source.get("kind").and_then(serde_yaml::Value::as_str) {
                     Some("file" | "line-range" | "markdown-heading") => {
-                        check(&concept.id.0, raw, true)
+                        check(&concept.id.0, raw, true);
                     }
                     None => check(&concept.id.0, raw, false),
                     _ => {} // URL, Git, and producer-specific resources need other resolvers.
@@ -544,7 +552,7 @@ fn missing(
             continue;
         }
         let text = std::str::from_utf8(bytes)
-            .map_err(|e| OkfError::Io(format!("{}: {e}", root.join(path).display())))?;
+            .map_err(|e| OkfError::io(format!("{}: {e}", root.join(path).display())))?;
         let id = format!("/{}", path.to_string_lossy().trim_end_matches(".md"));
         for event in pulldown_cmark::Parser::new(text) {
             if let pulldown_cmark::Event::Start(
@@ -786,15 +794,17 @@ pub fn prepare(root: &Path, set: &ChangeSet) -> Result<Plan> {
 pub fn apply(root: &Path, plan: Plan, expected: Option<&str>) -> Result<()> {
     let guard = transaction::writer_lock(root)?;
     if expected.is_some_and(|value| value != plan.base_digest) {
-        return Err(usage(
-            "baseline-conflict: change-set base digest differs from --expect; preview again",
+        return Err(OkfError::classified(
+            crate::error::FailureReason::BaselineConflict,
+            "change-set base digest differs from --expect; preview again",
         ));
     }
     let interpretation = serde_json::to_string(&crate::bundle::settings::load_for(root)?.0)
         .map_err(|e| OkfError::Internal(e.to_string()))?;
     if snapshot(root)? != plan.before || interpretation != plan.interpretation {
-        return Err(usage(
-            "baseline-conflict: bundle or interpretation changed during planning; preview again",
+        return Err(OkfError::classified(
+            crate::error::FailureReason::BaselineConflict,
+            "bundle or interpretation changed during planning; preview again",
         ));
     }
     transaction::commit_locked(root, &guard, plan.changes)

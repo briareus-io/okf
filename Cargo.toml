@@ -3,6 +3,43 @@ resolver = "2"
 members = ["crates/okf-core", "crates/okf-cli", "xtask"]
 
 [workspace.package]
-version = "0.6.3"
-edition = "2021"
+version = "0.6.4"
+edition = "2024"
 license = "MIT"
+rust-version = "1.98"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+serde_yaml = "0.9"
+indexmap = { version = "2", features = ["serde"] }
+toml = "1"
+tempfile = "3"
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[workspace.lints.clippy]
+undocumented_unsafe_blocks = "warn"
+use_self = "warn"
+redundant_closure_for_method_calls = "warn"
+map_unwrap_or = "warn"
+manual_let_else = "warn"
+semicolon_if_nothing_returned = "warn"
+uninlined_format_args = "warn"
+explicit_iter_loop = "warn"
+needless_pass_by_value = "warn"
+redundant_clone = "warn"
+implicit_clone = "warn"
+cloned_instead_of_copied = "warn"
+inefficient_to_string = "warn"
+format_push_string = "warn"
+derive_partial_eq_without_eq = "warn"
+# OKF concept paths are case-sensitive: only a literal lowercase `.md` is a concept.
+case_sensitive_file_extension_comparisons = "allow"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

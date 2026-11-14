@@ -5,7 +5,7 @@ use crate::cli::{
     BundleArgs, OntApplyArgs, OntEditArgs, OntFieldTypeCmd, OntRemoveArgs, OntShowArgs,
 };
 use crate::output;
-use crate::structured::{parse_yaml, preview_diff, InputReader};
+use crate::structured::{InputReader, parse_yaml, preview_diff};
 use okf_core::bundle::resolve::resolve_bundle;
 use okf_core::error::{OkfError, Result};
 use okf_core::mutate::transaction::{self, FileChange};
@@ -34,7 +34,7 @@ pub fn run_list(args: &BundleArgs, json: bool) -> Result<i32> {
             output::print_line(&concept_type_record(name, ct, &ontology))?;
         } else {
             let desc = ct.description.as_deref().unwrap_or("");
-            println!("{name}\t{desc}");
+            output::print_text_line(format_args!("{name}\t{desc}"))?;
         }
     }
     Ok(0)
@@ -51,30 +51,30 @@ pub fn run_show(args: &OntShowArgs, json: bool) -> Result<i32> {
     if json {
         output::print_line(&concept_type_record(&args.name, ct, &ontology))?;
     } else {
-        println!("# {}", args.name);
+        output::print_text_line(format_args!("# {}", args.name))?;
         if let Some(d) = &ct.description {
-            println!("description: {d}");
+            output::print_text_line(format_args!("description: {d}"))?;
         }
         if ct.attested {
-            println!("attested: true");
+            output::print_text_line(format_args!("attested: true"))?;
         }
         if !ct.requires.is_empty() {
-            println!("requires: {}", ct.requires.join(", "));
+            output::print_text_line(format_args!("requires: {}", ct.requires.join(", ")))?;
         }
         if let Some(trust) = &ct.trust {
-            println!(
+            output::print_text_line(format_args!(
                 "trust:\n{}",
                 serde_yaml::to_string(trust).map_err(|e| OkfError::Yaml(e.to_string()))?
-            );
+            ))?;
         }
         if !ct.extra.is_empty() {
-            print!(
+            output::print_text(format_args!(
                 "{}",
                 serde_yaml::to_string(&ct.extra).map_err(|e| OkfError::Yaml(e.to_string()))?
-            );
+            ))?;
         }
         if !ct.fields.is_empty() {
-            println!("fields:");
+            output::print_text_line(format_args!("fields:"))?;
             for (k, f) in &ct.fields {
                 let values = resolve_field(&ontology, f)
                     .ok()
@@ -82,15 +82,15 @@ pub fn run_show(args: &OntShowArgs, json: bool) -> Result<i32> {
                     .filter(|v| !v.is_empty())
                     .map(|v| format!(" [{}]", v.join("|")))
                     .unwrap_or_default();
-                println!(
+                output::print_text_line(format_args!(
                     "  {k}: {}{}{}",
                     f.type_name,
                     values,
                     if f.required { " (required)" } else { "" }
-                );
+                ))?;
             }
         }
-        println!(
+        output::print_text_line(format_args!(
             "effective fields:\n{}",
             serde_yaml::to_string(
                 &ct.fields
@@ -99,33 +99,33 @@ pub fn run_show(args: &OntShowArgs, json: bool) -> Result<i32> {
                     .collect::<std::collections::BTreeMap<_, _>>()
             )
             .unwrap_or_default()
-        );
+        ))?;
         if !ct.references.is_empty() {
-            println!("references:");
+            output::print_text_line(format_args!("references:"))?;
             for (k, r) in &ct.references {
-                println!(
+                output::print_text_line(format_args!(
                     "  {k}: {} [{}]",
                     r.target.types().join("|"),
                     r.cardinality.as_str()
-                );
+                ))?;
                 if let Some(selector) = &r.selector {
-                    println!("    selector: {selector}");
+                    output::print_text_line(format_args!("    selector: {selector}"))?;
                 }
                 if !r.extra.is_empty() {
-                    print!(
+                    output::print_text(format_args!(
                         "{}",
                         serde_yaml::to_string(&r.extra)
                             .map_err(|e| OkfError::Yaml(e.to_string()))?
-                    );
+                    ))?;
                 }
             }
         }
         if !ct.relationships.is_empty() {
-            println!(
+            output::print_text_line(format_args!(
                 "relationships:\n{}",
                 serde_yaml::to_string(&ct.relationships)
                     .map_err(|e| OkfError::Yaml(e.to_string()))?
-            );
+            ))?;
         }
     }
     Ok(0)
@@ -220,14 +220,14 @@ pub fn run_field_type(cmd: &OntFieldTypeCmd, json: bool) -> Result<i32> {
                     &json!({"kind": "ontology_field_type", "name": name, "definition": definition, "effective": resolve_type_name(&ontology, name, &mut Vec::new())?}),
                 )?;
             } else {
-                println!(
+                output::print_text_line(format_args!(
                     "{name}\t{}",
                     definition
                         .extends
                         .as_deref()
                         .or(definition.base.as_deref())
                         .unwrap_or("")
-                );
+                ))?;
             }
         }
         return Ok(0);
@@ -245,12 +245,12 @@ pub fn run_field_type(cmd: &OntFieldTypeCmd, json: bool) -> Result<i32> {
                 &json!({"kind": "ontology_field_type", "name": args.name, "definition": definition, "effective": effective}),
             )?;
         } else {
-            println!(
+            output::print_text_line(format_args!(
                 "# {}\n{}effective:\n{}",
                 args.name,
                 serde_yaml::to_string(definition).map_err(|e| OkfError::Yaml(e.to_string()))?,
                 serde_yaml::to_string(&effective).map_err(|e| OkfError::Yaml(e.to_string()))?
-            );
+            ))?;
         }
         return Ok(0);
     }
@@ -464,7 +464,7 @@ fn put_declaration(
     map.entry(Value::String(section.into()))
         .or_insert_with(|| Value::Mapping(Mapping::new()))
         .as_mapping_mut()
-        .unwrap()
+        .expect("invariant: section entry is a mapping")
         .insert(Value::String(key.into()), value);
     Ok(())
 }
@@ -484,6 +484,10 @@ fn read_definition(reader: &mut InputReader, input: &str) -> Result<Value> {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "owned values are handed over by every call site"
+)]
 fn finish(
     root: &std::path::Path,
     ontology: &Ontology,
@@ -503,8 +507,9 @@ fn finish(
     let context = okf_core::bundle::context::current_context(Some(&root.to_string_lossy()), None)?;
     let target = canonical_target(&path)?;
     if target != baseline_path {
-        return Err(OkfError::Usage(
-            "baseline-conflict: ontology target changed during preparation; preview again".into(),
+        return Err(OkfError::classified(
+            okf_core::error::FailureReason::BaselineConflict,
+            "ontology target changed during preparation; preview again",
         ));
     }
     let mut roots = vec![root.canonicalize()?];
@@ -533,10 +538,20 @@ fn finish(
         }
     }
     if !dependents.is_empty() && !check_dependents {
-        return Err(OkfError::Usage(format!("shared ontology scope: requested={}; required={}; examined=none; unavailable={}; unknown external users are not covered; rerun with --check-dependent-bundles", root.display(), dependents.join(","), unavailable.join(","))));
+        return Err(OkfError::Usage(format!(
+            "shared ontology scope: requested={}; required={}; examined=none; unavailable={}; unknown external users are not covered; rerun with --check-dependent-bundles",
+            root.display(),
+            dependents.join(","),
+            unavailable.join(",")
+        )));
     }
     if !unavailable.is_empty() {
-        return Err(OkfError::Environment(format!("shared ontology scope incomplete: requested={}; required={}; examined=none; unavailable={}; unknown external users are not covered", root.display(), dependents.join(","), unavailable.join(","))));
+        return Err(OkfError::Environment(format!(
+            "shared ontology scope incomplete: requested={}; required={}; examined=none; unavailable={}; unknown external users are not covered",
+            root.display(),
+            dependents.join(","),
+            unavailable.join(",")
+        )));
     }
     roots.sort();
     roots.dedup();
@@ -549,8 +564,9 @@ fn finish(
     let locked_path = okf_core::bundle::settings::ontology_path_for(&locked_context, root)?
         .unwrap_or_else(|| ontology_path(root));
     if canonical_target(&locked_path)? != baseline_path {
-        return Err(OkfError::Usage(
-            "baseline-conflict: ontology target changed during preparation; preview again".into(),
+        return Err(OkfError::classified(
+            okf_core::error::FailureReason::BaselineConflict,
+            "ontology target changed during preparation; preview again",
         ));
     }
     if let Some(catalog) = &locked_context.catalog {
@@ -565,10 +581,10 @@ fn finish(
                 == Some(target.as_path())
                 && !roots.contains(&entry.root)
             {
-                return Err(OkfError::Usage(format!(
-                    "baseline-conflict: new shared ontology consumer {}; preview again",
-                    entry.id
-                )));
+                return Err(OkfError::classified(
+                    okf_core::error::FailureReason::BaselineConflict,
+                    format!("new shared ontology consumer {}; preview again", entry.id),
+                ));
             }
         }
     }
@@ -598,7 +614,13 @@ fn finish(
     }
     if !dry_run {
         let primary = root.canonicalize()?;
-        let guard = &guards[roots.iter().position(|r| r == &primary).unwrap()];
+        let Some(position) = roots.iter().position(|r| r == &primary) else {
+            return Err(OkfError::Internal(format!(
+                "primary root {} missing from guarded roots",
+                primary.display()
+            )));
+        };
+        let guard = &guards[position];
         if target.starts_with(&primary) {
             let relative = target
                 .strip_prefix(&primary)
@@ -629,7 +651,7 @@ fn finish(
             &json!({"kind":"change", "op":format!("ontology-{op}"), "name":name, "dry_run":true, "diff":diff, "before":before, "after":generated, "requested_bundles":[root], "required_dependent_bundles":dependents, "examined_bundles":roots, "unknown_external_users_covered":false}),
         )?;
     } else {
-        print!("{diff}");
+        output::print_text(format_args!("{diff}"))?;
     }
     Ok(0)
 }
@@ -679,7 +701,7 @@ fn load_current(
             return Err(OkfError::Environment(format!(
                 "no ontology.yaml in bundle {}",
                 root.display()
-            )))
+            )));
         }
         None => Ontology {
             okf_ontology: ONTOLOGY_VERSION.to_string(),
@@ -702,7 +724,7 @@ fn report_change(
             &json!({"kind": "change", "op": format!("ontology-{op}"), "name": name, "requested_bundles":[root], "required_dependent_bundles":dependents, "examined_bundles":examined, "unknown_external_users_covered":false}),
         )?;
     } else {
-        println!("ontology {op}: {name}");
+        output::print_text_line(format_args!("ontology {op}: {name}"))?;
     }
     Ok(0)
 }
@@ -780,10 +802,9 @@ fn parse_reference(spec: &str) -> Result<(String, ReferenceRule)> {
     }
     let key = parts[0].trim().to_string();
     let targets: Vec<String> = parts[1].split('|').map(|t| t.trim().to_string()).collect();
-    let target = if targets.len() == 1 {
-        Target::One(targets.into_iter().next().unwrap())
-    } else {
-        Target::Many(targets)
+    let target = match <[String; 1]>::try_from(targets) {
+        Ok([only]) => Target::One(only),
+        Err(targets) => Target::Many(targets),
     };
     let cardinality = Cardinality::from_str(parts[2].trim())?;
     Ok((

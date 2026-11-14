@@ -45,24 +45,23 @@ pub fn write_concept_formatted(
     if let Some(value) = map.shift_remove("type") {
         ordered.insert("type".to_string(), value);
     }
-    if let Some(ontology) = ontology {
-        if let Some(ct) = concept
+    if let Some(ontology) = ontology
+        && let Some(ct) = concept
             .frontmatter
             .get("type")
             .and_then(serde_yaml::Value::as_str)
             .and_then(|name| ontology.concepts.get(name))
-        {
-            for (name, field) in &ct.fields {
-                if let Some(mut value) = map.shift_remove(name) {
-                    order_value(&mut value, &resolve_field(ontology, field)?.ty);
-                    ordered.insert(name.clone(), value);
-                }
+    {
+        for (name, field) in &ct.fields {
+            if let Some(mut value) = map.shift_remove(name) {
+                order_value(&mut value, &resolve_field(ontology, field)?.ty);
+                ordered.insert(name.clone(), value);
             }
-            // Reference-only declarations follow typed fields in reference declaration order.
-            for name in ct.references.keys() {
-                if let Some(value) = map.shift_remove(name) {
-                    ordered.insert(name.clone(), value);
-                }
+        }
+        // Reference-only declarations follow typed fields in reference declaration order.
+        for name in ct.references.keys() {
+            if let Some(value) = map.shift_remove(name) {
+                ordered.insert(name.clone(), value);
             }
         }
     }

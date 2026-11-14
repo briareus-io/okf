@@ -5,7 +5,7 @@ use crate::{
     fingerprint::canonicalize::sha256_hex,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::{Component, Path, PathBuf},
@@ -163,16 +163,55 @@ pub fn local_path(root: &Path, resource: &str) -> Result<PathBuf> {
         if root.as_os_str().is_empty() {
             continue;
         }
-        if let Ok(meta) = std::fs::symlink_metadata(&current) {
-            if meta.file_type().is_symlink() {
+        match std::fs::symlink_metadata(&current) {
+            Ok(meta) if meta.file_type().is_symlink() => {
                 return Err(usage(format!(
                     "support resource contains symlink: {resource}"
                 )));
             }
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.into()),
         }
     }
     Ok(current)
 }
+/// Open a regular file without following a symlink swapped in after `local_path` checked it.
+/// On unix the opened handle's `(dev, ino)` must match `symlink_metadata` of the path.
+pub fn open_regular_nofollow(path: &Path) -> std::io::Result<std::fs::File> {
+    let file = std::fs::File::open(path)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let opened = file.metadata()?;
+        let current = std::fs::symlink_metadata(path)?;
+        if current.file_type().is_symlink()
+            || (opened.dev(), opened.ino()) != (current.dev(), current.ino())
+        {
+            return Err(std::io::Error::other(
+                "path changed or became a symlink after validation",
+            ));
+        }
+    }
+    Ok(file)
+}
+
+/// UTF-8 text read through [`open_regular_nofollow`].
+pub fn read_to_string_nofollow(path: &Path) -> std::io::Result<String> {
+    use std::io::Read;
+    let mut text = String::new();
+    open_regular_nofollow(path)?.read_to_string(&mut text)?;
+    Ok(text)
+}
+
+/// Bytes read through [`open_regular_nofollow`].
+pub fn read_nofollow(path: &Path) -> std::io::Result<Vec<u8>> {
+    use std::io::Read;
+    let mut bytes = Vec::new();
+    open_regular_nofollow(path)?.read_to_end(&mut bytes)?;
+    Ok(bytes)
+}
+
 fn check_input(root: &Path, input: &WorkflowInput, value: &Value) -> Result<()> {
     let valid = match input.type_.as_str() {
         "string" => value.is_string(),
@@ -251,7 +290,7 @@ pub fn parse(text: &str) -> Result<Manifest> {
             if input.required && input.default.is_some() {
                 return Err(usage("required workflow input cannot have a default"));
             }
-            if input.type_ == "enum" && input.values.as_ref().is_none_or(|v| v.is_empty()) {
+            if input.type_ == "enum" && input.values.as_ref().is_none_or(std::vec::Vec::is_empty) {
                 return Err(usage("enum input requires nonempty values"));
             }
             if input.type_ != "enum" && input.values.is_some() {
@@ -278,7 +317,7 @@ pub fn parse(text: &str) -> Result<Manifest> {
 }
 pub fn load(root: &Path) -> Result<Option<LoadedManifest>> {
     let path = local_path(root, FILENAME)?;
-    let text = match std::fs::read_to_string(&path) {
+    let text = match read_to_string_nofollow(&path) {
         Ok(t) => t,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(usage(format!("cannot read {}: {e}", path.display()))),
@@ -320,7 +359,7 @@ pub fn validate_resources(root: &Path) -> Result<Option<LoadedManifest>> {
         );
     for reference in instruction_files {
         let path = local_path(root, reference)?;
-        std::fs::read_to_string(&path).map_err(|e| {
+        read_to_string_nofollow(&path).map_err(|e| {
             usage(format!(
                 "cannot read required UTF-8 instruction file {}: {e}",
                 path.display()
@@ -340,7 +379,7 @@ pub fn validate_resources(root: &Path) -> Result<Option<LoadedManifest>> {
                 path.display()
             )));
         }
-        std::fs::File::open(&path).map_err(|e| {
+        open_regular_nofollow(&path).map_err(|e| {
             usage(format!(
                 "cannot read declared support resource {}: {e}",
                 path.display()
@@ -405,7 +444,7 @@ fn read_body(
 ) -> Result<Option<String>> {
     if let Some(file) = file {
         let path = local_path(root, file)?;
-        let body = std::fs::read_to_string(&path).map_err(|e| {
+        let body = read_to_string_nofollow(&path).map_err(|e| {
             usage(format!(
                 "cannot read instruction file {}: {e}",
                 path.display()
@@ -491,20 +530,19 @@ pub fn context(
         &mut setting_origins,
     );
     let key = effective.bundle.as_deref().unwrap_or("default");
-    if !(effective.bundle.is_none() && selected_context.catalog.is_some()) {
-        if let Some(value) = selected_context
+    if !(effective.bundle.is_none() && selected_context.catalog.is_some())
+        && let Some(value) = selected_context
             .config
             .settings
             .get("bundle_settings")
             .and_then(|v| v.get(key))
-        {
-            origins(
-                &serde_json::to_value(value).map_err(|e| usage(e.to_string()))?,
-                "",
-                "legacy",
-                &mut setting_origins,
-            );
-        }
+    {
+        origins(
+            &serde_json::to_value(value).map_err(|e| usage(e.to_string()))?,
+            "",
+            "legacy",
+            &mut setting_origins,
+        );
     }
     if let Some(loaded) = &loaded {
         origins(
@@ -537,8 +575,7 @@ pub fn context(
             let matches = r
                 .operations
                 .as_ref()
-                .map(|ops| request.operations.iter().any(|o| ops.contains(o)))
-                .unwrap_or(true);
+                .is_none_or(|ops| request.operations.iter().any(|o| ops.contains(o)));
             let mandatory = r.tier == GuidanceTier::Mandatory;
             let full = request.all || (matches && mandatory) || request.rules.contains(&r.id);
             let mut row = json!({"kind":"guidance","id":r.id,"description":r.description,"operations":r.operations,"matches_selection":if r.operations.is_some()&&request.operations.is_empty(){None}else{Some(matches)},"tier":r.tier,"instruction_role":if matches && mandatory{role}else{"inspected"},"content":if full{"full"}else{"summary"},"origin":{"manifest":l.path,"manifest_digest":l.digest,"instructions_file":r.instructions_file,"provenance":r.provenance}});
@@ -582,7 +619,7 @@ pub fn context(
                 let mut resources = Vec::new();
                 for resource in &w.resources {
                     let path = local_path(root, resource)?;
-                    let bytes = std::fs::read(&path).map_err(|e| {
+                    let bytes = read_nofollow(&path).map_err(|e| {
                         usage(format!(
                             "cannot read workflow resource {}: {e}",
                             path.display()
@@ -683,10 +720,9 @@ pub fn context(
         if let Some(file) = record["origin"]["instructions_file"]
             .as_str()
             .map(str::to_owned)
+            && let Some(digest) = digests.get(&file)
         {
-            if let Some(digest) = digests.get(&file) {
-                record["origin"]["instruction_digest"] = json!(digest);
-            }
+            record["origin"]["instruction_digest"] = json!(digest);
         }
     }
     Ok(BundleContext {
@@ -712,7 +748,14 @@ mod tests {
     }
     #[test]
     fn rejects_ambiguous_bodies_unknown_keys_and_versions() {
-        for text in ["manifest_version: 2", "manifest_version: 1\nunknown: true", "manifest_version: 1\nguidance:\n  instructions: hi\n  instructions_file: x", "manifest_version: 1\nguidance:\n  rules:\n  - id: r\n    operations: []\n    instructions: hi"] {assert!(parse(text).is_err(),"{text}");}
+        for text in [
+            "manifest_version: 2",
+            "manifest_version: 1\nunknown: true",
+            "manifest_version: 1\nguidance:\n  instructions: hi\n  instructions_file: x",
+            "manifest_version: 1\nguidance:\n  rules:\n  - id: r\n    operations: []\n    instructions: hi",
+        ] {
+            assert!(parse(text).is_err(), "{text}");
+        }
     }
     #[test]
     fn instruction_file_change_changes_context_identity() {
@@ -734,7 +777,10 @@ mod tests {
     #[test]
     fn scoped_rules_and_inspection_do_not_select_workflows() {
         let dir = tempfile::tempdir().unwrap();
-        write(dir.path(),"manifest_version: 1\nguidance:\n  rules:\n  - id: graph\n    operations: [links]\n    instructions: edges\nworkflows:\n  import:\n    description: Import\n    instructions: Do it\n");
+        write(
+            dir.path(),
+            "manifest_version: 1\nguidance:\n  rules:\n  - id: graph\n    operations: [links]\n    instructions: edges\nworkflows:\n  import:\n    description: Import\n    instructions: Do it\n",
+        );
         let commands = vec!["links".into(), "backlinks".into()];
         let ctx = context(
             dir.path(),
@@ -762,7 +808,10 @@ mod tests {
     #[test]
     fn workflow_inputs_validate_and_report_missing() {
         let dir = tempfile::tempdir().unwrap();
-        write(dir.path(),"manifest_version: 1\nworkflows:\n  import:\n    description: Import\n    instructions: Do it\n    inputs:\n      source: {type: string, required: true}\n      destination: {type: path, default: requirements}\n");
+        write(
+            dir.path(),
+            "manifest_version: 1\nworkflows:\n  import:\n    description: Import\n    instructions: Do it\n    inputs:\n      source: {type: string, required: true}\n      destination: {type: path, default: requirements}\n",
+        );
         let request = ContextRequest {
             workflows: vec!["import".into()],
             ..Default::default()
@@ -779,7 +828,7 @@ mod tests {
     }
     #[test]
     fn executable_command_registry_validates_normal_parse_and_restores() {
-        let text="manifest_version: 1\nguidance:\n  rules:\n  - id: bad\n    operations: [not-a-command]\n    instructions: nope\n";
+        let text = "manifest_version: 1\nguidance:\n  rules:\n  - id: bad\n    operations: [not-a-command]\n    instructions: nope\n";
         assert!(parse(text).is_ok());
         {
             let _registry = command_registry(vec!["links".into()]);
@@ -801,13 +850,27 @@ mod tests {
             "manifest_version: 1\nguidance:\n  instructions_file: data.bin\n",
         );
         assert!(validate_resources(dir.path()).is_err());
-        write(dir.path(),"manifest_version: 1\nworkflows:\n  inspect:\n    description: Inspect data\n    instructions: Read metadata\n    resources: [data.bin]\n");
+        write(
+            dir.path(),
+            "manifest_version: 1\nworkflows:\n  inspect:\n    description: Inspect data\n    instructions: Read metadata\n    resources: [data.bin]\n",
+        );
         assert!(validate_resources(dir.path()).is_ok());
     }
     #[test]
     fn support_paths_cannot_escape() {
         assert!(local_path(Path::new("/tmp"), "../secret").is_err());
         assert!(local_path(Path::new("/tmp"), "/secret").is_err());
+    }
+    #[cfg(unix)]
+    #[test]
+    fn nofollow_open_rejects_symlinks_and_accepts_regular_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let real = dir.path().join("real.txt");
+        std::fs::write(&real, "x").unwrap();
+        let link = dir.path().join("link.txt");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        assert_eq!(read_to_string_nofollow(&real).unwrap(), "x");
+        assert!(open_regular_nofollow(&link).is_err());
     }
     #[test]
     fn manifest_settings_are_portable_and_conflicts_fail() {

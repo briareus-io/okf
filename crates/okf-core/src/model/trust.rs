@@ -15,9 +15,9 @@ impl TrustTier {
     /// Stable machine string used in NDJSON records and human output.
     pub fn as_str(&self) -> &'static str {
         match self {
-            TrustTier::Unverified => "unverified",
-            TrustTier::MachineConfirmed => "machine-confirmed",
-            TrustTier::HumanReviewed => "human-reviewed",
+            Self::Unverified => "unverified",
+            Self::MachineConfirmed => "machine-confirmed",
+            Self::HumanReviewed => "human-reviewed",
         }
     }
 }
@@ -37,9 +37,8 @@ fn entry_actor(entry: &Value) -> Option<&str> {
 /// - `verified` by non-`human:` actors only → `machine-confirmed`
 /// - any `verified` entry whose actor starts with `human:` → `human-reviewed`
 pub fn derive_trust_tier(fm: &Frontmatter) -> TrustTier {
-    let verified = match fm.get("verified") {
-        Some(v) => v,
-        None => return TrustTier::Unverified,
+    let Some(verified) = fm.get("verified") else {
+        return TrustTier::Unverified;
     };
 
     // Normalize to a list of entries: a sequence, or a single mapping/scalar.
@@ -96,7 +95,9 @@ mod tests {
 
     #[test]
     fn any_human_is_human_reviewed() {
-        let f = fm("verified:\n- by: process:ci\n  at: 2026-01-01T00:00:00Z\n- by: human:andrey\n  at: 2026-01-02T00:00:00Z");
+        let f = fm(
+            "verified:\n- by: process:ci\n  at: 2026-01-01T00:00:00Z\n- by: human:andrey\n  at: 2026-01-02T00:00:00Z",
+        );
         assert_eq!(derive_trust_tier(&f), TrustTier::HumanReviewed);
     }
 

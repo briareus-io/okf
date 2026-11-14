@@ -58,8 +58,9 @@ pub fn run(command: &ChangeSetCmd, json_output: bool) -> Result<i32> {
         .as_deref()
         .is_some_and(|expected| expected != plan.base_digest)
     {
-        return Err(OkfError::Usage(
-            "baseline-conflict: change-set base digest differs from --expect; preview again".into(),
+        return Err(OkfError::classified(
+            okf_core::error::FailureReason::BaselineConflict,
+            "change-set base digest differs from --expect; preview again",
         ));
     }
     let digest = plan.base_digest.clone();

@@ -16,7 +16,7 @@ use crate::ontology::field_types::check_concept_with_budget;
 pub const RULE: &str = "ontology-violation";
 
 /// One finding per ontology violation across all concepts. Empty when no ontology is present.
-pub fn run(ctx: &RuleContext) -> Vec<Finding> {
+pub fn run(ctx: &RuleContext<'_>) -> Vec<Finding> {
     let Some(severity) = ctx.config.ontology_violation else {
         return Vec::new();
     };

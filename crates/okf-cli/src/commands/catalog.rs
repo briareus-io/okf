@@ -6,14 +6,15 @@ use crate::output;
 use okf_core::bundle::{
     catalog::load_catalog,
     config::{find_config, load_config},
-    context::{current_context, Context},
+    context::{Context, current_context},
 };
 use okf_core::error::{OkfError, Result};
 use okf_core::graph::catalog::{
-    build_catalog_graph, resolve_reference, resolve_scope, resolve_scope_at, CatalogGraph, Edge,
-    Node,
+    CatalogGraph, Edge, Node, build_catalog_graph, resolve_reference, resolve_scope,
+    resolve_scope_at,
 };
 use serde_json::json;
+use std::fmt::Write as _;
 use std::path::PathBuf;
 
 thread_local! { static EXAMINATION_SCOPE: std::cell::RefCell<Vec<String>> = const {std::cell::RefCell::new(Vec::new())}; }
@@ -99,29 +100,25 @@ fn edge_text(edge: &Edge) -> String {
         "{}\t{}\t{}\t{}\t{}\n",
         edge.source.key(),
         edge.resource,
-        edge.target
-            .as_ref()
-            .map(Node::key)
-            .unwrap_or_else(|| "?".into()),
+        edge.target.as_ref().map_or_else(|| "?".into(), Node::key),
         edge.status,
         edge.evidence
     );
     if let Some(snapshot) = &edge.snapshot {
-        text.push_str(&format!(
-            "  snapshot={} evidence={} requested={} candidate={}\n",
+        let _ = writeln!(
+            text,
+            "  snapshot={} evidence={} requested={} candidate={}",
             snapshot.status,
             snapshot.evidence,
             snapshot
                 .resolved
                 .as_ref()
-                .map(Node::key)
-                .unwrap_or_else(|| "unresolved".into()),
+                .map_or_else(|| "unresolved".into(), Node::key),
             snapshot
                 .candidate
                 .as_ref()
-                .map(Node::key)
-                .unwrap_or_else(|| "none".into())
-        ));
+                .map_or_else(|| "none".into(), Node::key)
+        );
     }
     text
 }
@@ -197,7 +194,7 @@ pub fn run_catalog(json_output: bool) -> Result<i32> {
             let mut value =
                 serde_json::to_value(entry).map_err(|e| OkfError::Internal(e.to_string()))?;
             value["kind"] = json!("bundle-registration");
-            output::print_line(&value)?
+            output::print_line(&value)?;
         } else {
             output::print_text_line(format_args!(
                 "{}\t{}\t{}",
@@ -208,14 +205,14 @@ pub fn run_catalog(json_output: bool) -> Result<i32> {
                 } else {
                     "unavailable"
                 }
-            ))?
+            ))?;
         }
         if entry.available {
             let effective = okf_core::bundle::settings::load_for(&entry.root)?.0;
             if json_output {
                 output::print_line(
                     &json!({"kind":"effective-settings","bundle":entry.id,"settings":effective}),
-                )?
+                )?;
             }
         }
     }
@@ -303,14 +300,13 @@ pub fn run_catalog_command(args: &crate::cli::CatalogArgs, cli: &Cli) -> Result<
                     .plan
                     .as_ref()
                     .map(PathBuf::from)
-                    .map(Ok)
-                    .unwrap_or_else(|| okf_core::bundle::remote::default_plan_path(&plan))?;
+                    .map_or_else(|| okf_core::bundle::remote::default_plan_path(&plan), Ok)?;
                 okf_core::bundle::remote::save_plan(&dest, &plan)?;
                 output_report("catalog-update-plan", &plan, cli.json)?;
                 if cli.json {
-                    output::print_line(&json!({"kind":"plan-file","path":dest}))?
+                    output::print_line(&json!({"kind":"plan-file","path":dest}))?;
                 } else {
-                    output::print_text_line(format_args!("Plan saved: {}", dest.display()))?
+                    output::print_text_line(format_args!("Plan saved: {}", dest.display()))?;
                 }
             }
         }
@@ -351,7 +347,7 @@ pub fn writes_command(command: &Command) -> bool {
         Command::Catalog(a) => {
             matches!(&a.command,Some(crate::cli::CatalogCmd::Update(u)) if u.apply.is_some())
         }
-        Command::Docs(a) => a.format == "index",
+        Command::Docs(a) => a.format == crate::cli::DocsFormatArg::Index,
         Command::Ontology(OntologyCmd::Add(a) | OntologyCmd::Update(a)) => !a.dry_run,
         Command::Ontology(OntologyCmd::Remove(a)) => !a.dry_run,
         Command::Ontology(OntologyCmd::Apply(a)) => !a.dry_run,
@@ -419,13 +415,13 @@ pub fn prepare(cli: &mut Cli) -> Result<Option<i32>> {
     }
     let context = current_context(explicit.as_deref(), cli.bundle_id.as_deref())?;
     let mut ids = cli.scope_bundle.clone();
-    if cli.catalog_scope {
-        if let Some(c) = &context.catalog {
-            ids.extend(c.entries.keys().cloned())
-        }
+    if cli.catalog_scope
+        && let Some(c) = &context.catalog
+    {
+        ids.extend(c.entries.keys().cloned());
     }
     if let Some(id) = &context.primary.id {
-        ids.push(id.clone())
+        ids.push(id.clone());
     }
     ids.sort();
     ids.dedup();
@@ -487,10 +483,10 @@ pub fn prepare(cli: &mut Cli) -> Result<Option<i32>> {
     }
     match &mut cli.command {
         Command::Search(a) => {
-            super::filters::apply_primary(&context.primary.root, "search", a, cli.json)?
+            super::filters::apply_primary(&context.primary.root, "search", a, cli.json)?;
         }
         Command::List(a) => {
-            super::filters::apply_primary(&context.primary.root, "list", a, cli.json)?
+            super::filters::apply_primary(&context.primary.root, "list", a, cli.json)?;
         }
         _ => {}
     }
@@ -523,12 +519,12 @@ pub fn prepare(cli: &mut Cli) -> Result<Option<i32>> {
         if cli.json {
             output::print_line(
                 &json!({"kind":"mutation-scope","examined":graph.scope.requested,"out_of_scope":"unknown"}),
-            )?
+            )?;
         } else {
             eprintln!(
                 "mutation scope: {}; out-of-scope consumers remain unknown",
                 graph.scope.requested.join(", ")
-            )
+            );
         }
         return Ok(None);
     }
@@ -625,7 +621,7 @@ pub fn prepare(cli: &mut Cli) -> Result<Option<i32>> {
     Ok(None)
 }
 fn filter_scoped(cli: &mut Cli, context: &Context, graph: &CatalogGraph) -> Result<CatalogGraph> {
-    use okf_core::graph::filter::{CompiledFilters, MatchOutcome};
+    use okf_core::graph::filter::MatchOutcome;
     use std::collections::{BTreeMap, BTreeSet, VecDeque};
     let (args, operation) = match &cli.command {
         Command::Links(a) => (&a.filters, "links"),
@@ -746,10 +742,10 @@ fn filter_scoped(cli: &mut Cli, context: &Context, graph: &CatalogGraph) -> Resu
                             } else {
                                 Some(edge.source.clone())
                             };
-                            if let Some(other) = other {
-                                if seen.insert(other.clone()) {
-                                    queue.push_back((other, depth + 1));
-                                }
+                            if let Some(other) = other
+                                && seen.insert(other.clone())
+                            {
+                                queue.push_back((other, depth + 1));
                             }
                         }
                     }
@@ -780,18 +776,18 @@ fn filter_scoped(cli: &mut Cli, context: &Context, graph: &CatalogGraph) -> Resu
     }
     result.edges = matched;
     if !scan_complete {
-        output::mark_partial("examination", "relationship-scan-limit")
+        output::mark_partial("examination", "relationship-scan-limit");
     }
     if !delivery_complete {
-        output::mark_partial("delivery", "relationship-result-limit")
+        output::mark_partial("delivery", "relationship-result-limit");
     }
     if unknown > 0 {
-        output::mark_partial("matching", "unresolved-related-metadata")
+        output::mark_partial("matching", "unresolved-related-metadata");
     }
     if cli.json {
         output::print_line(
             &json!({"kind":"relationship-query-summary","examined_occurrences":examined,"matched_occurrences":matched_occurrences,"unresolved_candidates":unknown,"scan_complete":scan_complete,"delivery_complete":delivery_complete,"examined_documents":graph.examination.as_ref().map(|e|e.examined_documents),"eligible_documents":graph.examination.as_ref().map(|e|e.eligible_documents),"total_matches":if scan_complete{Some(observed_matches)}else{None}}),
-        )?
+        )?;
     }
     Ok(result)
 }
@@ -817,26 +813,27 @@ fn run_scoped(cli: &Cli, context: &Context, graph: &CatalogGraph) -> Result<i32>
             }
             for edge in graph.edges.iter().filter(|e| e.source == target) {
                 print_edge(edge, cli.json)?;
-                if a.details && !cli.json {
-                    if let Some(relationship) = &edge.relationship {
+                if a.details
+                    && !cli.json
+                    && let Some(relationship) = &edge.relationship
+                {
+                    output::print_text_line(format_args!(
+                        "  kind: {}",
+                        relationship.authored_kind.as_deref().unwrap_or("unknown")
+                    ))?;
+                    output::print_text_line(format_args!(
+                        "  source field: {}",
+                        relationship.field_path
+                    ))?;
+                    if let Some(inverse) = &relationship.inverse {
+                        output::print_text_line(format_args!("  inverse: {inverse}"))?;
+                    }
+                    for (key, value) in &relationship.attributes {
                         output::print_text_line(format_args!(
-                            "  kind: {}",
-                            relationship.authored_kind.as_deref().unwrap_or("unknown")
+                            "  {}: {}",
+                            key,
+                            serde_json::to_string(value).unwrap_or_default()
                         ))?;
-                        output::print_text_line(format_args!(
-                            "  source field: {}",
-                            relationship.field_path
-                        ))?;
-                        if let Some(inverse) = &relationship.inverse {
-                            output::print_text_line(format_args!("  inverse: {inverse}"))?;
-                        }
-                        for (key, value) in &relationship.attributes {
-                            output::print_text_line(format_args!(
-                                "  {}: {}",
-                                key,
-                                serde_json::to_string(value).unwrap_or_default()
-                            ))?;
-                        }
                     }
                 }
             }
@@ -886,7 +883,8 @@ fn run_scoped(cli: &Cli, context: &Context, graph: &CatalogGraph) -> Result<i32>
                 print_node(node, "bundle-affected", cli.json)?;
             }
             Ok(
-                if !nodes.is_empty() && a.fail_on.as_deref().is_some_and(|s| s != "never") {
+                if !nodes.is_empty() && a.fail_on.is_some_and(|s| s != crate::cli::FailOnArg::Never)
+                {
                     1
                 } else {
                     0
@@ -938,20 +936,24 @@ fn run_scoped(cli: &Cli, context: &Context, graph: &CatalogGraph) -> Result<i32>
                     "dot" => {
                         content.push_str("digraph okf {\n");
                         for (i, node) in nodes.iter().enumerate() {
-                            content.push_str(&format!(
-                                "  n{i} [label={}];\n",
-                                serde_json::to_string(&node.key()).unwrap()
-                            ));
+                            let _ = writeln!(
+                                content,
+                                "  n{i} [label={}];",
+                                serde_json::to_string(&node.key())
+                                    .expect("invariant: strings serialize to JSON")
+                            );
                         }
                         for edge in edges {
                             if let (Some(i), Some(j)) = (
                                 index.get(&edge.source.key()),
                                 edge.target.as_ref().and_then(|n| index.get(&n.key())),
                             ) {
-                                content.push_str(&format!(
-                                    "  n{i} -> n{j} [label={}];\n",
-                                    serde_json::to_string(&edge.status).unwrap()
-                                ));
+                                let _ = writeln!(
+                                    content,
+                                    "  n{i} -> n{j} [label={}];",
+                                    serde_json::to_string(&edge.status)
+                                        .expect("invariant: strings serialize to JSON")
+                                );
                             }
                         }
                         content.push_str("}\n");
@@ -959,19 +961,21 @@ fn run_scoped(cli: &Cli, context: &Context, graph: &CatalogGraph) -> Result<i32>
                     "graphml" => {
                         content.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<graphml xmlns=\"http://graphml.graphdrawing.org/xmlns\"><key id=\"label\" for=\"node\" attr.name=\"label\" attr.type=\"string\"/><graph edgedefault=\"directed\">\n");
                         for (i, node) in nodes.iter().enumerate() {
-                            content.push_str(&format!(
-                                "<node id=\"n{i}\"><data key=\"label\">{}</data></node>\n",
+                            let _ = writeln!(
+                                content,
+                                "<node id=\"n{i}\"><data key=\"label\">{}</data></node>",
                                 xml(&node.key())
-                            ));
+                            );
                         }
                         for (edge_id, edge) in edges.enumerate() {
                             if let (Some(i), Some(j)) = (
                                 index.get(&edge.source.key()),
                                 edge.target.as_ref().and_then(|n| index.get(&n.key())),
                             ) {
-                                content.push_str(&format!(
-                                    "<edge id=\"e{edge_id}\" source=\"n{i}\" target=\"n{j}\"/>\n"
-                                ));
+                                let _ = writeln!(
+                                    content,
+                                    "<edge id=\"e{edge_id}\" source=\"n{i}\" target=\"n{j}\"/>"
+                                );
                             }
                         }
                         content.push_str("</graph></graphml>\n");
@@ -979,17 +983,18 @@ fn run_scoped(cli: &Cli, context: &Context, graph: &CatalogGraph) -> Result<i32>
                     _ => {
                         content.push_str("graph TD\n");
                         for (i, node) in nodes.iter().enumerate() {
-                            content.push_str(&format!(
-                                "  n{i}[\"{}\"]\n",
+                            let _ = writeln!(
+                                content,
+                                "  n{i}[\"{}\"]",
                                 node.key().replace('&', "&amp;").replace('"', "&quot;")
-                            ));
+                            );
                         }
                         for edge in edges {
                             if let (Some(i), Some(j)) = (
                                 index.get(&edge.source.key()),
                                 edge.target.as_ref().and_then(|n| index.get(&n.key())),
                             ) {
-                                content.push_str(&format!("  n{i} -->|{}| n{j}\n", edge.status));
+                                let _ = writeln!(content, "  n{i} -->|{}| n{j}", edge.status);
                             }
                         }
                     }
@@ -997,7 +1002,8 @@ fn run_scoped(cli: &Cli, context: &Context, graph: &CatalogGraph) -> Result<i32>
                 output::print_text(format_args!("{content}"))?;
                 // Keep unresolved references and snapshot candidates visible in human output.
                 for edge in graph.edges.iter().filter(|e| {
-                    (e.status != "resolved" || e.snapshot.is_some())
+                    (e.status != okf_core::graph::catalog::EdgeStatus::Resolved
+                        || e.snapshot.is_some())
                         && selected
                             .as_ref()
                             .is_none_or(|nodes| nodes.contains(&e.source))
@@ -1024,9 +1030,9 @@ fn run_lint_scoped(
     context: &Context,
     graph: &CatalogGraph,
 ) -> Result<i32> {
-    use okf_core::check::lint::{lint_bundle, meets_threshold, FailOn, Finding, Severity};
+    use okf_core::check::lint::{FailOn, Finding, Severity, lint_bundle, meets_threshold};
     use std::str::FromStr;
-    let fail_on = FailOn::from_str(args.fail_on.as_deref().unwrap_or("error"))?;
+    let fail_on = FailOn::from_str(args.fail_on.map_or("error", crate::cli::FailOnArg::as_str))?;
     let mut failed = false;
     let mut broken_link_severities = std::collections::BTreeMap::new();
     let mut ontology_severities = std::collections::BTreeMap::new();
@@ -1161,7 +1167,7 @@ fn run_lint_scoped(
                             edge.source.bundle == examined.id
                                 && edge.source.id == concept.id.0
                                 && edge.resource == resource
-                                && edge.status == "resolved"
+                                && edge.status == okf_core::graph::catalog::EdgeStatus::Resolved
                         })
                         .and_then(|edge| edge.target.as_ref())
                         .and_then(|node| target_types.get(node))
@@ -1216,7 +1222,7 @@ fn run_lint_scoped(
                         edge.source.bundle == examined.id
                             && edge.source.id == concept.id.0
                             && edge.reference_rule.is_some()
-                            && edge.status == "resolved"
+                            && edge.status == okf_core::graph::catalog::EdgeStatus::Resolved
                     }) {
                         let Some(target) = &edge.target else {
                             continue;
@@ -1357,7 +1363,7 @@ fn run_lint_scoped(
             }
         }
     }
-    let threshold = args.fail_on.as_deref().unwrap_or("error");
+    let threshold = args.fail_on.map_or("error", crate::cli::FailOnArg::as_str);
     for edge in &graph.edges {
         let issue = if !matches!(edge.status.as_str(), "resolved" | "out-of-scope") {
             Some(edge.status.as_str())
@@ -1373,7 +1379,7 @@ fn run_lint_scoped(
             None
         };
         if let Some(issue) = issue {
-            let local_missing = edge.status == "missing-target"
+            let local_missing = edge.status == okf_core::graph::catalog::EdgeStatus::MissingTarget
                 && (edge
                     .target
                     .as_ref()

@@ -17,7 +17,10 @@ pub struct ContextReceipt {
 }
 
 fn invalid(message: impl std::fmt::Display) -> OkfError {
-    OkfError::Usage(format!("context-invalid: {message}; reload bundle context"))
+    OkfError::classified(
+        crate::error::FailureReason::ContextInvalid,
+        format!("{message}; reload bundle context"),
+    )
 }
 
 impl ContextReceipt {

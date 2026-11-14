@@ -40,36 +40,39 @@ pub fn run(mut cli: Cli) -> Result<i32> {
         )));
     }
     if let Some(path) = &cli.catalog {
-        std::env::set_var("OKF_CATALOG", std::env::current_dir()?.join(path));
+        // SAFETY: runs on the main thread during dispatch, before any threads are spawned.
+        unsafe { std::env::set_var("OKF_CATALOG", std::env::current_dir()?.join(path)) };
     }
     match &cli.command {
         Command::Computation(ComputationCmd::Check(a)) if a.details => {
             return Err(okf_core::error::OkfError::Usage(
                 "computation check --details has no effect".into(),
-            ))
+            ));
         }
         Command::Affected(a) if a.depth.is_some() && !a.transitive => {
             return Err(okf_core::error::OkfError::Usage(
                 "affected --depth requires --transitive".into(),
-            ))
+            ));
         }
         Command::Init(a) if a.title.is_some() && a.no_index => {
             return Err(okf_core::error::OkfError::Usage(
                 "init --title conflicts with --no-index".into(),
-            ))
+            ));
         }
         _ => {}
     }
 
     let failure_alias = match &cli.command {
-        Command::Scan(a) | Command::Stats(a) => a.fail_on.as_deref(),
-        Command::Stale(a) => a.fail_on.as_deref(),
-        Command::Affected(a) => a.fail_on.as_deref(),
-        Command::Diff(a) => a.fail_on.as_deref(),
+        Command::Scan(a) | Command::Stats(a) => a.fail_on.map(crate::cli::FailOnArg::as_str),
+        Command::Stale(a) => a.fail_on.map(crate::cli::FailOnArg::as_str),
+        Command::Affected(a) => a.fail_on.map(crate::cli::FailOnArg::as_str),
+        Command::Diff(a) => a.fail_on.map(crate::cli::FailOnArg::as_str),
         _ => None,
     };
-    if matches!(failure_alias, Some("info" | "warn" | "error")) {
-        eprintln!("okf: discovery --fail-on {} is a compatibility alias for any; results have no severity", failure_alias.unwrap());
+    if let Some(alias @ ("info" | "warn" | "error")) = failure_alias {
+        eprintln!(
+            "okf: discovery --fail-on {alias} is a compatibility alias for any; results have no severity"
+        );
     }
     let legacy_materialize = cli.revision.is_some()
         && matches!(
@@ -95,10 +98,12 @@ pub fn run(mut cli: Cli) -> Result<i32> {
             okf_core::bundle::context::current_context(path.as_deref(), cli.bundle_id.as_deref())?;
         let snapshot = okf_core::bundle::snapshot_context::prepare_primary_revision(
             &context,
-            cli.revision.as_deref().unwrap(),
+            cli.revision
+                .as_deref()
+                .expect("invariant: revision checked by enclosing branch"),
         )?;
         if let Some(slot) = catalog::bundle_slot(&mut cli.command) {
-            *slot = Some(snapshot.context.primary.root.to_string_lossy().into_owned())
+            *slot = Some(snapshot.context.primary.root.to_string_lossy().into_owned());
         }
         cli.bundle_id = None;
         cli.revision = None;
@@ -121,13 +126,13 @@ pub fn run(mut cli: Cli) -> Result<i32> {
         let context =
             okf_core::bundle::context::current_context(path.as_deref(), cli.bundle_id.as_deref())?;
         let mut ids = cli.scope_bundle.clone();
-        if cli.catalog_scope {
-            if let Some(c) = &context.catalog {
-                ids.extend(c.entries.keys().cloned())
-            }
+        if cli.catalog_scope
+            && let Some(c) = &context.catalog
+        {
+            ids.extend(c.entries.keys().cloned());
         }
         if let Some(id) = &context.primary.id {
-            ids.push(id.clone())
+            ids.push(id.clone());
         }
         ids.sort();
         ids.dedup();
@@ -137,7 +142,7 @@ pub fn run(mut cli: Cli) -> Result<i32> {
         )?;
         let snapshot = okf_core::bundle::snapshot_context::prepare(&context, selection, &ids)?;
         if let Some(slot) = catalog::bundle_slot(&mut cli.command) {
-            *slot = Some(snapshot.context.primary.root.to_string_lossy().into_owned())
+            *slot = Some(snapshot.context.primary.root.to_string_lossy().into_owned());
         }
         cli.bundle_id = None;
         if cli.json {

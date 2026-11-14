@@ -63,9 +63,11 @@ fn shared_sidecar_requires_explicit_scope_and_journals_single_target() {
         serde_json::json!(["acme.b"])
     );
     assert_eq!(record["examined_bundles"].as_array().unwrap().len(), 2);
-    assert!(fs::read_to_string(dir.path().join("shared.yaml"))
-        .unwrap()
-        .contains("Changed"));
+    assert!(
+        fs::read_to_string(dir.path().join("shared.yaml"))
+            .unwrap()
+            .contains("Changed")
+    );
     assert!(!dir.path().join("a/.okf-transaction").exists());
     assert_eq!(
         fs::read_to_string(dir.path().join("b/note.md")).unwrap(),

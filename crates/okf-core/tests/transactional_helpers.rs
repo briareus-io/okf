@@ -25,13 +25,15 @@ fn index_preparation_failure_does_not_publish_earlier_indexes() {
 #[test]
 fn artifact_preparation_has_no_parent_directory_side_effect_on_invalid_content() {
     let root = tempfile::tempdir().unwrap();
-    assert!(put_artifact(
-        root.path(),
-        "new/index.md",
-        b"---\ntype: Note\n---\n",
-        false
-    )
-    .is_err());
+    assert!(
+        put_artifact(
+            root.path(),
+            "new/index.md",
+            b"---\ntype: Note\n---\n",
+            false
+        )
+        .is_err()
+    );
     assert!(!root.path().join("new").exists());
     assert!(!root.path().join(JOURNAL).exists());
 }
@@ -82,7 +84,9 @@ fn normalization_reloads_content_instead_of_overwriting_a_stale_inventory() {
     )
     .unwrap();
     frontmatter_order::fix(&old, root.path(), None).unwrap();
-    assert!(fs::read_to_string(root.path().join("a.md"))
-        .unwrap()
-        .ends_with("After\n"));
+    assert!(
+        fs::read_to_string(root.path().join("a.md"))
+            .unwrap()
+            .ends_with("After\n")
+    );
 }

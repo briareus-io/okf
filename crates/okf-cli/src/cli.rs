@@ -495,8 +495,8 @@ pub struct GraphArgs {
     #[arg(long = "root")]
     pub concept: Option<String>,
     /// Output format: mermaid (default), dot, or graphml.
-    #[arg(long, default_value = "mermaid", value_parser = ["mermaid", "dot", "graphml"])]
-    pub format: String,
+    #[arg(long, value_enum, default_value = "mermaid")]
+    pub format: GraphFormatArg,
     /// Edges to follow from the root: outgoing (default), incoming, or both.
     #[arg(
         long,
@@ -591,12 +591,8 @@ pub struct LintArgs {
     #[arg(long)]
     pub fix: bool,
     /// Severity threshold that makes the run fail (exit 1): never|info|warn|error|any.
-    #[arg(
-        long = "fail-on",
-        value_parser = ["never", "info", "warn", "error", "any"],
-        default_value = "error"
-    )]
-    pub fail_on: Option<String>,
+    #[arg(long = "fail-on", value_enum, default_value = "error")]
+    pub fail_on: Option<FailOnArg>,
 }
 
 #[derive(Debug, Args)]
@@ -604,12 +600,8 @@ pub struct FailOnArgs {
     /// Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory).
     pub bundle: Option<String>,
     /// Fail on any result: never (default) or any; info/warn/error are compatibility aliases.
-    #[arg(
-        long = "fail-on",
-        value_parser = ["never", "info", "warn", "error", "any"],
-        default_value = "never"
-    )]
-    pub fail_on: Option<String>,
+    #[arg(long = "fail-on", value_enum, default_value = "never")]
+    pub fail_on: Option<FailOnArg>,
 }
 
 #[derive(Debug, Args)]
@@ -617,8 +609,13 @@ pub struct StaleArgs {
     /// Bundle directory.
     pub bundle: Option<String>,
     /// Existing discovery failure threshold; state policy is separate.
-    #[arg(long = "fail-on", value_parser = ["never", "info", "warn", "error", "any"], default_value = "never", conflicts_with = "fail_on_state")]
-    pub fail_on: Option<String>,
+    #[arg(
+        long = "fail-on",
+        value_enum,
+        default_value = "never",
+        conflicts_with = "fail_on_state"
+    )]
+    pub fail_on: Option<FailOnArg>,
     /// Display only these source-health states (comma-separated or repeatable).
     #[arg(long, value_enum, value_delimiter = ',')]
     pub only: Vec<SourceState>,
@@ -669,12 +666,8 @@ pub struct AffectedArgs {
     #[arg(long, requires = "transitive")]
     pub depth: Option<usize>,
     /// Fail (exit 1) on any affected concept: never (default) | info | warn | error | any.
-    #[arg(
-        long = "fail-on",
-        value_parser = ["never", "info", "warn", "error", "any"],
-        default_value = "never"
-    )]
-    pub fail_on: Option<String>,
+    #[arg(long = "fail-on", value_enum, default_value = "never")]
+    pub fail_on: Option<FailOnArg>,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, ValueEnum)]
@@ -691,12 +684,8 @@ pub struct DiffArgs {
     /// Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory).
     pub bundle: Option<String>,
     /// Fail (exit 1) on any change: never (default) | info | warn | error | any.
-    #[arg(
-        long = "fail-on",
-        value_parser = ["never", "info", "warn", "error", "any"],
-        default_value = "never"
-    )]
-    pub fail_on: Option<String>,
+    #[arg(long = "fail-on", value_enum, default_value = "never")]
+    pub fail_on: Option<FailOnArg>,
 }
 
 #[derive(Debug, Args)]
@@ -900,12 +889,8 @@ pub struct RefreshArgs {
     /// Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory).
     pub bundle: Option<String>,
     /// Fail (exit 1) when any source is skipped: never (default) | skipped | any.
-    #[arg(
-        long = "fail-on",
-        value_parser = ["never", "skipped", "any"],
-        default_value = "never"
-    )]
-    pub fail_on: Option<String>,
+    #[arg(long = "fail-on", value_enum, default_value = "never")]
+    pub fail_on: Option<RefreshFailOn>,
     /// Require the ontology write gate even when bundle policy leaves it disabled.
     #[arg(long)]
     pub require_ontology_gate: bool,
@@ -957,12 +942,8 @@ pub struct DocsArgs {
     /// Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory).
     pub bundle: Option<String>,
     /// Output format: md|html|graphml|obsidian|index; pdf is retained but unavailable.
-    #[arg(
-        long,
-        default_value = "md",
-        value_parser = ["md", "html", "pdf", "graphml", "obsidian", "index"]
-    )]
-    pub format: String,
+    #[arg(long, value_enum, default_value = "md")]
+    pub format: DocsFormatArg,
 }
 
 #[derive(Debug, Args)]
@@ -1204,10 +1185,8 @@ pub fn command_tree() -> clap::Command {
             ("catalog_scope", supports_scope(&name)),
             ("bundle_id", supports_bundle(&name)),
         ] {
-            if !supported {
-                if let Some(global) = globals.iter().find(|a| a.get_id() == arg) {
-                    *command = command.clone().arg(global.clone().hide(true));
-                }
+            if !supported && let Some(global) = globals.iter().find(|a| a.get_id() == arg) {
+                *command = command.clone().arg(global.clone().hide(true));
             }
         }
         if name == "ontology field-type remove" {
@@ -1245,4 +1224,76 @@ pub struct FormatArgs {
     /// Preview the complete diff without writing.
     #[arg(long)]
     pub dry_run: bool,
+}
+
+/// `--fail-on` threshold accepted by discovery and lint commands.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, ValueEnum)]
+pub enum FailOnArg {
+    Never,
+    Info,
+    Warn,
+    Error,
+    Any,
+}
+
+impl FailOnArg {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Never => "never",
+            Self::Info => "info",
+            Self::Warn => "warn",
+            Self::Error => "error",
+            Self::Any => "any",
+        }
+    }
+}
+
+/// `okf refresh --fail-on` threshold.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, ValueEnum)]
+pub enum RefreshFailOn {
+    Never,
+    Skipped,
+    Any,
+}
+
+/// `okf graph --format` values.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, ValueEnum)]
+pub enum GraphFormatArg {
+    Mermaid,
+    Dot,
+    Graphml,
+}
+
+/// `okf docs --format` values.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, ValueEnum)]
+pub enum DocsFormatArg {
+    Md,
+    Html,
+    Pdf,
+    Graphml,
+    Obsidian,
+    Index,
+}
+
+impl GraphFormatArg {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Mermaid => "mermaid",
+            Self::Dot => "dot",
+            Self::Graphml => "graphml",
+        }
+    }
+}
+
+impl DocsFormatArg {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Md => "md",
+            Self::Html => "html",
+            Self::Pdf => "pdf",
+            Self::Graphml => "graphml",
+            Self::Obsidian => "obsidian",
+            Self::Index => "index",
+        }
+    }
 }

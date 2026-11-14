@@ -65,24 +65,22 @@ fn extract_heading_section(text: &str, slug: &str) -> Option<String> {
             continue;
         }
 
-        if !in_fence {
-            if let Some((level, htext)) = parse_atx(line) {
-                match target_level {
-                    None => {
-                        if slugify(htext) == slug {
-                            target_level = Some(level);
-                        }
-                        // Either way, the heading line itself is not collected.
-                        continue;
+        if !in_fence && let Some((level, htext)) = parse_atx(line) {
+            match target_level {
+                None => {
+                    if slugify(htext) == slug {
+                        target_level = Some(level);
                     }
-                    Some(tl) => {
-                        if level <= tl {
-                            break; // next equal-or-shallower heading ends the section.
-                        }
-                        // Deeper heading: part of a nested subsection — include it.
-                        collected.push(line);
-                        continue;
+                    // Either way, the heading line itself is not collected.
+                    continue;
+                }
+                Some(tl) => {
+                    if level <= tl {
+                        break; // next equal-or-shallower heading ends the section.
                     }
+                    // Deeper heading: part of a nested subsection — include it.
+                    collected.push(line);
+                    continue;
                 }
             }
         }

@@ -34,12 +34,16 @@ fn moves_preserve_self_references_navigation_and_source_namespace() {
     let moved = fs::read_to_string(root.path().join("nested/new.md")).unwrap();
     assert!(moved.contains("[self](new.md)"), "{moved}");
     assert!(moved.contains("resource: evidence/data.txt"), "{moved}");
-    assert!(fs::read_to_string(root.path().join("index.md"))
-        .unwrap()
-        .contains("[ref]: nested/new.md"));
-    assert!(fs::read_to_string(root.path().join("log.md"))
-        .unwrap()
-        .contains("(nested/new.md)"));
+    assert!(
+        fs::read_to_string(root.path().join("index.md"))
+            .unwrap()
+            .contains("[ref]: nested/new.md")
+    );
+    assert!(
+        fs::read_to_string(root.path().join("log.md"))
+            .unwrap()
+            .contains("(nested/new.md)")
+    );
 }
 
 #[test]
@@ -73,10 +77,12 @@ fn planted_legacy_temp_symlink_is_not_followed() {
     )
     .unwrap();
     assert_eq!(fs::read_to_string(outside.path()).unwrap(), "untouched");
-    assert!(!fs::symlink_metadata(root.path().join("note.md"))
-        .unwrap()
-        .file_type()
-        .is_symlink());
+    assert!(
+        !fs::symlink_metadata(root.path().join("note.md"))
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
 }
 
 #[test]
@@ -108,10 +114,14 @@ fn bare_declared_references_and_bundle_root_sources_follow_moves() {
     )
     .unwrap();
     mv::mv(root.path(), "old", "nested/new").unwrap();
-    assert!(fs::read_to_string(root.path().join("ref.md"))
-        .unwrap()
-        .contains("depends_on: nested/new"));
-    assert!(fs::read_to_string(root.path().join("nested/source.md"))
-        .unwrap()
-        .contains("resource: nested/new.md"));
+    assert!(
+        fs::read_to_string(root.path().join("ref.md"))
+            .unwrap()
+            .contains("depends_on: nested/new")
+    );
+    assert!(
+        fs::read_to_string(root.path().join("nested/source.md"))
+            .unwrap()
+            .contains("resource: nested/new.md")
+    );
 }

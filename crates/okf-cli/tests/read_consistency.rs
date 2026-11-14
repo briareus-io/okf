@@ -49,9 +49,10 @@ fn working_tree_commands_refuse_a_writer_before_reading_payloads() {
             .lines()
             .map(|line| serde_json::from_str(line).unwrap())
             .collect();
-        assert!(rows
-            .iter()
-            .all(|row| row["kind"] == "operation-start" || row["kind"] == "operation-complete"));
+        assert!(
+            rows.iter()
+                .all(|row| row["kind"] == "operation-start" || row["kind"] == "operation-complete")
+        );
         assert_eq!(rows.last().unwrap()["outcome"], "failed");
     }
     drop(guard);

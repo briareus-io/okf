@@ -12,7 +12,7 @@ pub const MISSING_RULE: &str = "source-missing";
 pub const UNAVAILABLE_RULE: &str = "source-unavailable";
 pub const UNSUPPORTED_RULE: &str = "source-unsupported";
 
-pub fn run(ctx: &RuleContext) -> Vec<Finding> {
+pub fn run(ctx: &RuleContext<'_>) -> Vec<Finding> {
     let fs = RealFs;
     let git = RealGit;
     let engine = Engine::new(&ctx.bundle.root, &fs, &git, None);
@@ -69,9 +69,10 @@ pub fn run(ctx: &RuleContext) -> Vec<Finding> {
                 }
                 continue;
             }
-            if source.fingerprint.is_empty() {
-                if let Some(severity) = ctx.config.source_unrecorded {
-                    findings.push(Finding {
+            if source.fingerprint.is_empty()
+                && let Some(severity) = ctx.config.source_unrecorded
+            {
+                findings.push(Finding {
                         code: None,
                         field_path: None,
                         rule: UNRECORDED_RULE.to_string(),
@@ -82,43 +83,37 @@ pub fn run(ctx: &RuleContext) -> Vec<Finding> {
                             source.resource
                         ),
                     });
-                }
             }
             if matches!(
                 source.kind,
                 SourceKind::File | SourceKind::LineRange | SourceKind::MarkdownHeading
-            ) {
-                if let Some(severity) = ctx.config.source_missing {
-                    if let Err(error) = engine.fingerprint(&source) {
-                        let missing = error
-                            .to_string()
-                            .to_ascii_lowercase()
-                            .contains("no such file");
-                        findings.push(Finding {
-                            code: Some(
-                                if missing {
-                                    "source-missing"
-                                } else {
-                                    "source-unavailable"
-                                }
-                                .into(),
-                            ),
-                            field_path: Some("sources".into()),
-                            rule: if missing {
-                                MISSING_RULE
-                            } else {
-                                UNAVAILABLE_RULE
-                            }
-                            .into(),
-                            severity,
-                            concept: Some(concept.id.0.clone()),
-                            message: format!(
-                                "cannot fingerprint source {}: {error}",
-                                source.resource
-                            ),
-                        });
+            ) && let Some(severity) = ctx.config.source_missing
+                && let Err(error) = engine.fingerprint(&source)
+            {
+                let missing = error
+                    .to_string()
+                    .to_ascii_lowercase()
+                    .contains("no such file");
+                findings.push(Finding {
+                    code: Some(
+                        if missing {
+                            "source-missing"
+                        } else {
+                            "source-unavailable"
+                        }
+                        .into(),
+                    ),
+                    field_path: Some("sources".into()),
+                    rule: if missing {
+                        MISSING_RULE
+                    } else {
+                        UNAVAILABLE_RULE
                     }
-                }
+                    .into(),
+                    severity,
+                    concept: Some(concept.id.0.clone()),
+                    message: format!("cannot fingerprint source {}: {error}", source.resource),
+                });
             }
         }
     }

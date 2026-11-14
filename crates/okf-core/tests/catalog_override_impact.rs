@@ -45,12 +45,16 @@ fn impact_uses_overridden_consumer_root_and_preserves_its_registered_identity() 
     .unwrap();
     assert_eq!(report.consumers.len(), 1);
     assert_eq!(report.consumers[0].bundle, "test.consumer");
-    assert!(report.consumers[0]
-        .after_links
-        .iter()
-        .any(|e| e.source.contains("right")));
-    assert!(!report.consumers[0]
-        .after_links
-        .iter()
-        .any(|e| e.source.contains("wrong")));
+    assert!(
+        report.consumers[0]
+            .after_links
+            .iter()
+            .any(|e| e.source.contains("right"))
+    );
+    assert!(
+        !report.consumers[0]
+            .after_links
+            .iter()
+            .any(|e| e.source.contains("wrong"))
+    );
 }

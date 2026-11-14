@@ -1,6 +1,6 @@
 //! Selection and catalog discovery, independent from examination scope.
-use super::catalog::{absolute, load_catalog, Catalog};
-use super::config::{find_config, load_config, Config};
+use super::catalog::{Catalog, absolute, load_catalog};
+use super::config::{BundleSelector, Config, find_config, load_config};
 use crate::error::{OkfError, Result};
 use std::path::{Path, PathBuf};
 
@@ -52,14 +52,14 @@ pub fn resolve_context(
         .clone()
         .or_else(|| super::catalog::discover(cwd))
         .or_else(|| config.catalog.as_ref().map(|p| base.join(p)));
-    if explicit_catalog.is_none() {
-        if let (Some(discovered), Some(old)) = (&selected_catalog, &config.catalog) {
-            let old = base.join(old);
-            if super::catalog::absolute(discovered)? != super::catalog::absolute(&old)? {
-                return Err(OkfError::Usage(
-                    "legacy and discovered catalog locations conflict".into(),
-                ));
-            }
+    if explicit_catalog.is_none()
+        && let (Some(discovered), Some(old)) = (&selected_catalog, &config.catalog)
+    {
+        let old = base.join(old);
+        if super::catalog::absolute(discovered)? != super::catalog::absolute(&old)? {
+            return Err(OkfError::Usage(
+                "legacy and discovered catalog locations conflict".into(),
+            ));
         }
     }
     let catalog = match selected_catalog
@@ -71,45 +71,41 @@ pub fn resolve_context(
         Err(_) if explicit_catalog.is_none() && (path.is_some() || env.is_some()) => None,
         Err(error) => return Err(error),
     };
-    if let (Some(catalog), Some(old)) = (&catalog, &config.default_bundle) {
-        if let Some(new) = &catalog.default_bundle {
-            let same = old.id.as_ref() == Some(new)
-                || old.path.as_ref().is_some_and(|p| {
-                    catalog.entries.get(new).is_some_and(|e| {
-                        super::catalog::absolute(&base.join(p)).ok().as_ref() == Some(&e.root)
-                    })
-                });
-            if !same {
-                return Err(OkfError::Usage(
-                    "legacy and catalog default_bundle conflict".into(),
-                ));
-            }
+    if let (Some(catalog), Some(old)) = (&catalog, &config.default_bundle)
+        && let Some(new) = &catalog.default_bundle
+    {
+        let same = match old {
+            BundleSelector::Id(id) => id == new,
+            BundleSelector::Path(p) => catalog.entries.get(new).is_some_and(|e| {
+                super::catalog::absolute(&base.join(p)).ok().as_ref() == Some(&e.root)
+            }),
+        };
+        if !same {
+            return Err(OkfError::Usage(
+                "legacy and catalog default_bundle conflict".into(),
+            ));
         }
     }
     if let Some(catalog) = &catalog {
-        if let Some(default) = &catalog.default_bundle {
-            if let Some(old) = &config.bundle {
-                if let Some(entry) = catalog.entries.get(default) {
-                    if super::catalog::absolute(&base.join(old))? != entry.root {
-                        return Err(OkfError::Usage(
-                            "legacy bundle and catalog default_bundle conflict".into(),
-                        ));
-                    }
-                }
-            }
+        if let Some(default) = &catalog.default_bundle
+            && let Some(old) = &config.bundle
+            && let Some(entry) = catalog.entries.get(default)
+            && super::catalog::absolute(&base.join(old))? != entry.root
+        {
+            return Err(OkfError::Usage(
+                "legacy bundle and catalog default_bundle conflict".into(),
+            ));
         }
         if let (Some(entry), Some(manifest_root)) = (
             catalog.containing(cwd),
             cwd.ancestors()
                 .find(|p| p.join(super::manifest::FILENAME).is_file()),
-        ) {
-            if std::fs::canonicalize(manifest_root).unwrap_or_else(|_| manifest_root.to_path_buf())
-                != entry.root
-            {
-                return Err(OkfError::Usage(
-                    "containing manifest contradicts registered bundle boundary".into(),
-                ));
-            }
+        ) && std::fs::canonicalize(manifest_root).unwrap_or_else(|_| manifest_root.to_path_buf())
+            != entry.root
+        {
+            return Err(OkfError::Usage(
+                "containing manifest contradicts registered bundle boundary".into(),
+            ));
         }
     }
     let path_selection = |path: PathBuf| -> Result<SelectedBundle> {
@@ -150,10 +146,9 @@ pub fn resolve_context(
     } else if let Some(default) = catalog.as_ref().and_then(|c| c.default_bundle.as_deref()) {
         id_selection(default)?
     } else if let Some(selector) = &config.default_bundle {
-        if let Some(id) = &selector.id {
-            id_selection(id)?
-        } else {
-            path_selection(base.join(selector.path.as_ref().unwrap()))?
+        match selector {
+            BundleSelector::Id(id) => id_selection(id)?,
+            BundleSelector::Path(path) => path_selection(base.join(path))?,
         }
     } else if let Some(path) = &config.bundle {
         path_selection(base.join(path))?
@@ -253,11 +248,13 @@ mod tests {
             "bundle='a'\ndefault_bundle={path='./a'}",
         )
         .unwrap();
-        assert!(resolve_context(None, None, None, dir.path())
-            .unwrap()
-            .primary
-            .root
-            .ends_with("a"));
+        assert!(
+            resolve_context(None, None, None, dir.path())
+                .unwrap()
+                .primary
+                .root
+                .ends_with("a")
+        );
     }
     #[test]
     fn invalid_catalog_does_not_prohibit_explicit_standalone_consumption() {

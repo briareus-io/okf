@@ -179,7 +179,7 @@ pub fn load_catalog(path: &Path, overrides: Option<&Path>) -> Result<Catalog> {
             _ => {
                 return Err(OkfError::Usage(format!(
                     "unsupported location type for {id}"
-                )))
+                )));
             }
         };
         entries.insert(
@@ -217,14 +217,9 @@ pub fn load_catalog(path: &Path, overrides: Option<&Path>) -> Result<Catalog> {
     }
     for entry in entries.values_mut() {
         entry.available = entry.root.is_dir()
-            && entry
-                .settings
-                .get("remote")
-                .map(|origin| {
-                    entry.overridden
-                        || origin.get("state").and_then(|v| v.as_str()) == Some("matched")
-                })
-                .unwrap_or(true);
+            && entry.settings.get("remote").is_none_or(|origin| {
+                entry.overridden || origin.get("state").and_then(|v| v.as_str()) == Some("matched")
+            });
         if entry.available {
             entry.root = std::fs::canonicalize(&entry.root)?;
         }
@@ -243,12 +238,12 @@ pub fn load_catalog(path: &Path, overrides: Option<&Path>) -> Result<Catalog> {
             }
         }
     }
-    if let Some(id) = &file.default_bundle {
-        if !entries.contains_key(id) {
-            return Err(OkfError::Usage(format!(
-                "default_bundle names unknown ID: {id}"
-            )));
-        }
+    if let Some(id) = &file.default_bundle
+        && !entries.contains_key(id)
+    {
+        return Err(OkfError::Usage(format!(
+            "default_bundle names unknown ID: {id}"
+        )));
     }
     Ok(Catalog {
         path: path.to_path_buf(),
@@ -321,27 +316,41 @@ mod tests {
     }
     #[test]
     fn validates_namespaced_ids_and_duplicate_registrations() {
-        for bundles in ["plain: {location: {type: directory, path: a}}","acme.a: {location: {type: directory, path: a}}\n  acme.a: {location: {type: directory, path: b}}"] {
-            let dir=fixture(&format!("catalog_version: 1\nbundles:\n  {bundles}\n"));
-            assert_eq!(load_catalog(&dir.path().join("catalog.yaml"),None).unwrap_err().exit_code(),2);
+        for bundles in [
+            "plain: {location: {type: directory, path: a}}",
+            "acme.a: {location: {type: directory, path: a}}\n  acme.a: {location: {type: directory, path: b}}",
+        ] {
+            let dir = fixture(&format!("catalog_version: 1\nbundles:\n  {bundles}\n"));
+            assert_eq!(
+                load_catalog(&dir.path().join("catalog.yaml"), None)
+                    .unwrap_err()
+                    .exit_code(),
+                2
+            );
         }
     }
     #[test]
     fn rejects_equal_and_nested_roots_without_treating_unavailable_as_verified() {
         for path in ["a", "a/child"] {
-            let dir=fixture(&format!("catalog_version: 1\nbundles:\n  acme.a: {{location: {{type: directory, path: a}}}}\n  acme.b: {{location: {{type: directory, path: {path}}}}}\n"));
+            let dir = fixture(&format!(
+                "catalog_version: 1\nbundles:\n  acme.a: {{location: {{type: directory, path: a}}}}\n  acme.b: {{location: {{type: directory, path: {path}}}}}\n"
+            ));
             if path == "a/child" {
                 std::fs::create_dir(dir.path().join(path)).unwrap();
             }
             assert!(load_catalog(&dir.path().join("catalog.yaml"), None).is_err());
         }
-        let dir=fixture("catalog_version: 1\nbundles:\n  acme.a: {location: {type: directory, path: absent}}\n  acme.b: {location: {type: directory, path: absent/child}}\n");
+        let dir = fixture(
+            "catalog_version: 1\nbundles:\n  acme.a: {location: {type: directory, path: absent}}\n  acme.b: {location: {type: directory, path: absent/child}}\n",
+        );
         let catalog = load_catalog(&dir.path().join("catalog.yaml"), None).unwrap();
         assert!(catalog.entries.values().all(|e| !e.available));
     }
     #[test]
     fn overrides_preserve_configured_root_and_validate_effective_overlap() {
-        let dir=fixture("catalog_version: 1\nbundles:\n  acme.a: {location: {type: directory, path: absent}}\n  acme.b: {location: {type: directory, path: b}}\n");
+        let dir = fixture(
+            "catalog_version: 1\nbundles:\n  acme.a: {location: {type: directory, path: absent}}\n  acme.b: {location: {type: directory, path: b}}\n",
+        );
         let overrides = dir.path().join("local.yaml");
         std::fs::write(&overrides, "bundles: {acme.a: a}\n").unwrap();
         let catalog = load_catalog(&dir.path().join("catalog.yaml"), Some(&overrides)).unwrap();

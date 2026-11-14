@@ -21,7 +21,7 @@ use std::path::Path;
 use crate::bundle::loader::Bundle;
 use crate::fingerprint::{Engine, Fingerprinter};
 use crate::model::concept::Concept;
-use crate::model::source::{parse_sources, Fingerprint, Source, SourceKind};
+use crate::model::source::{Fingerprint, Source, SourceKind, parse_sources};
 use crate::model::standard::parse_timestamp;
 use crate::ports::clock::{Clock, SystemClock};
 use crate::ports::fs::{FileSystem, RealFs};
@@ -50,19 +50,19 @@ pub enum DriftKind {
 impl DriftKind {
     pub fn as_str(self) -> &'static str {
         match self {
-            DriftKind::Drifted => "drifted",
-            DriftKind::RevisionChanged => "revision-changed",
-            DriftKind::Unrecorded => "unrecorded",
-            DriftKind::Missing => "missing",
-            DriftKind::Unsupported => "unsupported",
-            DriftKind::Unavailable => "unavailable",
-            DriftKind::Expired => "expired",
+            Self::Drifted => "drifted",
+            Self::RevisionChanged => "revision-changed",
+            Self::Unrecorded => "unrecorded",
+            Self::Missing => "missing",
+            Self::Unsupported => "unsupported",
+            Self::Unavailable => "unavailable",
+            Self::Expired => "expired",
         }
     }
 }
 
 /// Drift detected on one `sources[]` entry of a concept.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceDrift {
     /// The source's `resource` string.
     pub resource: String,
@@ -80,7 +80,7 @@ pub struct SourceDrift {
 
 /// The drift status of a single concept: its expired flag plus per-source drift. A concept
 /// with `is_stale() == false` is fully in sync and is omitted from [`StaleReport`].
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConceptDrift {
     /// The concept id (e.g. `/computations/mileage`).
     pub concept: String,
@@ -99,7 +99,7 @@ impl ConceptDrift {
 
 /// The typed outcome of a staleness check: one entry per drifted concept (in-sync concepts
 /// are omitted), in bundle order.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct StaleReport {
     pub concepts: Vec<ConceptDrift>,
 }
@@ -187,7 +187,7 @@ impl<'a> StaleChecker<'a> {
     fn check_concept_with(
         &self,
         concept: &Concept,
-        engine: &Engine,
+        engine: &Engine<'_>,
         cache: &mut FingerprintCache,
     ) -> ConceptDrift {
         let mut sources = Vec::new();
@@ -223,7 +223,7 @@ impl<'a> StaleChecker<'a> {
     /// not opt into fingerprinting with a `kind` extension.
     fn check_source(
         &self,
-        engine: &Engine,
+        engine: &Engine<'_>,
         source: &Source,
         cache: &mut FingerprintCache,
     ) -> Option<SourceDrift> {
@@ -347,15 +347,15 @@ pub(crate) fn malformed_source_entry(entry: &Value, index: usize) -> Option<Stri
         _ => {
             return Some(format!(
                 "sources[{index}].resource must be a non-empty string"
-            ))
-        }
-    }
-    if let Some(kind) = mapping.get(Value::String("kind".into())) {
-        if !matches!(kind, Value::String(value) if !value.trim().is_empty()) {
-            return Some(format!(
-                "sources[{index}].kind must be a non-empty string when declared"
             ));
         }
+    }
+    if let Some(kind) = mapping.get(Value::String("kind".into()))
+        && !matches!(kind, Value::String(value) if !value.trim().is_empty())
+    {
+        return Some(format!(
+            "sources[{index}].kind must be a non-empty string when declared"
+        ));
     }
     None
 }
@@ -375,7 +375,7 @@ fn cache_key(source: &Source) -> (String, String) {
     )
 }
 
-fn prime_git_cache(bundle: &Bundle, engine: &Engine, cache: &mut FingerprintCache) {
+fn prime_git_cache(bundle: &Bundle, engine: &Engine<'_>, cache: &mut FingerprintCache) {
     let mut paths = BTreeMap::new();
     let mut commits = BTreeMap::new();
     for concept in &bundle.concepts {
@@ -638,13 +638,18 @@ mod tests {
     #[test]
     fn malformed_mapping_resource_and_declared_kind_are_unavailable_but_kindless_provenance_is_not()
     {
-        let malformed = concept("m", "type: Note\nsources:\n- {}\n- {resource: 42}\n- {resource: ' '}\n- {resource: valid.txt, kind: 7}\n- {resource: valid.txt, kind: ''}\n- {resource: valid.txt}\n");
+        let malformed = concept(
+            "m",
+            "type: Note\nsources:\n- {}\n- {resource: 42}\n- {resource: ' '}\n- {resource: valid.txt, kind: 7}\n- {resource: valid.txt, kind: ''}\n- {resource: valid.txt}\n",
+        );
         let report = check(&bundle(vec![malformed]), &FakeFs::new(), &FakeGit::new());
         let findings = &report.concepts[0].sources;
         assert_eq!(findings.len(), 5);
-        assert!(findings
-            .iter()
-            .all(|source| source.drift == DriftKind::Unavailable));
+        assert!(
+            findings
+                .iter()
+                .all(|source| source.drift == DriftKind::Unavailable)
+        );
         for (index, finding) in findings.iter().enumerate() {
             assert!(finding.message.contains(&format!("sources[{index}]")));
         }

@@ -5,7 +5,7 @@ use okf_core::bundle::loader::load_bundle;
 use okf_core::model::trust::TrustTier;
 use okf_core::output::record::concept_record;
 use okf_core::parse::{parse_concept, writer};
-use okf_core::query::search::{search, SearchFilter};
+use okf_core::query::search::{SearchFilter, search};
 use okf_core::query::show::show;
 
 fn bundle_root() -> PathBuf {

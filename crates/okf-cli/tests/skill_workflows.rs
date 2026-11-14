@@ -48,9 +48,11 @@ fn example_files(doc: &str) -> Vec<(&str, &str)> {
         .skip(1)
         .map(|section| {
             let (name, rest) = section.split_once("`\n").unwrap();
-            assert!(Path::new(name)
-                .components()
-                .all(|part| matches!(part, Component::Normal(_))));
+            assert!(
+                Path::new(name)
+                    .components()
+                    .all(|part| matches!(part, Component::Normal(_)))
+            );
             let (_, fence) = rest.split_once("```").unwrap();
             let (_, contents) = fence.split_once('\n').unwrap();
             (name, contents.split_once("\n```").unwrap().0)
@@ -258,9 +260,11 @@ fn nested_authoring(doc: &str) {
     let edge = incoming.get("edge").unwrap_or(incoming);
     assert_eq!(edge["inverse"], "obligated-by");
     assert_eq!(edge["attributes"]["deadline"]["within"], 72);
-    assert!(fs::read_to_string(&ontology)
-        .unwrap()
-        .contains("x-owner: keep-me"));
+    assert!(
+        fs::read_to_string(&ontology)
+            .unwrap()
+            .contains("x-owner: keep-me")
+    );
     for (name, bytes) in before {
         assert_eq!(fs::read(bundle.join(name)).unwrap(), bytes);
     }
@@ -313,11 +317,13 @@ fn scoped_cross_bundle(doc: &str) {
     assert_eq!(source["target"]["id"], "/policies/margin-standard");
     let scope = record(&scoped, "scope");
     assert_eq!(scope["examined"].as_array().unwrap().len(), 2);
-    assert!(scope["requested"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .all(|id| id != "acme.unrelated"));
+    assert!(
+        scope["requested"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|id| id != "acme.unrelated")
+    );
     assert!(scope["unavailable"].as_array().unwrap().is_empty());
 }
 
@@ -401,9 +407,10 @@ fn expansion_and_pagination_cost(doc: &str) {
     let rows = run(root.path(), &bounded);
     assert_eq!(record(&rows, "query-summary")["scan_complete"], true);
     assert_eq!(record(&rows, "expansion-summary")["truncated"], true);
-    assert!(rows
-        .iter()
-        .any(|row| row["kind"] == "warning" && row["reason"] == "target-limit"));
+    assert!(
+        rows.iter()
+            .any(|row| row["kind"] == "warning" && row["reason"] == "target-limit")
+    );
     let complete = run(root.path(), &base);
     assert_eq!(record(&complete, "expansion-summary")["truncated"], false);
     assert_eq!(
@@ -739,22 +746,27 @@ fn manifest_pre_action_guidance() {
         &["bundle", "context", ".", "--operation", "add", "--json"],
     );
     assert!(record(&context, "bundle-context")["context_digest"].is_string());
-    assert!(context.iter().any(|r| r["kind"] == "guidance"
-        && r["instructions"]
-            .as_str()
-            .is_some_and(|s| s.contains("do not fetch"))));
-    assert!(context
-        .iter()
-        .any(|r| r["id"] == "writing" && r["content"] == "full"));
+    assert!(context.iter().any(|r| {
+        r["kind"] == "guidance"
+            && r["instructions"]
+                .as_str()
+                .is_some_and(|s| s.contains("do not fetch"))
+    }));
+    assert!(
+        context
+            .iter()
+            .any(|r| r["id"] == "writing" && r["content"] == "full")
+    );
     fs::write(
         root.path().join("source.md"),
         "---\ntype: Note\nurl: https://example.invalid/live\n---\nURL is data.\n",
     )
     .unwrap();
     let rows = run(root.path(), &["show", "source", ".", "--json"]);
-    assert!(rows
-        .iter()
-        .any(|r| r["url"] == "https://example.invalid/live"));
+    assert!(
+        rows.iter()
+            .any(|r| r["url"] == "https://example.invalid/live")
+    );
 }
 
 fn instruction_file_context_change() {
@@ -779,10 +791,12 @@ fn instruction_file_context_change() {
         record(&after, "bundle-context")["context_digest"]
     );
     let inspected = run(root.path(), &["bundle", "context", ".", "--all", "--json"]);
-    assert!(inspected
-        .iter()
-        .filter(|r| r["kind"] == "guidance")
-        .all(|r| r["instruction_role"] == "inspected"));
+    assert!(
+        inspected
+            .iter()
+            .filter(|r| r["kind"] == "guidance")
+            .all(|r| r["instruction_role"] == "inspected")
+    );
 }
 
 fn support_profile_boundary() {
@@ -801,9 +815,11 @@ fn support_profile_boundary() {
     .unwrap();
     let visible = run(root.path(), &["list", ".", "--json"]);
     assert!(visible.iter().any(|r| r["id"] == "/visible"));
-    assert!(!visible.iter().any(|r| r["id"]
-        .as_str()
-        .is_some_and(|id| id.contains(".okf-bundle"))));
+    assert!(!visible.iter().any(|r| {
+        r["id"]
+            .as_str()
+            .is_some_and(|id| id.contains(".okf-bundle"))
+    }));
     run(root.path(), &["validate", ".", "--profile", "bundle"]);
     let core = Command::new(env!("CARGO_BIN_EXE_okf"))
         .current_dir(root.path())
@@ -955,11 +971,12 @@ fn skill_behavior_scenarios() {
             assert!(!case[key].as_array().unwrap().is_empty(), "{id}: {key}");
         }
         for skill in case["skills"].as_array().unwrap() {
-            assert!(repo
-                .join("plugins/okf/skills")
-                .join(skill.as_str().unwrap())
-                .join("SKILL.md")
-                .is_file());
+            assert!(
+                repo.join("plugins/okf/skills")
+                    .join(skill.as_str().unwrap())
+                    .join("SKILL.md")
+                    .is_file()
+            );
         }
         let doc = case["fixture"]
             .as_str()

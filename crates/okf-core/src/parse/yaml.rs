@@ -137,19 +137,21 @@ fn append_value(
 }
 
 fn scalar(value: &Value, available: usize) -> Result<String> {
-    if let Value::String(s) = value {
-        if available > 0 && s.chars().count() > available && safe_words(s) {
-            let lines = wrap_words(s, available);
-            if lines.len() > 1 {
-                return Ok(format!(
-                    ">-\n{}\n",
-                    lines
-                        .iter()
-                        .map(|line| format!("  {line}"))
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                ));
-            }
+    if let Value::String(s) = value
+        && available > 0
+        && s.chars().count() > available
+        && safe_words(s)
+    {
+        let lines = wrap_words(s, available);
+        if lines.len() > 1 {
+            return Ok(format!(
+                ">-\n{}\n",
+                lines
+                    .iter()
+                    .map(|line| format!("  {line}"))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            ));
         }
     }
     serde_yaml::to_string(value).map_err(|e| OkfError::Internal(e.to_string()))

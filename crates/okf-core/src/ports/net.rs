@@ -27,7 +27,7 @@ impl Net for RealNet {
         use crate::error::OkfError;
         let resp = ureq::get(url)
             .call()
-            .map_err(|e| OkfError::Io(format!("fetch {url}: {e}")))?;
+            .map_err(|e| OkfError::io(format!("fetch {url}: {e}")))?;
         let etag = resp
             .headers()
             .get("etag")
@@ -40,7 +40,7 @@ impl Net for RealNet {
             .map(str::to_string);
         let mut body = Vec::new();
         std::io::Read::read_to_end(&mut resp.into_body().into_reader(), &mut body)
-            .map_err(|e| OkfError::Io(format!("read body {url}: {e}")))?;
+            .map_err(|e| OkfError::io_with(format!("read body {url}: {e}"), e))?;
         Ok(HttpResponse {
             etag,
             last_modified,
@@ -71,6 +71,6 @@ impl Net for FakeNet {
         self.responses
             .get(url)
             .cloned()
-            .ok_or_else(|| crate::error::OkfError::Io(format!("no fake response for {url}")))
+            .ok_or_else(|| crate::error::OkfError::io(format!("no fake response for {url}")))
     }
 }

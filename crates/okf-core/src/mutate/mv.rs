@@ -25,13 +25,16 @@ use crate::bundle::loader::load_bundle;
 use crate::error::{OkfError, Result};
 
 use crate::model::concept::{Concept, ConceptId};
-use crate::model::link::{classify, resolve_link as resolve_concept_link, LinkKind};
+use crate::model::link::{LinkKind, classify, resolve_link as resolve_concept_link};
 use crate::ontology::load::try_load;
 use crate::ontology::schema::Ontology;
 use crate::query::selector::Selector;
 
 use super::edit::{id_to_path, render_validated};
-use super::transaction::{commit_locked, FileChange};
+use super::normalize_links::{
+    encode_destination, find_definition_destination, find_inline_destination, percent_decode,
+};
+use super::transaction::{FileChange, commit_locked};
 
 /// What `mv` changed.
 #[derive(Debug, Clone)]
@@ -99,7 +102,7 @@ pub fn mv_with_ontology(
                 return None;
             }
             let rebuilt = rewrite_link_string(&from, raw, &new_t);
-            (rebuilt != raw).then_some(rebuilt)
+            (rebuilt != raw && rebuilt != percent_decode(raw)).then_some(rebuilt)
         });
         changed |= rewrite_sources(&mut concept, &old, &new);
         changed |= rewrite_logical_references(
@@ -135,7 +138,7 @@ pub fn mv_with_ontology(
                 target
             };
             let rebuilt = rewrite_link_string(&new_from, raw, &target);
-            (rebuilt != raw).then_some(rebuilt)
+            (rebuilt != raw && rebuilt != percent_decode(raw)).then_some(rebuilt)
         });
     }
     rewrite_sources(&mut moved, &old, &new);
@@ -151,10 +154,19 @@ pub fn mv_with_ontology(
         } else {
             None
         };
+        let source_path = if concept.id == new { &old_path } else { &path };
+        // The parser drops a leading BOM before frontmatter; carry it over so rewrites
+        // neither lose nor duplicate it.
+        let had_bom =
+            std::fs::read(source_path).is_ok_and(|bytes| bytes.starts_with("\u{feff}".as_bytes()));
+        let mut after = render_validated(root, concept)?;
+        if had_bom && !after.starts_with('\u{feff}') {
+            after.insert(0, '\u{feff}');
+        }
         changes.push(FileChange {
             path: path.strip_prefix(root).unwrap().to_path_buf(),
             before,
-            after: Some(render_validated(root, concept)?.into_bytes()),
+            after: Some(after.into_bytes()),
         });
     }
     for (id, path, before) in structural_documents(root)? {
@@ -209,18 +221,16 @@ where
                 .collect(),
         );
         for rule in definition.references.values() {
-            if let Some(selector) = &rule.selector {
-                if let Ok(selector) = Selector::parse(selector) {
-                    changed |= rewrite_selected(&mut metadata, &selector.steps, rewrite);
-                }
+            if let Some(selector) = &rule.selector
+                && let Ok(selector) = Selector::parse(selector)
+            {
+                changed |= rewrite_selected(&mut metadata, &selector.steps, rewrite);
             }
         }
-        if changed {
-            if let Value::Mapping(map) = metadata {
-                for (key, value) in map {
-                    if let Value::String(key) = key {
-                        concept.frontmatter.map.insert(key, value);
-                    }
+        if changed && let Value::Mapping(map) = metadata {
+            for (key, value) in map {
+                if let Value::String(key) = key {
+                    concept.frontmatter.map.insert(key, value);
                 }
             }
         }
@@ -237,10 +247,10 @@ where
         })
         .unwrap_or_default();
     for key in keys {
-        if let Some(value) = concept.frontmatter.map.get_mut(&key) {
-            if rewrite_in_value(value, rewrite) {
-                changed = true;
-            }
+        if let Some(value) = concept.frontmatter.map.get_mut(&key)
+            && rewrite_in_value(value, rewrite)
+        {
+            changed = true;
         }
     }
     // Legacy untyped source references use the concept-link namespace. Typed
@@ -250,22 +260,21 @@ where
             let Some(map) = source.as_mapping_mut() else {
                 continue;
             };
-            if !map.contains_key(Value::String("kind".into()))
+            if (!map.contains_key(Value::String("kind".into()))
                 || map
                     .get(Value::String("kind".into()))
                     .and_then(Value::as_str)
-                    == Some("bundle-resource")
+                    == Some("bundle-resource"))
+                && let Some(resource) = map.get_mut(Value::String("resource".into()))
             {
-                if let Some(resource) = map.get_mut(Value::String("resource".into())) {
-                    changed |= rewrite_in_value(resource, rewrite);
-                }
+                changed |= rewrite_in_value(resource, rewrite);
             }
         }
     }
-    if let Some(value) = concept.frontmatter.map.get_mut("computation") {
-        if rewrite_in_value(value, rewrite) {
-            changed = true;
-        }
+    if let Some(value) = concept.frontmatter.map.get_mut("computation")
+        && rewrite_in_value(value, rewrite)
+    {
+        changed = true;
     }
     for family in ["executor", "attester"] {
         if let Some(resource) = concept
@@ -274,10 +283,9 @@ where
             .get_mut(family)
             .and_then(Value::as_mapping_mut)
             .and_then(|m| m.get_mut(Value::String("resource".to_string())))
+            && rewrite_in_value(resource, rewrite)
         {
-            if rewrite_in_value(resource, rewrite) {
-                changed = true;
-            }
+            changed = true;
         }
     }
     let (new_body, body_changed) = rewrite_in_body(&concept.body, rewrite);
@@ -295,11 +303,11 @@ where
 {
     match value {
         Value::String(s) => {
-            if !s.trim().is_empty() {
-                if let Some(new) = rewrite(s) {
-                    *s = new;
-                    return true;
-                }
+            if !s.trim().is_empty()
+                && let Some(new) = rewrite(s)
+            {
+                *s = new;
+                return true;
             }
             false
         }
@@ -327,11 +335,12 @@ where
     for (_, definition) in parser.reference_definitions().iter() {
         if let Some(new) = rewrite(&definition.dest) {
             let span = &body[definition.span.clone()];
-            if let Some(colon) = span.find("]: ").or_else(|| span.find("]:")) {
-                if let Some(offset) = span[colon + 2..].find(definition.dest.as_ref()) {
-                    let start = definition.span.start + colon + 2 + offset;
-                    edits.push((start, start + definition.dest.len(), new));
-                }
+            if let Some((start, end)) = find_definition_destination(span, &definition.dest) {
+                edits.push((
+                    definition.span.start + start,
+                    definition.span.start + end,
+                    encode_destination(&new),
+                ));
             }
         }
     }
@@ -355,12 +364,12 @@ where
             }
             if let Some(new) = rewrite(&dest) {
                 let span = &body[range.clone()];
-                if let Some(open) = span.rfind("](") {
-                    let destination = &span[open + 2..];
-                    if let Some(pos) = destination.find(dest.as_str()) {
-                        let start = range.start + open + 2 + pos;
-                        edits.push((start, start + dest.len(), new));
-                    }
+                if let Some((start, end)) = find_inline_destination(span, &dest) {
+                    edits.push((
+                        range.start + start,
+                        range.start + end,
+                        encode_destination(&new),
+                    ));
                 }
             }
         }
@@ -383,7 +392,8 @@ fn resolve_link(from: &ConceptId, raw: &str) -> ConceptId {
         return resolve_concept_link(from, raw);
     }
     let (core, _) = split_suffix(raw.trim());
-    let core = core.strip_suffix(".md").unwrap_or(core).replace('\\', "/");
+    let core = percent_decode(core);
+    let core = core.strip_suffix(".md").unwrap_or(&core).replace('\\', "/");
     let joined = format!("{}/{}", parent_dir(&from.0).trim_start_matches('/'), core);
     let mut segments = Vec::new();
     for segment in joined.split('/') {
@@ -446,8 +456,10 @@ fn relative_path(from_dir: &str, target: &str) -> String {
     let from: Vec<&str> = from_dir.split('/').filter(|s| !s.is_empty()).collect();
     let to: Vec<&str> = target.split('/').filter(|s| !s.is_empty()).collect();
 
+    // The target's last segment is the file itself and is never part of the shared prefix.
+    let max_common = to.len().saturating_sub(1);
     let mut common = 0;
-    while common < from.len() && common < to.len() && from[common] == to[common] {
+    while common < from.len() && common < max_common && from[common] == to[common] {
         common += 1;
     }
 
@@ -680,15 +692,14 @@ fn rewrite_logical_references(
 ) -> Result<bool> {
     if let Some(Value::Sequence(sources)) = concept.frontmatter.get("sources") {
         for source in sources {
-            if let Some(raw) = source.get("resource").and_then(Value::as_str) {
-                if logical_rewrite(raw, bundle, old, new).is_some()
-                    && source
-                        .get("bundle_ref")
-                        .and_then(|v| v.get("snapshot"))
-                        .is_some()
-                {
-                    return Err(OkfError::Usage("cannot automatically rewrite a snapshot-constrained logical source; reconcile its provenance explicitly".into()));
-                }
+            if let Some(raw) = source.get("resource").and_then(Value::as_str)
+                && logical_rewrite(raw, bundle, old, new).is_some()
+                && source
+                    .get("bundle_ref")
+                    .and_then(|v| v.get("snapshot"))
+                    .is_some()
+            {
+                return Err(OkfError::Usage("cannot automatically rewrite a snapshot-constrained logical source; reconcile its provenance explicitly".into()));
             }
         }
     }
@@ -713,24 +724,22 @@ fn rewrite_logical_references(
             if !is_rewritten_logical {
                 continue;
             }
-            if let Some(declared) = source.get_mut("bundle_ref").and_then(Value::as_mapping_mut) {
-                if declared
+            if let Some(declared) = source.get_mut("bundle_ref").and_then(Value::as_mapping_mut)
+                && declared
                     .get(Value::String("id".into()))
                     .and_then(Value::as_str)
                     == bundle
-                    && declared
-                        .get(Value::String("path".into()))
-                        .and_then(Value::as_str)
-                        .is_some_and(|path| {
-                            ConceptId::from_relative(path.strip_suffix(".md").unwrap_or(path))
-                                == *old
-                        })
-                {
-                    declared.insert(
-                        Value::String("path".into()),
-                        Value::String(format!("{}.md", new.0.trim_start_matches('/'))),
-                    );
-                }
+                && declared
+                    .get(Value::String("path".into()))
+                    .and_then(Value::as_str)
+                    .is_some_and(|path| {
+                        ConceptId::from_relative(path.strip_suffix(".md").unwrap_or(path)) == *old
+                    })
+            {
+                declared.insert(
+                    Value::String("path".into()),
+                    Value::String(format!("{}.md", new.0.trim_start_matches('/'))),
+                );
             }
         }
     }
@@ -760,4 +769,66 @@ pub(crate) fn references_target(
         (classify(raw) != LinkKind::External && resolve_link(&from, raw) == *target)
             .then(|| raw.to_owned())
     }) | rewrite_sources(&mut copy, target, target)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn relative_path_never_consumes_the_target_file_segment() {
+        assert_eq!(relative_path("/a", "/a/x"), "./x");
+        assert_eq!(relative_path("/a", "/a"), "../a");
+        assert_eq!(relative_path("/x/y", "/x/y"), "../y");
+        assert_eq!(relative_path("", "/a"), "./a");
+        assert_eq!(relative_path("/a/b", "/a/c/d"), "../c/d");
+        assert_eq!(
+            relative_path("/policies", "/tables/customers"),
+            "../tables/customers"
+        );
+        assert_eq!(relative_path("", "/tables/customers"), "./tables/customers");
+    }
+
+    fn body_rewrite(body: &str, from: &str, to: &str) -> (String, bool) {
+        rewrite_in_body(body, &|raw| (raw == from).then(|| to.to_string()))
+    }
+
+    #[test]
+    fn body_rewrite_handles_escaped_angle_and_titled_destinations() {
+        let (out, changed) = body_rewrite("[a](./x\\_y.md \"t\")\n", "./x_y.md", "./z.md");
+        assert!(changed);
+        assert_eq!(out, "[a](./z.md \"t\")\n");
+        let (out, _) = body_rewrite("[a](<./x y.md>)\n", "./x y.md", "./z.md");
+        assert_eq!(out, "[a](<./z.md>)\n");
+        let (out, _) = body_rewrite(
+            "[x](./x.md) and [y](./x.md)\n\n[r]: ./x.md\n",
+            "./x.md",
+            "./z.md",
+        );
+        assert_eq!(out, "[x](./z.md) and [y](./z.md)\n\n[r]: ./z.md\n");
+    }
+
+    #[test]
+    fn body_rewrite_encodes_spaces_and_resolve_decodes() {
+        let (out, _) = body_rewrite("[a](./x.md)\n", "./x.md", "./my file.md");
+        assert_eq!(out, "[a](./my%20file.md)\n");
+        let id = ConceptId("/dir/a".to_string());
+        assert_eq!(resolve_link(&id, "./my%20file.md").0, "/dir/my file");
+    }
+
+    #[test]
+    fn body_rewrite_finds_entity_encoded_destinations() {
+        let (out, changed) = body_rewrite("[a](./a&amp;b.md)\n", "./a&b.md", "./z.md");
+        assert!(changed);
+        assert_eq!(out, "[a](./z.md)\n");
+        let (out, changed) = body_rewrite(
+            "[a](./a&#38;b.md \"t\")\n\n[r]: ./a&#x26;b.md\n",
+            "./a&b.md",
+            "./c d.md",
+        );
+        assert!(changed);
+        assert_eq!(out, "[a](./c%20d.md \"t\")\n\n[r]: ./c%20d.md\n");
+        let (_, changed) = body_rewrite("[a](./a&bogus;b.md)\n", "./a&b.md", "./z.md");
+        assert!(!changed);
+    }
 }

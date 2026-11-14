@@ -57,7 +57,11 @@ fn token(root: &Path, extra: &[&str]) -> String {
 }
 fn fixture() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
-    write(dir.path(), "okf-bundle.yaml", "manifest_version: 1\nguidance:\n  instructions_file: .okf-bundle/global.md\n  provenance: {generator: example}\n  rules:\n  - id: model\n    operations: [edit]\n    instructions: Preserve ownership.\n  - id: details\n    tier: reference\n    description: Extended modeling procedures.\n    operations: [edit]\n    instructions_file: .okf-bundle/details.md\n  - id: create\n    operations: [add]\n    instructions: Pick a stable ID.\nworkflows:\n  review:\n    description: Review support\n    instructions: Inspect the supporting evidence.\n    resources: [.okf-bundle/support.txt]\n");
+    write(
+        dir.path(),
+        "okf-bundle.yaml",
+        "manifest_version: 1\nguidance:\n  instructions_file: .okf-bundle/global.md\n  provenance: {generator: example}\n  rules:\n  - id: model\n    operations: [edit]\n    instructions: Preserve ownership.\n  - id: details\n    tier: reference\n    description: Extended modeling procedures.\n    operations: [edit]\n    instructions_file: .okf-bundle/details.md\n  - id: create\n    operations: [add]\n    instructions: Pick a stable ID.\nworkflows:\n  review:\n    description: Review support\n    instructions: Inspect the supporting evidence.\n    resources: [.okf-bundle/support.txt]\n",
+    );
     write(
         dir.path(),
         ".okf-bundle/global.md",
@@ -187,8 +191,7 @@ fn compact_settings_preserve_state_and_union_relevant_groups() {
         ],
     ));
     assert_eq!(
-        record(&relationships, "bundle-context")["effective_settings"]["settings"]["query"]
-            ["scan_limit"],
+        record(&relationships, "bundle-context")["effective_settings"]["settings"]["query"]["scan_limit"],
         25
     );
 
@@ -251,16 +254,19 @@ fn compact_settings_preserve_state_and_union_relevant_groups() {
             "--json",
         ],
     ));
-    assert!(all
-        .iter()
-        .filter(|r| r["kind"] == "guidance")
-        .all(|r| r["instruction_role"] == "inspected"));
-    assert!(!run(
-        dir.path(),
-        &["bundle", "context", ".", "--all", "--operation", "edit"]
-    )
-    .status
-    .success());
+    assert!(
+        all.iter()
+            .filter(|r| r["kind"] == "guidance")
+            .all(|r| r["instruction_role"] == "inspected")
+    );
+    assert!(
+        !run(
+            dir.path(),
+            &["bundle", "context", ".", "--all", "--operation", "edit"]
+        )
+        .status
+        .success()
+    );
 }
 #[test]
 fn tokens_allow_subset_operations_and_concept_edits_but_refuse_stale_guidance_before_writes() {
@@ -332,11 +338,13 @@ fn tokens_allow_subset_operations_and_concept_edits_but_refuse_stale_guidance_be
     )
     .unwrap();
     assert_eq!(terminal["publication"], "not-published");
-    assert!(terminal["reasons"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|v| v == "context-invalid"));
+    assert!(
+        terminal["reasons"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v == "context-invalid")
+    );
     // Ordinary use remains available without opting into receipt checking.
     rows(&run(
         dir.path(),
@@ -370,12 +378,14 @@ fn receipts_bind_root_operations_resources_and_ontology() {
         "ontology.yaml",
         "okf_ontology: '0.1'\nconcepts: {}\n",
     );
-    assert!(!run(
-        dir.path(),
-        &["bundle", "context", ".", "--check-token", &receipt]
-    )
-    .status
-    .success());
+    assert!(
+        !run(
+            dir.path(),
+            &["bundle", "context", ".", "--check-token", &receipt]
+        )
+        .status
+        .success()
+    );
 }
 #[test]
 fn cannot_issue_execution_tokens_for_inspection_or_incomplete_workflows() {
@@ -385,7 +395,11 @@ fn cannot_issue_execution_tokens_for_inspection_or_incomplete_workflows() {
             .status
             .success()
     );
-    write(dir.path(), "okf-bundle.yaml", "manifest_version: 1\nworkflows:\n  import:\n    description: Import\n    instructions: Import the supplied source.\n    inputs:\n      source: {type: string, required: true}\n");
+    write(
+        dir.path(),
+        "okf-bundle.yaml",
+        "manifest_version: 1\nworkflows:\n  import:\n    description: Import\n    instructions: Import the supplied source.\n    inputs:\n      source: {type: string, required: true}\n",
+    );
     let out = run(
         dir.path(),
         &[
@@ -405,14 +419,20 @@ fn cannot_issue_execution_tokens_for_inspection_or_incomplete_workflows() {
             .status
             .success()
     );
-    assert!(!run(dir.path(), &["version", "--context", "malformed"])
-        .status
-        .success());
+    assert!(
+        !run(dir.path(), &["version", "--context", "malformed"])
+            .status
+            .success()
+    );
 }
 #[test]
 fn scoped_commands_require_receipts_for_each_examined_bundle() {
     let dir = tempfile::tempdir().unwrap();
-    write(dir.path(), "okf-catalog.yaml", "catalog_version: 2\ndefault_bundle: example.a\nbundles:\n  example.a:\n    location: {type: directory, path: a}\n  example.b:\n    location: {type: directory, path: b}\n");
+    write(
+        dir.path(),
+        "okf-catalog.yaml",
+        "catalog_version: 2\ndefault_bundle: example.a\nbundles:\n  example.a:\n    location: {type: directory, path: a}\n  example.b:\n    location: {type: directory, path: b}\n",
+    );
     for bundle in ["a", "b"] {
         write(
             dir.path(),
@@ -446,20 +466,22 @@ fn scoped_commands_require_receipts_for_each_examined_bundle() {
         .map(|r| r["token"].as_str().unwrap())
         .collect();
     assert_eq!(tokens.len(), 2);
-    assert!(!run(
-        dir.path(),
-        &[
-            "list",
-            "--bundle-id",
-            "example.a",
-            "--scope-bundle",
-            "example.b",
-            "--context",
-            tokens[0]
-        ]
-    )
-    .status
-    .success());
+    assert!(
+        !run(
+            dir.path(),
+            &[
+                "list",
+                "--bundle-id",
+                "example.a",
+                "--scope-bundle",
+                "example.b",
+                "--context",
+                tokens[0]
+            ]
+        )
+        .status
+        .success()
+    );
     rows(&run(
         dir.path(),
         &[

@@ -41,7 +41,15 @@ fn payload(bytes: &[u8]) -> serde_json::Value {
 fn ontology_inspection_exposes_selectors_relationships_and_authored_properties() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    success(root, &["ontology", "apply", "--from", "{field_types: {Norm: {base: object, fields: {bearer: {type: uri}}}}, concepts: {Base: {}, Procedure: {extends: Base, trust: {min_tier: verified, local: retained}, local: authored, fields: {norms: {type: list, item: Norm, min: 1}}, references: {bearers: {selector: 'norms[].bearer', target: Team, cardinality: '1..n', local: retained}}, relationships: {obligations: {reference: bearers, kind: obliges, inverse: obligated-by}}}}}"]);
+    success(
+        root,
+        &[
+            "ontology",
+            "apply",
+            "--from",
+            "{field_types: {Norm: {base: object, fields: {bearer: {type: uri}}}}, concepts: {Base: {}, Procedure: {extends: Base, trust: {min_tier: verified, local: retained}, local: authored, fields: {norms: {type: list, item: Norm, min: 1}}, references: {bearers: {selector: 'norms[].bearer', target: Team, cardinality: '1..n', local: retained}}, relationships: {obligations: {reference: bearers, kind: obliges, inverse: obligated-by}}}}}",
+        ],
+    );
     let out = success(root, &["ontology", "show", "Procedure"]);
     let human = String::from_utf8(out.stdout).unwrap();
     for expected in [
@@ -72,7 +80,15 @@ fn ontology_inspection_exposes_selectors_relationships_and_authored_properties()
 fn reusable_field_type_inspection_shows_declarations_and_effective_constraints() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    success(root, &["ontology", "apply", "--from", "{field_types: {Text: {base: string, min: 1, local: retained}, Label: {extends: Text, max: 20}}}"]);
+    success(
+        root,
+        &[
+            "ontology",
+            "apply",
+            "--from",
+            "{field_types: {Text: {base: string, min: 1, local: retained}, Label: {extends: Text, max: 20}}}",
+        ],
+    );
     let out = success(root, &["ontology", "field-type", "list", "--json"]);
     let records: Vec<serde_json::Value> = String::from_utf8(out.stdout)
         .unwrap()
@@ -95,9 +111,11 @@ fn reusable_field_type_inspection_shows_declarations_and_effective_constraints()
     assert_eq!(record["effective"]["constraints"]["max"], 20);
     assert_eq!(record["effective"]["constraints"]["local"], "retained");
     let human = success(root, &["ontology", "field-type", "show", "Label"]);
-    assert!(String::from_utf8(human.stdout)
-        .unwrap()
-        .contains("extends: Text"));
+    assert!(
+        String::from_utf8(human.stdout)
+            .unwrap()
+            .contains("extends: Text")
+    );
     let missing = run(root, &["ontology", "field-type", "show", "Missing"]);
     assert_eq!(missing.status.code(), Some(2));
 }
@@ -198,10 +216,12 @@ fn doctor_uses_configured_ontology_sidecar_for_warnings_and_failures() {
         .find(|record| record["rule"] == "ontology-unreadable")
         .expect("missing configured ontology warning");
     assert!(warning["path"].as_str().unwrap().ends_with("sidecar.yaml"));
-    assert!(warning["message"]
-        .as_str()
-        .unwrap()
-        .contains("sidecar.yaml"));
+    assert!(
+        warning["message"]
+            .as_str()
+            .unwrap()
+            .contains("sidecar.yaml")
+    );
 }
 
 #[test]
@@ -219,7 +239,20 @@ fn structured_declarations_author_relationships_and_replace_named_entries() {
             "{base: object, fields: {bearer: {type: uri}, action: {type: string}}}",
         ],
     );
-    success(root, &["ontology", "add", "Procedure", "--field-yaml", "norms={type: list, item: Norm, min: 1}", "--ref-yaml", "bearers={selector: 'norms[].bearer', target: Team, cardinality: '1..n'}", "--relationship-yaml", "obligations={reference: bearers, kind: obliges, inverse: obligated-by, attributes: {action: 'norms[].action'}}"]);
+    success(
+        root,
+        &[
+            "ontology",
+            "add",
+            "Procedure",
+            "--field-yaml",
+            "norms={type: list, item: Norm, min: 1}",
+            "--ref-yaml",
+            "bearers={selector: 'norms[].bearer', target: Team, cardinality: '1..n'}",
+            "--relationship-yaml",
+            "obligations={reference: bearers, kind: obliges, inverse: obligated-by, attributes: {action: 'norms[].action'}}",
+        ],
+    );
     let before = ontology(root);
     assert_eq!(
         before["concepts"]["Procedure"]["relationships"]["obligations"]["inverse"],
@@ -261,7 +294,16 @@ fn structured_declarations_author_relationships_and_replace_named_entries() {
 fn definition_file_merge_preserves_omitted_properties_and_extensions() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    success(root, &["ontology", "add", "Service", "--from", "{description: First, fields: {details: {type: object, fields: {priority: {type: int}}}, owner: {type: string}}, local: {retained: yes}}"]);
+    success(
+        root,
+        &[
+            "ontology",
+            "add",
+            "Service",
+            "--from",
+            "{description: First, fields: {details: {type: object, fields: {priority: {type: int}}}, owner: {type: string}}, local: {retained: yes}}",
+        ],
+    );
     std::fs::write(root.join("update.yaml"), "description: Second\nfields:\n  details:\n    type: object\n    fields:\n      severity: {type: string}\n").unwrap();
     success(
         root,
@@ -303,15 +345,39 @@ fn definition_file_merge_preserves_omitted_properties_and_extensions() {
 fn coordinated_apply_validates_final_state_and_supports_explicit_deletion() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    success(root, &["ontology", "apply", "--from", "{field_types: {Deadline: {base: object, fields: {within: {type: int, min: 1}}}}, concepts: {Procedure: {fields: {deadline: {type: Deadline}}}, Retired: {}}}"]);
+    success(
+        root,
+        &[
+            "ontology",
+            "apply",
+            "--from",
+            "{field_types: {Deadline: {base: object, fields: {within: {type: int, min: 1}}}}, concepts: {Procedure: {fields: {deadline: {type: Deadline}}}, Retired: {}}}",
+        ],
+    );
     let bytes = std::fs::read(root.join("ontology.yaml")).unwrap();
     let out = run(root, &["ontology", "field-type", "remove", "Deadline"]);
     assert_eq!(out.status.code(), Some(2));
     assert_eq!(bytes, std::fs::read(root.join("ontology.yaml")).unwrap());
-    let conflict = run(root, &["ontology", "apply", "--from", "{remove: {field_types: [Deadline], concepts: [Retired]}, concepts: {Procedure: {remove: {fields: [deadline]}, fields: {deadline: {type: int}}}}}"]);
+    let conflict = run(
+        root,
+        &[
+            "ontology",
+            "apply",
+            "--from",
+            "{remove: {field_types: [Deadline], concepts: [Retired]}, concepts: {Procedure: {remove: {fields: [deadline]}, fields: {deadline: {type: int}}}}}",
+        ],
+    );
     assert_eq!(conflict.status.code(), Some(2));
     assert_eq!(bytes, std::fs::read(root.join("ontology.yaml")).unwrap());
-    success(root, &["ontology", "apply", "--from", "{remove: {field_types: [Deadline], concepts: [Retired]}, concepts: {Procedure: {fields: {deadline: {type: int}}}}}"]);
+    success(
+        root,
+        &[
+            "ontology",
+            "apply",
+            "--from",
+            "{remove: {field_types: [Deadline], concepts: [Retired]}, concepts: {Procedure: {fields: {deadline: {type: int}}}}}",
+        ],
+    );
     let data = ontology(root);
     assert!(data["field_types"].is_null());
     assert!(data["concepts"]["Retired"].is_null());
@@ -483,7 +549,15 @@ fn reusable_field_type_updates_replace_and_inheritance_checks_removal() {
     let data = ontology(root);
     assert!(data["field_types"]["Positive"]["min"].is_null());
     assert!(data["field_types"]["Positive"]["local"].is_null());
-    success(root, &["ontology", "apply", "--from", "{field_types: {Limited: {extends: Positive, min: 1}}, concepts: {Parent: {}, Child: {extends: Parent}}}"]);
+    success(
+        root,
+        &[
+            "ontology",
+            "apply",
+            "--from",
+            "{field_types: {Limited: {extends: Positive, min: 1}}, concepts: {Parent: {}, Child: {extends: Parent}}}",
+        ],
+    );
     let bytes = std::fs::read(root.join("ontology.yaml")).unwrap();
     assert_eq!(
         run(root, &["ontology", "field-type", "remove", "Positive"])

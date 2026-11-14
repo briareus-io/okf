@@ -1,9 +1,7 @@
-use assert_cmd::Command;
+mod common;
+use common::okf;
 use predicates::prelude::*;
 use std::fs;
-fn okf() -> Command {
-    Command::new(assert_cmd::cargo::cargo_bin!("okf"))
-}
 fn manifest(dir: &std::path::Path, extra: &str) {
     fs::write(
         dir.join("okf-bundle.yaml"),
@@ -55,9 +53,10 @@ fn check_preview_apply_and_verification_preservation() {
         .lines()
         .map(|l| serde_json::from_str(l).unwrap())
         .collect();
-    assert!(rows
-        .iter()
-        .any(|r| r["kind"] == "format-summary" && r["files"] == 1));
+    assert!(
+        rows.iter()
+            .any(|r| r["kind"] == "format-summary" && r["files"] == 1)
+    );
     assert_eq!(rows.last().unwrap()["publication"], "committed");
     let formatted = fs::read_to_string(dir.path().join("a.md")).unwrap();
     assert!(formatted.contains(">-\n"));
@@ -88,7 +87,10 @@ fn ordinary_edits_respect_yaml_configuration_and_do_not_wrap_markdown() {
     let dir = tempfile::tempdir().unwrap();
     let original = "---\ntype: Note\n---\n";
     fs::write(dir.path().join("a.md"), original).unwrap();
-    manifest(dir.path(), "    yaml: {style: legacy, line_width: 20}\n    markdown: {wrap_prose: true, line_width: 20}\n");
+    manifest(
+        dir.path(),
+        "    yaml: {style: legacy, line_width: 20}\n    markdown: {wrap_prose: true, line_width: 20}\n",
+    );
     let note =
         "description=A description: with many ordinary words that could be wrapped across lines";
     let body = "A body with many ordinary words that must not wrap during an ordinary edit.";
@@ -100,7 +102,10 @@ fn ordinary_edits_respect_yaml_configuration_and_do_not_wrap_markdown() {
     let legacy = fs::read_to_string(dir.path().join("a.md")).unwrap();
     assert!(!legacy.contains(">-"));
     assert!(legacy.contains(body));
-    manifest(dir.path(), "    yaml: {style: readable, line_width: 20}\n    markdown: {wrap_prose: true, line_width: 20}\n");
+    manifest(
+        dir.path(),
+        "    yaml: {style: readable, line_width: 20}\n    markdown: {wrap_prose: true, line_width: 20}\n",
+    );
     okf()
         .args(["edit", "a", "--set", "title=Example"])
         .arg(dir.path())

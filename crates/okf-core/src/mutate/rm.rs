@@ -46,8 +46,7 @@ pub fn rm_with_ontology(
     let path = id_to_path(root, &cid)?;
     if !path.exists() {
         return Err(OkfError::Usage(format!(
-            "cannot remove: no concept at {}",
-            cid
+            "cannot remove: no concept at {cid}"
         )));
     }
 

@@ -30,10 +30,12 @@ fn preview_then_apply_preserves_yaml_and_markdown_presentation() {
         .replace("[B]: <b.md#anchor>", "[B]: </a/b.md#anchor>")
         .replace("](picture.png)", "](/a/picture.png)");
     assert_eq!(after, expected);
-    assert!(normalize_relative_links(root.path(), false)
-        .unwrap()
-        .changes
-        .is_empty());
+    assert!(
+        normalize_relative_links(root.path(), false)
+            .unwrap()
+            .changes
+            .is_empty()
+    );
 }
 
 #[test]
@@ -94,10 +96,12 @@ fn linked_image_with_same_destination_is_normalized_in_one_pass() {
         fs::read_to_string(root.path().join("a/a.md")).unwrap(),
         "---\ntype: Note\n---\n[![x](/a/b.md \"image\")](/a/b.md \"outer\")\n"
     );
-    assert!(normalize_relative_links(root.path(), false)
-        .unwrap()
-        .changes
-        .is_empty());
+    assert!(
+        normalize_relative_links(root.path(), false)
+            .unwrap()
+            .changes
+            .is_empty()
+    );
 }
 
 #[test]
@@ -130,8 +134,10 @@ fn links_escaping_through_symlinks_are_never_normalized() {
         "---\ntype: Note\n---\n[b](escape/b.md)\n",
     );
     std::os::unix::fs::symlink(external.path(), root.path().join("a/escape")).unwrap();
-    assert!(normalize_relative_links(root.path(), true)
-        .unwrap()
-        .changes
-        .is_empty());
+    assert!(
+        normalize_relative_links(root.path(), true)
+            .unwrap()
+            .changes
+            .is_empty()
+    );
 }

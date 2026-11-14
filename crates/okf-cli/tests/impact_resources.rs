@@ -30,7 +30,11 @@ fn records(output: &Output) -> Vec<Value> {
 
 fn fixture(root: &Path, prefix: &str) {
     write(root, &format!("{prefix}data.csv"), "name,value\nx,1\n");
-    write(root, &format!("{prefix}notes/direct.md"), "---\ntype: Note\nsources:\n- {resource: data.csv, kind: file}\n- {resource: 'data.csv#L1-2', kind: line-range}\n- {resource: ../data.csv}\n---\n");
+    write(
+        root,
+        &format!("{prefix}notes/direct.md"),
+        "---\ntype: Note\nsources:\n- {resource: data.csv, kind: file}\n- {resource: 'data.csv#L1-2', kind: line-range}\n- {resource: ../data.csv}\n---\n",
+    );
     write(
         root,
         &format!("{prefix}notes/second.md"),
@@ -102,7 +106,11 @@ fn catalog_changed_resources_accept_qualified_seeds_and_preserve_depth() {
         "okf.toml",
         "catalog='catalog.yaml'\ndefault_bundle={id='acme.a'}\n",
     );
-    write(root, "catalog.yaml", "catalog_version: 1\nbundles:\n  acme.a: {location: {type: directory, path: a}}\n  acme.b: {location: {type: directory, path: b}}\n");
+    write(
+        root,
+        "catalog.yaml",
+        "catalog_version: 1\nbundles:\n  acme.a: {location: {type: directory, path: a}}\n  acme.b: {location: {type: directory, path: b}}\n",
+    );
     for (extra, expected) in [
         (vec![], vec![("acme.a", "/notes/direct")]),
         (
@@ -158,14 +166,24 @@ fn catalog_local_missing_declared_references_obey_ontology_severity_and_off() {
         "a/note.md",
         "---\ntype: Note\nrefs: /missing.md\n---\n",
     );
-    write(root, "a/ontology.yaml", "okf_ontology: '0.1'\nconcepts:\n  Note:\n    references:\n      refs: {target: Note, cardinality: 0..n}\n");
+    write(
+        root,
+        "a/ontology.yaml",
+        "okf_ontology: '0.1'\nconcepts:\n  Note:\n    references:\n      refs: {target: Note, cardinality: 0..n}\n",
+    );
     write(
         root,
         "catalog.yaml",
         "catalog_version: 1\nbundles:\n  acme.a: {location: {type: directory, path: a}}\n",
     );
     for severity in ["off", "info", "warn", "error"] {
-        write(root, "okf.toml", &format!("catalog='catalog.yaml'\ndefault_bundle={{id='acme.a'}}\n[bundle_settings.\"acme.a\".lint]\nmissing_title='off'\nmissing_description='off'\norphan='off'\nindex_coverage='off'\nbroken_link='off'\nontology_violation='{severity}'\n"));
+        write(
+            root,
+            "okf.toml",
+            &format!(
+                "catalog='catalog.yaml'\ndefault_bundle={{id='acme.a'}}\n[bundle_settings.\"acme.a\".lint]\nmissing_title='off'\nmissing_description='off'\norphan='off'\nindex_coverage='off'\nbroken_link='off'\nontology_violation='{severity}'\n"
+            ),
+        );
         let output = run(
             root,
             &["lint", "--catalog-scope", "--json", "--fail-on", "warn"],

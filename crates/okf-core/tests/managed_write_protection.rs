@@ -1,6 +1,6 @@
 use okf_core::{
     mutate::{
-        init::{init, InitOptions},
+        init::{InitOptions, init},
         transaction::{self, FileChange},
     },
     ontology,
@@ -24,10 +24,12 @@ fn direct_managed_path_rejects_mutation_before_lock_or_directory_creation() {
         before: Some(original.to_vec()),
         after: Some(b"changed".to_vec()),
     };
-    assert!(transaction::commit(&tree, vec![change])
-        .unwrap_err()
-        .to_string()
-        .contains("read-only"));
+    assert!(
+        transaction::commit(&tree, vec![change])
+            .unwrap_err()
+            .to_string()
+            .contains("read-only")
+    );
     assert_eq!(std::fs::read(tree.join("note.md")).unwrap(), original);
     assert!(!tree.join(".okf-transaction.lock").exists());
     assert!(init(&tree.join("new"), &InitOptions::default()).is_err());

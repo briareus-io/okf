@@ -4,7 +4,7 @@ use crate::{
     model::concept::Concept,
     query::selector::Selector,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use serde_yaml::Value as Yaml;
 use std::collections::BTreeMap;
 #[derive(Debug, Clone)]
@@ -23,7 +23,7 @@ pub struct Condition {
     pub selector: Selector,
     pub operator: Operator,
     pub source: String,
-    alternatives: Vec<Condition>,
+    alternatives: Vec<Self>,
 }
 fn scalar(v: &Value) -> bool {
     matches!(v, Value::String(_) | Value::Bool(_) | Value::Number(_))
@@ -118,9 +118,9 @@ impl Condition {
                 }
             }
             if c == '\\' {
-                escaped = !escaped
+                escaped = !escaped;
             } else {
-                escaped = false
+                escaped = false;
             }
         }
         let (at,n,op)=split.ok_or_else(||OkfError::Usage(format!("invalid facet filter {raw:?}: expected selector =/!= JSON-scalar, selector [not] in [scalars], selector exists/absent, or selector is [not] null")))?;
@@ -180,7 +180,7 @@ impl Condition {
             Operator::IsNotNull => {
                 return Ok(
                     selected.leaves.iter().any(|o| !o.value.is_null()) || selected.empty_lists > 0
-                )
+                );
             }
             _ => {}
         }
@@ -211,7 +211,7 @@ impl Condition {
                     return Err(OkfError::Usage(format!(
                         "filter {} selected object at {}",
                         self.source, occurrence.path
-                    )))
+                    )));
                 }
                 other => {
                     let v = serde_json::to_value(other).unwrap_or(Value::Null);

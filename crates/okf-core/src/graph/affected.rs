@@ -8,7 +8,7 @@
 use crate::bundle::loader::Bundle;
 use crate::graph::build::LinkGraph;
 use crate::model::concept::ConceptId;
-use crate::model::link::{classify, resolve_link, LinkKind};
+use crate::model::link::{LinkKind, classify, resolve_link};
 use serde_yaml::Value;
 use std::collections::{HashMap, HashSet};
 
@@ -41,7 +41,7 @@ pub fn affected(graph: &LinkGraph, changed: &[String], opts: &AffectedOptions) -
 
     // Seeds are visited (so cycles back to them terminate) but never emitted.
     let mut visited: HashSet<String> = seeds.iter().cloned().collect();
-    let mut frontier: Vec<String> = seeds.clone();
+    let mut frontier: Vec<String> = seeds;
     frontier.sort();
     frontier.dedup();
 
@@ -81,6 +81,7 @@ pub fn affected_with_sources(
         crate::bundle::catalog::absolute(&bundle.root).unwrap_or_else(|_| bundle.root.clone())
     });
     let mut resource_dependents = HashMap::<std::path::PathBuf, Vec<ConceptId>>::new();
+    let mut seen_dependents = std::collections::HashSet::<(std::path::PathBuf, String)>::new();
     for concept in &bundle.concepts {
         let Some(Value::Sequence(sources)) = concept.frontmatter.get("sources") else {
             continue;
@@ -97,9 +98,11 @@ pub fn affected_with_sources(
             ) else {
                 continue;
             };
-            let dependents = resource_dependents.entry(path).or_default();
-            if !dependents.contains(&concept.id) {
-                dependents.push(concept.id.clone());
+            if seen_dependents.insert((path.clone(), concept.id.0.clone())) {
+                resource_dependents
+                    .entry(path)
+                    .or_default()
+                    .push(concept.id.clone());
             }
         }
     }
@@ -218,10 +221,22 @@ mod tests {
         let bundle = Bundle {
             root: ".".into(),
             concepts: vec![
-                concept("notes/direct", "type: Note\nsources:\n- {kind: file, resource: data.csv}\n- {kind: line-range, resource: 'data.csv#L1-2'}\n- {resource: '../data.csv'}\n- {resource: 'https://example.com/data.csv'}"),
-                concept("notes/second", "type: Note\nsources:\n- {resource: direct.md}"),
-                concept("notes/third", "type: Note\nsources:\n- {resource: second.md}"),
-                concept("notes/unrelated", "type: Note\nsources:\n- {resource: data.csv}"),
+                concept(
+                    "notes/direct",
+                    "type: Note\nsources:\n- {kind: file, resource: data.csv}\n- {kind: line-range, resource: 'data.csv#L1-2'}\n- {resource: '../data.csv'}\n- {resource: 'https://example.com/data.csv'}",
+                ),
+                concept(
+                    "notes/second",
+                    "type: Note\nsources:\n- {resource: direct.md}",
+                ),
+                concept(
+                    "notes/third",
+                    "type: Note\nsources:\n- {resource: second.md}",
+                ),
+                concept(
+                    "notes/unrelated",
+                    "type: Note\nsources:\n- {resource: data.csv}",
+                ),
             ],
         };
         let graph = build_graph(&bundle, None);
@@ -261,16 +276,18 @@ mod tests {
             )),
             vec!["/notes/direct", "/notes/second", "/notes/third"]
         );
-        assert!(affected_with_sources(
-            &bundle,
-            &graph,
-            &changed,
-            &AffectedOptions {
-                transitive: true,
-                depth: Some(0)
-            }
-        )
-        .is_empty());
+        assert!(
+            affected_with_sources(
+                &bundle,
+                &graph,
+                &changed,
+                &AffectedOptions {
+                    transitive: true,
+                    depth: Some(0)
+                }
+            )
+            .is_empty()
+        );
         assert_eq!(graph.forward, before);
         assert!(graph.inbound("/data.csv").is_empty());
     }

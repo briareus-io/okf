@@ -6,7 +6,7 @@
 //! target) and splice by `\n`-delimited line, which round-trips exactly for both LF and CRLF
 //! bodies. Content is normalized to end with a single trailing newline.
 use crate::error::{OkfError, Result};
-use crate::parse::markdown::{find_section, parse_atx, slugify};
+use crate::parse::markdown::{FenceTracker, find_section, parse_atx, slugify};
 
 /// Replace the entire body with `text` (normalized to a single trailing newline).
 pub fn set_body(text: &str) -> String {
@@ -32,15 +32,10 @@ pub fn set_section(body: &str, heading: &str, text: &str) -> Result<String> {
     let span = find_section(body, heading)
         .ok_or_else(|| OkfError::Usage(format!("edit: heading not found: {heading:?}")))?;
     let lines: Vec<&str> = body.split('\n').collect();
-    let mut out: Vec<String> = lines[..span.content_start]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-    out.push(String::new());
-    out.extend(text.trim_matches('\n').split('\n').map(|s| s.to_string()));
-    out.push(String::new());
-    out.extend(lines[span.end..].iter().map(|s| s.to_string()));
-    Ok(out.join("\n"))
+    let mut out = lines[..span.content_start].join("\n");
+    push_block(&mut out, text);
+    push_lines(&mut out, &lines[span.end..]);
+    Ok(out)
 }
 
 /// Append `text` to the end of the section under `heading`, separated by a blank line. Errors
@@ -55,12 +50,10 @@ pub fn append_section(body: &str, heading: &str, text: &str) -> Result<String> {
     while end > span.content_start && lines[end - 1].trim().is_empty() {
         end -= 1;
     }
-    let mut out: Vec<String> = lines[..end].iter().map(|s| s.to_string()).collect();
-    out.push(String::new());
-    out.extend(text.trim_matches('\n').split('\n').map(|s| s.to_string()));
-    out.push(String::new());
-    out.extend(lines[span.end..].iter().map(|s| s.to_string()));
-    Ok(out.join("\n"))
+    let mut out = lines[..end].join("\n");
+    push_block(&mut out, text);
+    push_lines(&mut out, &lines[span.end..]);
+    Ok(out)
 }
 
 /// Remove the section under `heading` entirely, including its heading line and nested
@@ -69,12 +62,25 @@ pub fn remove_section(body: &str, heading: &str) -> Result<String> {
     let span = find_section(body, heading)
         .ok_or_else(|| OkfError::Usage(format!("edit: heading not found: {heading:?}")))?;
     let lines: Vec<&str> = body.split('\n').collect();
-    let mut out: Vec<String> = lines[..span.heading_line]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-    out.extend(lines[span.end..].iter().map(|s| s.to_string()));
-    Ok(out.join("\n"))
+    Ok([&lines[..span.heading_line], &lines[span.end..]]
+        .concat()
+        .join("\n"))
+}
+
+/// Append `\n`, a blank line's worth of separation, the trimmed block and a trailing blank
+/// line to `out` (the `join("\n")` of `[.., "", block lines.., ""]`).
+fn push_block(out: &mut String, text: &str) {
+    out.push_str("\n\n");
+    out.push_str(text.trim_matches('\n'));
+    out.push('\n');
+}
+
+/// Append `lines` after `out` as further `\n`-joined lines.
+fn push_lines(out: &mut String, lines: &[&str]) {
+    for line in lines {
+        out.push('\n');
+        out.push_str(line);
+    }
 }
 
 /// Rename a section heading while preserving its level, indentation, and content. Errors if the
@@ -90,16 +96,12 @@ pub fn rename_section(body: &str, heading: &str, new_heading: &str) -> Result<St
     let mut lines: Vec<&str> = body.split('\n').collect();
     let old_line = lines[span.heading_line];
     let wanted = slugify(heading);
-    let mut in_fence = false;
+    let mut fence = FenceTracker::default();
     let matches = lines
         .iter()
         .filter(|line| {
-            let trimmed = line.trim_start();
-            if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
-                in_fence = !in_fence;
-                return false;
-            }
-            !in_fence && parse_atx(line).is_some_and(|(_, text)| slugify(text) == wanted)
+            !fence.skip_line(line)
+                && parse_atx(line).is_some_and(|(_, text)| slugify(text) == wanted)
         })
         .count();
     if matches > 1 {
@@ -110,14 +112,10 @@ pub fn rename_section(body: &str, heading: &str, new_heading: &str) -> Result<St
     let indent = old_line.len() - old_line.trim_start().len();
     let prefix = &old_line[..indent];
     let ending = if old_line.ends_with('\r') { "\r" } else { "" };
-    let level = parse_atx(old_line)
-        .map(|(level, _)| level)
-        .unwrap_or(span.level);
-    lines[span.heading_line] = "";
+    let level = parse_atx(old_line).map_or(span.level, |(level, _)| level);
     let replacement = format!("{prefix}{} {new_heading}{ending}", "#".repeat(level));
-    let mut owned: Vec<String> = lines.iter().map(|line| line.to_string()).collect();
-    owned[span.heading_line] = replacement;
-    Ok(owned.join("\n"))
+    lines[span.heading_line] = &replacement;
+    Ok(lines.join("\n"))
 }
 
 /// Ensure a single trailing newline (empty stays empty).

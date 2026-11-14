@@ -1,14 +1,14 @@
 //! Broken-link rule: a concept links (via frontmatter refs or body markdown) at an internal
 //! target that is not a loaded concept. Broken links are spec-legal, so this is advisory only.
 use crate::check::lint::{Finding, RuleContext};
-use crate::model::link::{classify, raw_links, resolve_link, LinkKind};
+use crate::model::link::{LinkKind, classify, raw_links, resolve_link};
 use crate::query::artifact::{ArtifactKind, ArtifactResolver};
 
 /// Rule identifier.
 pub const RULE: &str = "broken-link";
 
 /// One finding per outbound edge whose target does not exist in the bundle.
-pub fn run(ctx: &RuleContext) -> Vec<Finding> {
+pub fn run(ctx: &RuleContext<'_>) -> Vec<Finding> {
     let Some(severity) = ctx.config.broken_link else {
         return Vec::new();
     };

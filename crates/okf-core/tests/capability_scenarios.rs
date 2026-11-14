@@ -2,11 +2,12 @@
 use okf_core::{
     model::frontmatter::Frontmatter,
     ontology::{
-        field_types::{check_concept, ViolationKind},
+        field_types::{ViolationKind, check_concept},
         load::parse_ontology,
     },
     query::selector::Selector,
 };
+use std::fmt::Write as _;
 
 fn findings(schema: &str, metadata: &str) -> Vec<(String, String)> {
     let o = parse_ontology(schema).unwrap();
@@ -113,26 +114,29 @@ fn malformed_constraints_and_named_types_are_configuration_errors() {
 }
 #[test]
 fn derived_enum_values_and_list_item_replace_inherited_declarations() {
-    let schema="okf_ontology: '0.1'\nfield_types:\n  Old: {base: enum, values: [old]}\n  New: {extends: Old, values: [new]}\n  Strings: {base: list, item: string}\n  Numbers: {extends: Strings, item: int}\nconcepts:\n  Note:\n    fields:\n      state: {type: New}\n      items: {type: Numbers}\n";
+    let schema = "okf_ontology: '0.1'\nfield_types:\n  Old: {base: enum, values: [old]}\n  New: {extends: Old, values: [new]}\n  Strings: {base: list, item: string}\n  Numbers: {extends: Strings, item: int}\nconcepts:\n  Note:\n    fields:\n      state: {type: New}\n      items: {type: Numbers}\n";
     assert!(findings(schema, "type: Note\nstate: new\nitems: [2]\n").is_empty());
     let f = findings(schema, "type: Note\nstate: old\nitems: ['2']\n");
     assert!(f.iter().any(|(c, p)| c == "metadata-enum" && p == "state"));
-    assert!(f
-        .iter()
-        .any(|(c, p)| c == "metadata-type" && p == "items[0]"));
+    assert!(
+        f.iter()
+            .any(|(c, p)| c == "metadata-type" && p == "items[0]")
+    );
 }
 #[test]
 fn unknown_constraints_remain_visible_and_root_metadata_stays_open() {
-    let schema="okf_ontology: '0.1'\nconcepts:\n  Note:\n    fields:\n      value: {type: string, x-unimplemented: true}\n";
+    let schema = "okf_ontology: '0.1'\nconcepts:\n  Note:\n    fields:\n      value: {type: string, x-unimplemented: true}\n";
     let f = findings(
         schema,
         "type: Note\nvalue: okay\nunknown: {nested: [1, false]}\n",
     );
     assert_eq!(f, vec![("metadata-unenforced".into(), "value".into())]);
     let ontology = parse_ontology(schema).unwrap();
-    assert!(serde_yaml::to_string(&ontology)
-        .unwrap()
-        .contains("x-unimplemented"));
+    assert!(
+        serde_yaml::to_string(&ontology)
+            .unwrap()
+            .contains("x-unimplemented")
+    );
 }
 #[test]
 fn selector_subset_and_case_sensitive_explicit_traversal() {
@@ -171,20 +175,24 @@ fn selector_subset_and_case_sensitive_explicit_traversal() {
             .len(),
         1
     );
-    assert!(Selector::parse("norms.action.name")
-        .unwrap()
-        .select(&root)
-        .leaves
-        .is_empty());
-    assert!(Selector::parse("Norms[]")
-        .unwrap()
-        .select(&root)
-        .leaves
-        .is_empty());
+    assert!(
+        Selector::parse("norms.action.name")
+            .unwrap()
+            .select(&root)
+            .leaves
+            .is_empty()
+    );
+    assert!(
+        Selector::parse("Norms[]")
+            .unwrap()
+            .select(&root)
+            .leaves
+            .is_empty()
+    );
 }
 #[test]
 fn reference_cardinality_counts_duplicate_and_unresolved_occurrences() {
-    let schema="okf_ontology: '0.1'\nconcepts:\n  Note:\n    references:\n      links: {selector: 'rows[].target', target: Note, cardinality: 0..1}\n";
+    let schema = "okf_ontology: '0.1'\nconcepts:\n  Note:\n    references:\n      links: {selector: 'rows[].target', target: Note, cardinality: 0..1}\n";
     let o = parse_ontology(schema).unwrap();
     let f = Frontmatter::from_map(
         serde_yaml::from_str("type: Note\nrows: [{target: /missing}, {target: /missing}]\n")
@@ -205,8 +213,10 @@ fn invalid_relationship_anchors_and_dynamic_vocabularies_are_rejected() {
         "reference: absent\n        kind: fixed",
         "reference: targets\n        kind: fixed\n        attributes: {detail: unrelated[].detail}",
     ] {
-        let schema=format!("okf_ontology: '0.1'\nconcepts:\n  Note:\n    references:\n      targets: {{selector: 'rows[].target', target: Note, cardinality: 0..n}}\n    relationships:\n      relation:\n        {relationship}\n");
-        assert!(parse_ontology(&schema).is_err(),"{schema}");
+        let schema = format!(
+            "okf_ontology: '0.1'\nconcepts:\n  Note:\n    references:\n      targets: {{selector: 'rows[].target', target: Note, cardinality: 0..n}}\n    relationships:\n      relation:\n        {relationship}\n"
+        );
+        assert!(parse_ontology(&schema).is_err(), "{schema}");
     }
 }
 
@@ -214,10 +224,11 @@ fn invalid_relationship_anchors_and_dynamic_vocabularies_are_rejected() {
 fn recursive_value_depth_limit_reports_incomplete_checks() {
     let mut schema = String::from("okf_ontology: '0.1'\nfield_types:\n");
     for i in 0..66 {
-        schema.push_str(&format!(
-            "  T{i}: {{base: object, fields: {{child: {{type: T{}}}}}}}\n",
+        let _ = writeln!(
+            schema,
+            "  T{i}: {{base: object, fields: {{child: {{type: T{}}}}}}}",
             i + 1
-        ));
+        );
     }
     schema.push_str(
         "  T66: {base: string}\nconcepts:\n  Note:\n    fields:\n      root: {type: T0}\n",
@@ -232,21 +243,27 @@ fn recursive_value_depth_limit_reports_incomplete_checks() {
 
 #[test]
 fn dynamic_kind_widening_and_vocabulary_disagreement_are_configuration_errors() {
-    let base="okf_ontology: '0.1'\nconcepts:\n  Policy: {}\n  Team: {}\n  SecurePolicy: {extends: [Policy]}\n  Note:\n    fields:\n      kind: {type: enum, values: [implements]}\n    references:\n      target: {target: SecurePolicy, cardinality: 0..1}\n    relationships:\n      policy:\n        reference: target\n        kind_selector: kind\n        kinds:\n          implements: {inverse: implemented-by, target: SecurePolicy}\n";
+    let base = "okf_ontology: '0.1'\nconcepts:\n  Policy: {}\n  Team: {}\n  SecurePolicy: {extends: [Policy]}\n  Note:\n    fields:\n      kind: {type: enum, values: [implements]}\n    references:\n      target: {target: SecurePolicy, cardinality: 0..1}\n    relationships:\n      policy:\n        reference: target\n        kind_selector: kind\n        kinds:\n          implements: {inverse: implemented-by, target: SecurePolicy}\n";
     assert!(parse_ontology(base).is_ok(), "{:?}", parse_ontology(base));
-    assert!(parse_ontology(&base.replace(
-        "implements: {inverse: implemented-by, target: SecurePolicy}",
-        "implements: {inverse: implemented-by, target: Policy}"
-    ))
-    .is_err());
-    assert!(parse_ontology(&base.replace(
-        "implements: {inverse: implemented-by, target: SecurePolicy}",
-        "implements: {inverse: implemented-by, target: Team}"
-    ))
-    .is_err());
-    assert!(parse_ontology(&base.replace(
-        "implements: {inverse: implemented-by, target: SecurePolicy}",
-        "other: {inverse: implemented-by, target: SecurePolicy}"
-    ))
-    .is_err());
+    assert!(
+        parse_ontology(&base.replace(
+            "implements: {inverse: implemented-by, target: SecurePolicy}",
+            "implements: {inverse: implemented-by, target: Policy}"
+        ))
+        .is_err()
+    );
+    assert!(
+        parse_ontology(&base.replace(
+            "implements: {inverse: implemented-by, target: SecurePolicy}",
+            "implements: {inverse: implemented-by, target: Team}"
+        ))
+        .is_err()
+    );
+    assert!(
+        parse_ontology(&base.replace(
+            "implements: {inverse: implemented-by, target: SecurePolicy}",
+            "other: {inverse: implemented-by, target: SecurePolicy}"
+        ))
+        .is_err()
+    );
 }

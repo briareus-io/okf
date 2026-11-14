@@ -65,16 +65,18 @@ fn list_reordering_is_not_a_new_violation_but_added_invalid_occurrences_are() {
         true,
     )
     .unwrap();
-    assert!(gate::check_changes(
-        root.path(),
-        &[change(
+    assert!(
+        gate::check_changes(
             root.path(),
-            "a.md",
-            Some("---\ntype: Note\nitems: [wrong, wrong]\n---\n")
-        )],
-        true
-    )
-    .is_err());
+            &[change(
+                root.path(),
+                "a.md",
+                Some("---\ntype: Note\nitems: [wrong, wrong]\n---\n")
+            )],
+            true
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -141,8 +143,10 @@ fn unsupported_constraints_cannot_be_reported_as_a_passing_gate() {
         )],
         true,
     );
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("write-gate-incomplete"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("write-gate-incomplete")
+    );
 }

@@ -3,32 +3,32 @@
 //! Beyond the frontmatter/body split, this module hosts the shared ATX-heading primitives
 //! (`parse_atx`, `slugify`) used by both `markdown-heading` fingerprints and section-aware
 //! `okf edit`, plus [`find_section`], which locates a heading's line span for lossless
-//! splicing.
+//! splicing, and the shared [`FenceTracker`] for fenced code blocks.
 
 /// Split a concept file's leading `---\n … \n---\n` frontmatter block from its body.
 ///
 /// Returns `(Some(frontmatter_text), body)` when a well-formed leading block is present,
 /// otherwise `(None, whole_content)`. The body is preserved verbatim (everything after the
 /// closing delimiter line's newline). Frontmatter text excludes both delimiter lines.
+/// A leading UTF-8 BOM is tolerated when detecting the block; it belongs to neither the
+/// frontmatter nor the body (callers that rewrite the file must carry it over themselves).
 pub fn split_frontmatter(content: &str) -> (Option<String>, String) {
+    let text = content.strip_prefix('\u{feff}').unwrap_or(content);
     // The block must open on the very first line.
-    let first_line_end = content.find('\n').map(|i| i + 1).unwrap_or(content.len());
-    let first_line = &content[..first_line_end];
+    let first_line_end = text.find('\n').map_or(text.len(), |i| i + 1);
+    let first_line = &text[..first_line_end];
     if !is_delimiter(first_line) {
         return (None, content.to_string());
     }
 
     let open_end = first_line_end;
     let mut pos = open_end;
-    while pos < content.len() {
-        let nl = content[pos..]
-            .find('\n')
-            .map(|i| pos + i + 1)
-            .unwrap_or(content.len());
-        let line = &content[pos..nl];
+    while pos < text.len() {
+        let nl = text[pos..].find('\n').map_or(text.len(), |i| pos + i + 1);
+        let line = &text[pos..nl];
         if is_delimiter(line) {
-            let fm = content[open_end..pos].to_string();
-            let body = content[nl..].to_string();
+            let fm = text[open_end..pos].to_string();
+            let body = text[nl..].to_string();
             return (Some(fm), body);
         }
         pos = nl;
@@ -57,31 +57,74 @@ pub(crate) struct SectionSpan {
     pub end: usize,
 }
 
+/// Tracks fenced code blocks line by line, per CommonMark: an opener is 3+ backticks or
+/// tildes (indented at most 3 spaces; a backtick opener's info string has no backticks), and
+/// the closer must use the same character, be at least as long, and carry no info string.
+#[derive(Debug, Default)]
+pub(crate) struct FenceTracker {
+    open: Option<(u8, usize)>,
+}
+
+impl FenceTracker {
+    /// Feed the next line. Returns `true` when the line is a fence delimiter or lies inside
+    /// a fenced block (i.e. it must not be interpreted as Markdown structure).
+    pub(crate) fn skip_line(&mut self, line: &str) -> bool {
+        let line = line.strip_suffix('\r').unwrap_or(line);
+        let indent = line.len() - line.trim_start_matches(' ').len();
+        let rest = &line[indent..];
+        let run = fence_run(rest);
+        match self.open {
+            Some((ch, len)) => {
+                if indent <= 3
+                    && run.is_some_and(|(c, n)| c == ch && n >= len)
+                    && rest[run.map_or(0, |(_, n)| n)..].trim().is_empty()
+                {
+                    self.open = None;
+                }
+                true
+            }
+            None => match run {
+                Some((ch, n)) if indent <= 3 && !(ch == b'`' && rest[n..].contains('`')) => {
+                    self.open = Some((ch, n));
+                    true
+                }
+                _ => false,
+            },
+        }
+    }
+}
+
+/// Leading run of 3+ identical fence characters, as `(char, length)`.
+fn fence_run(text: &str) -> Option<(u8, usize)> {
+    let first = *text.as_bytes().first()?;
+    if first != b'`' && first != b'~' {
+        return None;
+    }
+    let len = text.bytes().take_while(|&b| b == first).count();
+    (len >= 3).then_some((first, len))
+}
+
 /// Locate the first heading whose slug equals `slugify(heading)`, honoring fenced code blocks
 /// (ATX headings inside ```` ``` ````/`~~~` fences are ignored). Returns line indices into
 /// `body.split('\n')`; `None` if no heading matches. Nested subsections are part of the span.
 pub(crate) fn find_section(body: &str, heading: &str) -> Option<SectionSpan> {
     let want = slugify(heading);
     let lines: Vec<&str> = body.split('\n').collect();
-    let mut in_fence = false;
-    for i in 0..lines.len() {
-        if is_fence(lines[i]) {
-            in_fence = !in_fence;
+    let mut fence = FenceTracker::default();
+    for (i, line) in lines.iter().enumerate() {
+        if fence.skip_line(line) {
             continue;
         }
-        if in_fence {
-            continue;
-        }
-        if let Some((level, htext)) = parse_atx(lines[i]) {
-            if slugify(htext) == want {
-                let end = section_end(&lines, i + 1, level);
-                return Some(SectionSpan {
-                    level,
-                    heading_line: i,
-                    content_start: i + 1,
-                    end,
-                });
-            }
+        if let Some((level, htext)) = parse_atx(line)
+            && slugify(htext) == want
+        {
+            let end = section_end(&lines, i + 1, level);
+            return Some(SectionSpan {
+                level,
+                heading_line: i,
+                content_start: i + 1,
+                end,
+            });
         }
     }
     None
@@ -90,28 +133,18 @@ pub(crate) fn find_section(body: &str, heading: &str) -> Option<SectionSpan> {
 /// The exclusive end of a section that starts after `from`: the first equal-or-shallower ATX
 /// heading (fences honored), or `lines.len()`.
 fn section_end(lines: &[&str], from: usize, level: usize) -> usize {
-    let mut in_fence = false;
+    let mut fence = FenceTracker::default();
     for (j, line) in lines.iter().enumerate().skip(from) {
-        if is_fence(line) {
-            in_fence = !in_fence;
+        if fence.skip_line(line) {
             continue;
         }
-        if in_fence {
-            continue;
-        }
-        if let Some((lvl, _)) = parse_atx(line) {
-            if lvl <= level {
-                return j;
-            }
+        if let Some((lvl, _)) = parse_atx(line)
+            && lvl <= level
+        {
+            return j;
         }
     }
     lines.len()
-}
-
-/// True for a code-fence line (```` ``` ```` or `~~~`, possibly indented).
-fn is_fence(line: &str) -> bool {
-    let t = line.trim_start();
-    t.starts_with("```") || t.starts_with("~~~")
 }
 
 /// Parse an ATX heading line, returning `(level, text)`. Requires 1–6 leading `#` followed by
@@ -218,5 +251,33 @@ mod tests {
     fn slugify_matches_github_style() {
         assert_eq!(slugify("Reimbursement Rates"), "reimbursement-rates");
         assert_eq!(slugify("Foo: Bar (baz)!"), "foo-bar-baz");
+    }
+}
+
+#[cfg(test)]
+mod fence_and_bom_tests {
+    use super::*;
+
+    #[test]
+    fn bom_before_frontmatter_is_tolerated() {
+        let (fm, body) = split_frontmatter("\u{feff}---\ntype: T\n---\nhi\n");
+        assert_eq!(fm.as_deref(), Some("type: T\n"));
+        assert_eq!(body, "hi\n");
+        let (fm, body) = split_frontmatter("\u{feff}plain\n");
+        assert!(fm.is_none());
+        assert_eq!(body, "\u{feff}plain\n");
+    }
+
+    #[test]
+    fn fence_closer_must_match_char_and_length() {
+        let doc = "## A\n\n````\n```\n## fake\n````\n\n## Real\n";
+        assert!(find_section(doc, "fake").is_none());
+        assert!(find_section(doc, "Real").is_some());
+        let doc = "~~~\n```\n## fake\n~~~\n## Real\n";
+        assert!(find_section(doc, "fake").is_none());
+        assert!(find_section(doc, "Real").is_some());
+        // A closer with an info string does not close.
+        let doc = "```\n``` x\n## fake\n```\n## Real\n";
+        assert!(find_section(doc, "fake").is_none());
     }
 }

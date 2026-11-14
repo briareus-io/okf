@@ -10,8 +10,7 @@ use okf_core::error::{OkfError, Result};
 use okf_core::model::standard::parse_timestamp;
 use okf_core::ports::clock::{Clock, SystemClock};
 use okf_core::query::artifact::{
-    fetch_artifact, list_artifacts, put_artifact, resolve_artifact, show_artifact, ArtifactKind,
-    ArtifactResolver,
+    ArtifactKind, ArtifactResolver, fetch_artifact, list_artifacts, put_artifact,
 };
 use okf_core::query::computation::inspect_concept;
 use serde_json::json;
@@ -34,7 +33,7 @@ pub fn run_list(args: &ArtifactListArgs, json_output: bool) -> Result<i32> {
             }))?;
         }
     } else if entries.is_empty() {
-        println!("(no artifacts)");
+        output::print_text_line(format_args!("(no artifacts)"))?;
     } else {
         for entry in entries {
             output::print_text_line(format_args!(
@@ -71,15 +70,16 @@ fn check_list_bundle_argument(bundle: Option<&str>) -> Result<()> {
         .canonicalize()
         .ok()
         .or_else(|| default_root.join(bundle).canonicalize().ok());
-    if let Some(candidate) = candidate {
-        if candidate != default_root {
-            if let Ok(directory) = candidate.strip_prefix(&default_root) {
-                return Err(OkfError::Usage(format!(
-                    "artifact list positional argument selects a bundle root; {} is inside bundle {}; use --directory {}",
-                    bundle, default_root.display(), directory.display()
-                )));
-            }
-        }
+    if let Some(candidate) = candidate
+        && candidate != default_root
+        && let Ok(directory) = candidate.strip_prefix(&default_root)
+    {
+        return Err(OkfError::Usage(format!(
+            "artifact list positional argument selects a bundle root; {} is inside bundle {}; use --directory {}",
+            bundle,
+            default_root.display(),
+            directory.display()
+        )));
     }
     Ok(())
 }
@@ -110,8 +110,7 @@ pub fn run_resolve(args: &ArtifactResolveArgs, json_output: bool) -> Result<i32>
             result
                 .path
                 .as_ref()
-                .map(|p| p.display().to_string())
-                .unwrap_or_else(|| result.resource.clone()),
+                .map_or_else(|| result.resource.clone(), |p| p.display().to_string()),
             result.message.unwrap_or_default()
         ))?;
     }
@@ -147,7 +146,7 @@ pub fn run_show(args: &ArtifactShowArgs, json_output: bool) -> Result<i32> {
                 .and_then(|path| {
                     path.strip_prefix(&canonical_root)
                         .ok()
-                        .map(|rel| rel.to_path_buf())
+                        .map(std::path::Path::to_path_buf)
                 })
                 .map(|rel| format!("; did you mean {}?", rel.display()))
                 .unwrap_or_default()
@@ -156,7 +155,9 @@ pub fn run_show(args: &ArtifactShowArgs, json_output: bool) -> Result<i32> {
         };
         return Err(OkfError::Usage(format!(
             "artifact not found: {}; paths are resolved relative to the bundle root {} (or the declaring concept with --from){}",
-            args.resource, canonical_root.display(), suggestion
+            args.resource,
+            canonical_root.display(),
+            suggestion
         )));
     }
     let lines = args.lines.as_deref().map(parse_lines).transpose()?;
@@ -189,7 +190,7 @@ pub fn run_put(args: &ArtifactPutArgs, json_output: bool) -> Result<i32> {
         .strip_prefix('@')
         .filter(|path| !path.is_empty())
         .ok_or_else(|| OkfError::Usage("artifact put input must be @file".to_string()))?;
-    let bytes = std::fs::read(input).map_err(|e| OkfError::Io(format!("{input}: {e}")))?;
+    let bytes = std::fs::read(input).map_err(|e| OkfError::io_with(format!("{input}: {e}"), e))?;
     let written = put_artifact(&root, &args.resource, &bytes, args.replace)?;
     if json_output {
         output::print_line(&json!({

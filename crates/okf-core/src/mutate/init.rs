@@ -63,7 +63,8 @@ pub fn init(root: &Path, opts: &InitOptions) -> Result<InitResult> {
             root.display()
         )));
     }
-    std::fs::create_dir_all(root).map_err(|e| OkfError::Io(format!("{}: {e}", root.display())))?;
+    std::fs::create_dir_all(root)
+        .map_err(|e| OkfError::io_with(format!("{}: {e}", root.display()), e))?;
     let guard = super::transaction::writer_lock(root)?;
     let mut changes = Vec::new();
 

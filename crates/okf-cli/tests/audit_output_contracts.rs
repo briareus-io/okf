@@ -56,9 +56,11 @@ fn schema_advertises_profile_and_migration_payloads_and_effects() {
         temp.path(),
         &["validate", "knowledge", "--profile", "bundle", "--json"],
     );
-    assert!(validation
-        .iter()
-        .any(|row| row["kind"] == "validation-profile"));
+    assert!(
+        validation
+            .iter()
+            .any(|row| row["kind"] == "validation-profile")
+    );
     let plan = run(
         temp.path(),
         &[
@@ -103,12 +105,14 @@ fn schema_advertises_profile_and_migration_payloads_and_effects() {
 fn catalog_lint_does_not_invent_concept_edges_for_repository_markdown_sources() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
-    assert!(Command::new("git")
-        .args(["init", "-q"])
-        .current_dir(root)
-        .status()
-        .unwrap()
-        .success());
+    assert!(
+        Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(root)
+            .status()
+            .unwrap()
+            .success()
+    );
     std::fs::create_dir(root.join("knowledge")).unwrap();
     std::fs::create_dir(root.join("source-docs")).unwrap();
     std::fs::write(

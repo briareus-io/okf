@@ -455,12 +455,16 @@ fn historical_query_uses_committed_concepts_and_interpretation_settings() {
         .unwrap();
     assert_eq!(summary["scan_limit"], 2, "{summary}");
     assert_eq!(summary["examined_documents"], 2);
-    assert!(summary["scope"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .all(|member| member["version"].as_str().unwrap().starts_with("git:")));
-    assert!(!rows
-        .iter()
-        .any(|row| row["title"] == "Changed after commit"));
+    assert!(
+        summary["scope"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|member| member["version"].as_str().unwrap().starts_with("git:"))
+    );
+    assert!(
+        !rows
+            .iter()
+            .any(|row| row["title"] == "Changed after commit")
+    );
 }

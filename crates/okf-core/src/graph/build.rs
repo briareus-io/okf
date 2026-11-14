@@ -26,12 +26,12 @@ pub struct LinkGraph {
 impl LinkGraph {
     /// Outbound targets of `id` (empty if `id` is unknown or a leaf).
     pub fn outbound(&self, id: &str) -> &[ConceptId] {
-        self.forward.get(id).map(Vec::as_slice).unwrap_or(&[])
+        self.forward.get(id).map_or(&[], Vec::as_slice)
     }
 
     /// Concepts linking to `id` (empty if nothing points at it).
     pub fn inbound(&self, id: &str) -> &[ConceptId] {
-        self.reverse.get(id).map(Vec::as_slice).unwrap_or(&[])
+        self.reverse.get(id).map_or(&[], Vec::as_slice)
     }
 
     /// Whether `id` is a loaded concept (vs. a broken-link target).

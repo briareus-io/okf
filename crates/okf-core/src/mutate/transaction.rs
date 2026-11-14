@@ -60,8 +60,9 @@ pub fn check_ontology_snapshot(
     };
     let (settings, current) = crate::bundle::settings::load_for(root)?;
     if settings.ontology_path.is_some() && current.as_ref() != Some(supplied) {
-        return Err(usage(
-            "baseline-conflict: ontology changed during write preparation; preview again",
+        return Err(OkfError::classified(
+            crate::error::FailureReason::BaselineConflict,
+            "ontology changed during write preparation; preview again",
         ));
     }
     Ok(())
@@ -137,6 +138,7 @@ impl SavedPermissions {
 // to lock a different inode while an earlier holder still owns the old one.
 /// Unlock explicitly before closing the descriptor: another thread can fork while a
 /// lock is held, temporarily retaining the descriptor until that child execs.
+#[must_use = "the lock is released when the guard is dropped"]
 #[derive(Debug)]
 pub struct WriterGuard {
     file: std::fs::File,
@@ -151,6 +153,7 @@ impl Drop for WriterGuard {
 /// A cooperative read barrier. Readers share the writer's stable lock inode and
 /// hold this guard for the whole read, not merely while checking journal state.
 /// Arbitrary filesystem writers do not participate in this protocol.
+#[must_use = "the lock is released when the guard is dropped"]
 #[derive(Debug)]
 pub struct ReaderGuard {
     file: std::fs::File,
@@ -164,6 +167,7 @@ impl Drop for ReaderGuard {
 
 /// Acquire all working-tree read barriers in canonical path order. A failed
 /// acquisition drops earlier guards, so callers never retain a partial scope.
+#[must_use = "the locks are released when the guards are dropped"]
 pub fn reader_locks(roots: &[PathBuf]) -> Result<Vec<ReaderGuard>> {
     let roots = roots
         .iter()
@@ -239,6 +243,7 @@ fn ensure_read_idle(root: &Path) -> Result<()> {
     Ok(())
 }
 
+#[must_use = "the lock is released when the guard is dropped"]
 fn acquire_lock(root: &Path) -> Result<WriterGuard> {
     crate::bundle::remote::ensure_writable(root)?;
     let path = root.join(LOCK);
@@ -352,10 +357,10 @@ fn target_path(root: &Path, change: &FileChange, external: Option<&Path>) -> Res
         if parent.canonicalize()? != parent || external.file_name().is_none() {
             return Err(usage("external ontology journal target is not canonical"));
         }
-        if let Ok(meta) = std::fs::symlink_metadata(external) {
-            if !meta.is_file() || meta.file_type().is_symlink() {
-                return Err(usage("external ontology target must be a regular file"));
-            }
+        if let Ok(meta) = std::fs::symlink_metadata(external)
+            && (!meta.is_file() || meta.file_type().is_symlink())
+        {
+            return Err(usage("external ontology target must be a regular file"));
         }
         Ok(external.to_path_buf())
     } else {
@@ -366,45 +371,24 @@ fn target_path(root: &Path, change: &FileChange, external: Option<&Path>) -> Res
 fn publish(
     root: &Path,
     change: &FileChange,
-    bytes: &Option<Vec<u8>>,
+    bytes: Option<&[u8]>,
     external: Option<&Path>,
 ) -> Result<()> {
     let path = target_path(root, change, external)?;
     crate::bundle::remote::ensure_writable(&path)?;
     if let Some(bytes) = bytes {
-        let parent = path.parent().unwrap();
-        std::fs::create_dir_all(parent)?;
-        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let (temp, mut file) = loop {
-            let seq = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            let temp = parent.join(format!(".okf-publish-{}-{seq}", std::process::id()));
-            match std::fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&temp)
-            {
-                Ok(f) => break (temp, f),
-                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
-                Err(e) => return Err(e.into()),
-            }
-        };
-        let result = (|| -> Result<()> {
-            if let Ok(meta) = std::fs::metadata(&path) {
-                file.set_permissions(meta.permissions())?;
-            }
-            file.write_all(bytes)?;
-            file.sync_all()?;
-            drop(file);
-            std::fs::rename(&temp, &path)?;
-            sync_dir(parent)
-        })();
-        let _ = std::fs::remove_file(&temp);
-        result?;
-    } else if path.exists() {
-        std::fs::remove_file(&path)?;
-        sync_dir(path.parent().unwrap())?;
+        super::edit::durable_write(&path, bytes, super::edit::WriteMode::Replace)
+    } else {
+        match std::fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => return Err(e.into()),
+        }
+        let parent = path
+            .parent()
+            .ok_or_else(|| OkfError::Internal("publish target has no parent".into()))?;
+        sync_dir(parent)
     }
-    Ok(())
 }
 
 pub fn ensure_idle(root: &Path) -> Result<()> {
@@ -419,6 +403,7 @@ pub fn ensure_idle(root: &Path) -> Result<()> {
 /// Hold across an ordinary mutation's complete read/modify/write operation.
 /// Publish with `commit_locked` while holding this guard. An absent root is an error;
 /// bundle initialization creates its root before acquiring this guard.
+#[must_use = "the lock is released when the guard is dropped"]
 pub fn writer_lock(root: &Path) -> Result<WriterGuard> {
     let lock = acquire_lock(root)?;
     ensure_idle(root)?;
@@ -502,6 +487,10 @@ fn commit_with_hook(
     commit_under_lock(root, changes, None, after_publish)
 }
 
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "changes are consumed by the filter below"
+)]
 fn commit_under_lock(
     root: &Path,
     changes: Vec<FileChange>,
@@ -605,7 +594,7 @@ fn commit_under_lock(
                     c.path.display()
                 )));
             }
-            publish(root, c, &c.after, external_target.as_deref())?;
+            publish(root, c, c.after.as_deref(), external_target.as_deref())?;
             after_publish(index)?;
         }
         // Persist directory entries for newly created ancestor chains before commit.
@@ -622,7 +611,7 @@ fn commit_under_lock(
                 set_evidence(PublicationEvidence::RecoveryRequired {
                     commit_reached: false,
                 });
-                Err(OkfError::Io(format!(
+                Err(OkfError::io(format!(
                     "{error}; rollback requires attention: {recovery}; journal retained"
                 )))
             }
@@ -773,11 +762,11 @@ fn recover_locked(root: &Path) -> Result<Vec<PathBuf>> {
         checked_path(root, &directory.join("_okf_directory_check"))?;
     }
     for c in changes.iter().rev() {
-        publish(root, c, &c.before, external_target.as_deref())?;
-        if c.before.is_some() {
-            if let Some(saved) = permissions.get(&c.path) {
-                saved.restore(&target_path(root, c, external_target.as_deref())?)?;
-            }
+        publish(root, c, c.before.as_deref(), external_target.as_deref())?;
+        if c.before.is_some()
+            && let Some(saved) = permissions.get(&c.path)
+        {
+            saved.restore(&target_path(root, c, external_target.as_deref())?)?;
         }
     }
     // Only remove directories created by this transaction, and only while empty.
@@ -837,7 +826,7 @@ mod tests {
             root.path(),
             vec![change("ontology.yaml", Some("old\n"), Some("new\n"))],
             Some(target.clone()),
-            &mut |_| Err(OkfError::Io("injected external failure".into())),
+            &mut |_| Err(OkfError::io("injected external failure")),
         )
         .unwrap_err();
         assert!(error.to_string().contains("injected external failure"));
@@ -881,10 +870,12 @@ mod tests {
         )
         .unwrap();
         fs::write(&target, "external editor").unwrap();
-        assert!(recover(root.path())
-            .unwrap_err()
-            .to_string()
-            .contains("intervening edit"));
+        assert!(
+            recover(root.path())
+                .unwrap_err()
+                .to_string()
+                .contains("intervening edit")
+        );
         assert!(journal.exists());
         assert_eq!(fs::read_to_string(&target).unwrap(), "external editor");
         fs::write(&target, "after").unwrap();
@@ -919,7 +910,7 @@ mod tests {
             &mut |index| {
                 published += 1;
                 if index == 1 {
-                    Err(OkfError::Io("injected publication failure".into()))
+                    Err(OkfError::io("injected publication failure"))
                 } else {
                     Ok(())
                 }
@@ -955,10 +946,12 @@ mod tests {
             root.path(),
             vec![change("new.txt", None, Some("new"))],
             &mut |_| {
-                assert!(recover(root.path())
-                    .unwrap_err()
-                    .to_string()
-                    .contains("active"));
+                assert!(
+                    recover(root.path())
+                        .unwrap_err()
+                        .to_string()
+                        .contains("active")
+                );
                 assert!(
                     commit(root.path(), vec![change("other.txt", None, Some("other"))]).is_err()
                 );
@@ -1046,10 +1039,12 @@ mod tests {
     fn ordinary_writer_guard_refuses_pending_journal_and_absent_root() {
         let root = tempfile::tempdir().unwrap();
         fs::create_dir(root.path().join(JOURNAL)).unwrap();
-        assert!(writer_lock(root.path())
-            .unwrap_err()
-            .to_string()
-            .contains("pending transaction"));
+        assert!(
+            writer_lock(root.path())
+                .unwrap_err()
+                .to_string()
+                .contains("pending transaction")
+        );
         recover(root.path()).unwrap();
         assert!(writer_lock(root.path()).is_ok());
         let absent = root.path().join("absent");
@@ -1081,19 +1076,23 @@ mod tests {
                 change("b.txt", None, Some("b")),
             ],
             &mut |_| {
-                assert!(reader_locks(&roots)
-                    .unwrap_err()
-                    .to_string()
-                    .contains("transaction is still active"));
+                assert!(
+                    reader_locks(&roots)
+                        .unwrap_err()
+                        .to_string()
+                        .contains("transaction is still active")
+                );
                 Ok(())
             },
         )
         .unwrap();
         fs::create_dir(root.path().join(JOURNAL)).unwrap();
-        assert!(reader_locks(&roots)
-            .unwrap_err()
-            .to_string()
-            .contains("pending transaction"));
+        assert!(
+            reader_locks(&roots)
+                .unwrap_err()
+                .to_string()
+                .contains("pending transaction")
+        );
         recover(root.path()).unwrap();
         assert!(reader_locks(&roots).is_ok());
     }
@@ -1134,11 +1133,13 @@ mod tests {
     fn stale_before_image_never_creates_a_journal() {
         let root = tempfile::tempdir().unwrap();
         fs::write(root.path().join("a.txt"), "current").unwrap();
-        assert!(commit(
-            root.path(),
-            vec![change("a.txt", Some("stale"), Some("new"))]
-        )
-        .is_err());
+        assert!(
+            commit(
+                root.path(),
+                vec![change("a.txt", Some("stale"), Some("new"))]
+            )
+            .is_err()
+        );
         assert_eq!(
             fs::read_to_string(root.path().join("a.txt")).unwrap(),
             "current"

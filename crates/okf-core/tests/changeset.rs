@@ -178,9 +178,11 @@ fn enabled_gate_checks_final_changeset_state_after_intermediate_invalid_creation
     .unwrap();
     assert!(!root.path().join("new.md").exists());
     changeset::apply(root.path(), plan, None).unwrap();
-    assert!(fs::read_to_string(root.path().join("new.md"))
-        .unwrap()
-        .contains("type: Note"));
+    assert!(
+        fs::read_to_string(root.path().join("new.md"))
+            .unwrap()
+            .contains("type: Note")
+    );
 }
 
 #[test]
@@ -221,12 +223,16 @@ fn split_retargets_selected_records_and_commits_only_after_preview() {
     let digest = plan.base_digest.clone();
     changeset::apply(root.path(), plan, Some(&digest)).unwrap();
     assert!(!root.path().join("old.md").exists());
-    assert!(fs::read_to_string(root.path().join("a.md"))
-        .unwrap()
-        .contains("(left.md)"));
-    assert!(fs::read_to_string(root.path().join("b.md"))
-        .unwrap()
-        .contains("(right.md)"));
+    assert!(
+        fs::read_to_string(root.path().join("a.md"))
+            .unwrap()
+            .contains("(left.md)")
+    );
+    assert!(
+        fs::read_to_string(root.path().join("b.md"))
+            .unwrap()
+            .contains("(right.md)")
+    );
     assert!(!root.path().join(transaction::JOURNAL).exists());
 }
 
@@ -396,18 +402,22 @@ fn retarget_can_select_structural_navigation_and_rejects_misspelled_referrers() 
     )
     .unwrap();
     changeset::apply(root.path(), plan, None).unwrap();
-    assert!(fs::read_to_string(root.path().join("index.md"))
-        .unwrap()
-        .contains("(new.md)"));
-    assert!(changeset::prepare(
-        root.path(),
-        &set(vec![Operation::Retarget {
-            from: "old".into(),
-            to: "new".into(),
-            within: Some(vec!["typo".into()])
-        }])
-    )
-    .is_err());
+    assert!(
+        fs::read_to_string(root.path().join("index.md"))
+            .unwrap()
+            .contains("(new.md)")
+    );
+    assert!(
+        changeset::prepare(
+            root.path(),
+            &set(vec![Operation::Retarget {
+                from: "old".into(),
+                to: "new".into(),
+                within: Some(vec!["typo".into()])
+            }])
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -415,26 +425,30 @@ fn opaque_image_cleanup_and_bare_declared_links_are_guarded() {
     let root = tempfile::tempdir().unwrap();
     fs::write(root.path().join("image.png"), "image bytes").unwrap();
     fs::write(root.path().join("note.md"), note("![image](image.png)\n")).unwrap();
-    assert!(changeset::prepare(
-        root.path(),
-        &set(vec![Operation::Remove {
-            path: "image.png".into()
-        }])
-    )
-    .is_err());
+    assert!(
+        changeset::prepare(
+            root.path(),
+            &set(vec![Operation::Remove {
+                path: "image.png".into()
+            }])
+        )
+        .is_err()
+    );
     fs::write(root.path().join("ontology.yaml"), "okf_ontology: '0.1'\nconcepts:\n  Note:\n    references:\n      depends_on: {target: Note, cardinality: 0..1}\n").unwrap();
     fs::write(
         root.path().join("ref.md"),
         "---\ntype: Note\ndepends_on: note\n---\n",
     )
     .unwrap();
-    assert!(changeset::prepare(
-        root.path(),
-        &set(vec![Operation::Remove {
-            path: "note.md".into()
-        }])
-    )
-    .is_err());
+    assert!(
+        changeset::prepare(
+            root.path(),
+            &set(vec![Operation::Remove {
+                path: "note.md".into()
+            }])
+        )
+        .is_err()
+    );
     assert!(okf_core::mutate::rm::rm(root.path(), "note", false).is_err());
 }
 
@@ -464,9 +478,11 @@ fn final_state_validation_allows_transient_dangling_links_inside_a_plan() {
     assert!(root.path().join("old.md").exists());
     changeset::apply(root.path(), plan, None).unwrap();
     assert!(!root.path().join("old.md").exists());
-    assert!(fs::read_to_string(root.path().join("ref.md"))
-        .unwrap()
-        .contains("(new.md)"));
+    assert!(
+        fs::read_to_string(root.path().join("ref.md"))
+            .unwrap()
+            .contains("(new.md)")
+    );
 }
 
 #[test]

@@ -78,14 +78,18 @@ fn edit_reports_verification_invalidation_but_preserves_it_for_noops_and_preview
         &["edit", "note", "--set", "title=Changed", "--dry-run"],
     );
     success(&output);
-    assert!(String::from_utf8_lossy(&output.stdout)
-        .contains("verification: would remove 1 prior verification record(s)"));
+    assert!(
+        String::from_utf8_lossy(&output.stdout)
+            .contains("verification: would remove 1 prior verification record(s)")
+    );
     assert_eq!(std::fs::read(&path).unwrap(), preview_before);
 
     let output = cli(dir.path(), &["edit", "note", "--set", "title=Changed"]);
     success(&output);
-    assert!(String::from_utf8_lossy(&output.stdout)
-        .contains("verification: removed 1 prior verification record(s)"));
+    assert!(
+        String::from_utf8_lossy(&output.stdout)
+            .contains("verification: removed 1 prior verification record(s)")
+    );
     assert!(read_fm(dir.path(), "note.md")["verified"].is_null());
 
     std::fs::write(&path, before).unwrap();
@@ -103,11 +107,13 @@ fn edit_reports_verification_invalidation_but_preserves_it_for_noops_and_preview
         .iter()
         .find(|record| record["kind"] == "change")
         .unwrap();
-    assert!(change["changes"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|change| change["op"] == "invalidate-verification" && change["removed"] == 1));
+    assert!(
+        change["changes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|change| change["op"] == "invalidate-verification" && change["removed"] == 1)
+    );
 }
 
 #[test]
@@ -130,15 +136,29 @@ fn source_replacement_rejects_overlap_and_accepts_guarded_patch() {
         assert!(String::from_utf8_lossy(&output.stderr).contains("both added"));
         assert_eq!(std::fs::read_to_string(&path).unwrap(), before);
     }
-    success(&cli(dir.path(), &["edit", "note", "--patch",
-        "[{op: test, path: /sources/0/resource, value: old.py}, {op: replace, path: /sources/0/resource, value: new.py}]"]));
+    success(&cli(
+        dir.path(),
+        &[
+            "edit",
+            "note",
+            "--patch",
+            "[{op: test, path: /sources/0/resource, value: old.py}, {op: replace, path: /sources/0/resource, value: new.py}]",
+        ],
+    ));
     let fm = read_fm(dir.path(), "note.md");
     assert_eq!(fm["sources"][0]["resource"].as_str(), Some("new.py"));
     assert_eq!(fm["sources"][0]["id"].as_str(), Some("stable"));
     assert_eq!(fm["sources"][0]["custom"].as_str(), Some("preserve-me"));
     let changed = std::fs::read(&path).unwrap();
-    let output = cli(dir.path(), &["edit", "note", "--patch",
-        "[{op: test, path: /sources/0/resource, value: old.py}, {op: replace, path: /sources/0/resource, value: wrong.py}]"]);
+    let output = cli(
+        dir.path(),
+        &[
+            "edit",
+            "note",
+            "--patch",
+            "[{op: test, path: /sources/0/resource, value: old.py}, {op: replace, path: /sources/0/resource, value: wrong.py}]",
+        ],
+    );
     assert!(!output.status.success());
     assert_eq!(std::fs::read(&path).unwrap(), changed);
 }
@@ -205,7 +225,15 @@ fn edit_object_paths_delete_siblings_and_support_literal_equals_keys() {
 #[test]
 fn inline_block_patch_and_file_patch_apply_to_frontmatter() {
     let dir = setup();
-    success(&cli(dir.path(), &["edit", "onboarding", "--patch", "- op: replace\n  path: /deadline/within\n  value: 72\n- op: add\n  path: /norms\n  value: []\n"]));
+    success(&cli(
+        dir.path(),
+        &[
+            "edit",
+            "onboarding",
+            "--patch",
+            "- op: replace\n  path: /deadline/within\n  value: 72\n- op: add\n  path: /norms\n  value: []\n",
+        ],
+    ));
     std::fs::write(dir.path().join("patch.yaml"), "- op: add\n  path: /norms/-\n  value: {bearer: /teams/platform.md, action: review}\n- op: test\n  path: /deadline/within\n  value: 72.0\n").unwrap();
     success(&cli(
         dir.path(),
@@ -313,8 +341,15 @@ fn malformed_or_unsupported_yaml_and_patch_errors_leave_file_unchanged() {
         "[{op: remove, path: /type}]",
         "[{op: replace, path: /deadline/within, value: 72}, {op: remove, path: /missing}]",
     ] {
-        assert!(!cli(dir.path(), &["edit", "onboarding", "--patch", operations]).status.success());
-        assert_eq!(std::fs::read(dir.path().join("onboarding.md")).unwrap(), before);
+        assert!(
+            !cli(dir.path(), &["edit", "onboarding", "--patch", operations])
+                .status
+                .success()
+        );
+        assert_eq!(
+            std::fs::read(dir.path().join("onboarding.md")).unwrap(),
+            before
+        );
     }
 }
 

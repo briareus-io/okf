@@ -11,7 +11,7 @@ use crate::model::standard::{parse_timestamp, valid_actor};
 
 pub const RULE: &str = "okf-v02";
 
-pub fn run(ctx: &RuleContext) -> Vec<Finding> {
+pub fn run(ctx: &RuleContext<'_>) -> Vec<Finding> {
     let Some(severity) = ctx.config.spec_v02 else {
         return Vec::new();
     };
@@ -26,7 +26,7 @@ pub fn run(ctx: &RuleContext) -> Vec<Finding> {
                 severity,
                 concept: Some(concept.id.0.clone()),
                 message,
-            })
+            });
         };
 
         if fm.get("tags").is_some_and(|v| !v.is_sequence()) {
@@ -38,12 +38,12 @@ pub fn run(ctx: &RuleContext) -> Vec<Finding> {
         {
             add("`description` should be one line".to_string());
         }
-        if let Some(status) = fm.get_str("status") {
-            if !matches!(status, "draft" | "stable" | "deprecated") {
-                add(format!(
-                    "invalid status {status:?}: expected draft, stable, or deprecated"
-                ));
-            }
+        if let Some(status) = fm.get_str("status")
+            && !matches!(status, "draft" | "stable" | "deprecated")
+        {
+            add(format!(
+                "invalid status {status:?}: expected draft, stable, or deprecated"
+            ));
         }
         check_timestamp(fm.get("stale_after"), "stale_after", &mut add);
         if let Some(generated) = fm.get("generated") {
@@ -99,10 +99,10 @@ pub fn run(ctx: &RuleContext) -> Vec<Finding> {
                         {
                             add(format!("sources[{i}].resource is required"));
                         }
-                        if let Some(id) = map.get("id").and_then(Value::as_str) {
-                            if !source_ids.insert(id.to_string()) {
-                                add(format!("duplicate sources[].id {id:?}"));
-                            }
+                        if let Some(id) = map.get("id").and_then(Value::as_str)
+                            && !source_ids.insert(id.to_string())
+                        {
+                            add(format!("duplicate sources[].id {id:?}"));
                         }
                         check_timestamp(
                             map.get("last_modified"),
@@ -197,10 +197,10 @@ pub fn computation_issues(concept: &crate::model::concept::Concept) -> Vec<Strin
                     "parameters[{i}] must contain name, type, and boolean required"
                 ));
             }
-            if let Some(name) = parameter.get("name").and_then(Value::as_str) {
-                if !names.insert(name.to_string()) {
-                    add(format!("duplicate computation parameter {name:?}"));
-                }
+            if let Some(name) = parameter.get("name").and_then(Value::as_str)
+                && !names.insert(name.to_string())
+            {
+                add(format!("duplicate computation parameter {name:?}"));
             }
         }
     }
@@ -276,10 +276,9 @@ where
                 map.get("to")
                     .and_then(Value::as_str)
                     .and_then(parse_timestamp),
-            ) {
-                if from > to {
-                    add(format!("`{name}.from` must not be after `{name}.to`"));
-                }
+            ) && from > to
+            {
+                add(format!("`{name}.from` must not be after `{name}.to`"));
             }
         }
         None => add(format!("`{name}` must be a {{from,to}} mapping")),

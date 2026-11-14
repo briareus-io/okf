@@ -7,6 +7,7 @@
 use crate::graph::build::LinkGraph;
 use crate::model::concept::ConceptId;
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::fmt::Write as _;
 
 /// Output format for [`render`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,9 +21,9 @@ impl RenderFormat {
     /// Parse a format name (`mermaid` / `graphml` / `dot`), case-insensitive.
     pub fn parse(s: &str) -> Option<Self> {
         match s.to_ascii_lowercase().as_str() {
-            "mermaid" => Some(RenderFormat::Mermaid),
-            "graphml" => Some(RenderFormat::Graphml),
-            "dot" => Some(RenderFormat::Dot),
+            "mermaid" => Some(Self::Mermaid),
+            "graphml" => Some(Self::Graphml),
+            "dot" => Some(Self::Dot),
             _ => None,
         }
     }
@@ -51,9 +52,9 @@ impl GraphDirection {
     /// Parse a direction name (`outgoing` / `incoming` / `both`), case-insensitive.
     pub fn parse(s: &str) -> Option<Self> {
         match s.to_ascii_lowercase().as_str() {
-            "outgoing" => Some(GraphDirection::Outgoing),
-            "incoming" => Some(GraphDirection::Incoming),
-            "both" => Some(GraphDirection::Both),
+            "outgoing" => Some(Self::Outgoing),
+            "incoming" => Some(Self::Incoming),
+            "both" => Some(Self::Both),
             _ => None,
         }
     }
@@ -163,14 +164,10 @@ fn mermaid(nodes: &[String], edges: &[(String, String)]) -> String {
     let mut out = String::from("graph LR\n");
     for node in nodes {
         let label = node.replace('"', "&quot;");
-        out.push_str(&format!("    {}[\"{}\"]\n", idx[node.as_str()], label));
+        let _ = writeln!(out, "    {}[\"{}\"]", idx[node.as_str()], label);
     }
     for (src, dst) in edges {
-        out.push_str(&format!(
-            "    {} --> {}\n",
-            idx[src.as_str()],
-            idx[dst.as_str()]
-        ));
+        let _ = writeln!(out, "    {} --> {}", idx[src.as_str()], idx[dst.as_str()]);
     }
     out
 }
@@ -180,18 +177,10 @@ fn dot(nodes: &[String], edges: &[(String, String)]) -> String {
     let mut out = String::from("digraph okf {\n");
     for node in nodes {
         let label = node.replace('\\', "\\\\").replace('"', "\\\"");
-        out.push_str(&format!(
-            "    {} [label=\"{}\"];\n",
-            idx[node.as_str()],
-            label
-        ));
+        let _ = writeln!(out, "    {} [label=\"{}\"];", idx[node.as_str()], label);
     }
     for (src, dst) in edges {
-        out.push_str(&format!(
-            "    {} -> {};\n",
-            idx[src.as_str()],
-            idx[dst.as_str()]
-        ));
+        let _ = writeln!(out, "    {} -> {};", idx[src.as_str()], idx[dst.as_str()]);
     }
     out.push_str("}\n");
     out
@@ -205,19 +194,21 @@ fn graphml(nodes: &[String], edges: &[(String, String)]) -> String {
     out.push_str("  <key id=\"label\" for=\"node\" attr.name=\"label\" attr.type=\"string\"/>\n");
     out.push_str("  <graph id=\"okf\" edgedefault=\"directed\">\n");
     for node in nodes {
-        out.push_str(&format!(
-            "    <node id=\"{}\"><data key=\"label\">{}</data></node>\n",
+        let _ = writeln!(
+            out,
+            "    <node id=\"{}\"><data key=\"label\">{}</data></node>",
             idx[node.as_str()],
             xml_escape(node)
-        ));
+        );
     }
     for (i, (src, dst)) in edges.iter().enumerate() {
-        out.push_str(&format!(
-            "    <edge id=\"e{}\" source=\"{}\" target=\"{}\"/>\n",
+        let _ = writeln!(
+            out,
+            "    <edge id=\"e{}\" source=\"{}\" target=\"{}\"/>",
             i,
             idx[src.as_str()],
             idx[dst.as_str()]
-        ));
+        );
     }
     out.push_str("  </graph>\n");
     out.push_str("</graphml>\n");

@@ -12,7 +12,7 @@ use std::str::FromStr;
 
 use crate::bundle::loader::Bundle;
 use crate::error::OkfError;
-use crate::graph::build::{build_graph, LinkGraph};
+use crate::graph::build::{LinkGraph, build_graph};
 use crate::ontology::schema::Ontology;
 
 /// Severity of a lint finding, ordered `Info < Warn < Error` so a threshold is a simple
@@ -27,9 +27,9 @@ pub enum Severity {
 impl Severity {
     pub fn as_str(self) -> &'static str {
         match self {
-            Severity::Info => "info",
-            Severity::Warn => "warn",
-            Severity::Error => "error",
+            Self::Info => "info",
+            Self::Warn => "warn",
+            Self::Error => "error",
         }
     }
 }
@@ -65,20 +65,20 @@ impl FailOn {
     /// The minimum severity that trips the threshold, or `None` for [`FailOn::Never`].
     pub fn min_severity(self) -> Option<Severity> {
         match self {
-            FailOn::Never => None,
-            FailOn::Info | FailOn::Any => Some(Severity::Info),
-            FailOn::Warn => Some(Severity::Warn),
-            FailOn::Error => Some(Severity::Error),
+            Self::Never => None,
+            Self::Info | Self::Any => Some(Severity::Info),
+            Self::Warn => Some(Severity::Warn),
+            Self::Error => Some(Severity::Error),
         }
     }
 
     pub fn as_str(self) -> &'static str {
         match self {
-            FailOn::Never => "never",
-            FailOn::Info => "info",
-            FailOn::Warn => "warn",
-            FailOn::Error => "error",
-            FailOn::Any => "any",
+            Self::Never => "never",
+            Self::Info => "info",
+            Self::Warn => "warn",
+            Self::Error => "error",
+            Self::Any => "any",
         }
     }
 }
@@ -88,15 +88,15 @@ impl FromStr for FailOn {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s.trim() {
-            "never" => FailOn::Never,
-            "info" => FailOn::Info,
-            "warn" => FailOn::Warn,
-            "error" => FailOn::Error,
-            "any" => FailOn::Any,
+            "never" => Self::Never,
+            "info" => Self::Info,
+            "warn" => Self::Warn,
+            "error" => Self::Error,
+            "any" => Self::Any,
             other => {
                 return Err(OkfError::Usage(format!(
                     "invalid --fail-on {other:?}: expected never, info, warn, error, or any"
-                )))
+                )));
             }
         })
     }

@@ -77,12 +77,14 @@ fn historical_graph_reports_malformed_files_instead_of_unavailable_revision() {
             "Malformed fixture",
         ],
     ] {
-        assert!(Command::new("git")
-            .current_dir(root.path())
-            .args(args)
-            .status()
-            .unwrap()
-            .success());
+        assert!(
+            Command::new("git")
+                .current_dir(root.path())
+                .args(args)
+                .status()
+                .unwrap()
+                .success()
+        );
     }
     let message = failure(root.path(), &["graph", "--revision", "HEAD"]);
     assert!(

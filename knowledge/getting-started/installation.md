@@ -6,10 +6,10 @@ description: Install a release, verify its checksum, and check CLI/plugin compat
 ---
 # Install OKF
 
-The 0.6.3 plugin requires stable CLI versions `>=0.6.3, <0.7.0`. Read the
+The 0.6.4 plugin requires stable CLI versions `>=0.6.3, <0.7.0`. Read the
 [0.6 migration guide](../reference/migrations/0.6.0.md) before updating configuration or automation.
-Review the [0.6.3 release notes](https://github.com/briareus-io/okf/blob/v0.6.3/releases/0.6.3.md)
-for the readable YAML default, opt-in Markdown wrapping, and plugin compatibility changes.
+Review the [0.6.4 release notes](https://github.com/briareus-io/okf/blob/v0.6.4/releases/0.6.4.md)
+for its fixes and plugin compatibility notes.
 For upgrades from 0.6.0, also review the [0.6.1 release notes](https://github.com/briareus-io/okf/blob/v0.6.1/releases/0.6.1.md)
 for corrected typed-source paths and reader coordination.
 The core OKF document specification remains v0.2; the bundle tooling profile adds support-directory
@@ -35,13 +35,13 @@ okf version
 ```
 
 Alternatively, download the standalone installer from a **published release**, inspect it,
-then run it with an explicit version. Use the release version you selected; this example targets 0.6.3 once it is published:
+then run it with an explicit version. Use the release version you selected; this example targets 0.6.4 once it is published:
 
 ```sh
 curl --fail --location --proto '=https' --proto-redir '=https' \
-  https://github.com/briareus-io/okf/releases/download/v0.6.3/install.sh -o install.sh
+  https://github.com/briareus-io/okf/releases/download/v0.6.4/install.sh -o install.sh
 # Review install.sh before running it.
-sh install.sh 0.6.3
+sh install.sh 0.6.4
 ```
 
 The optional installer detects your platform, verifies the archive checksum, checks that the

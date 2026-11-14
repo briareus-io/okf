@@ -63,10 +63,10 @@ fn walk_dir(
     include: &dyn Fn(&Path) -> bool,
 ) -> Result<()> {
     let mut entries = std::fs::read_dir(dir)
-        .map_err(|e| OkfError::Io(format!("{}: {e}", dir.display())))?
+        .map_err(|e| OkfError::io_with(format!("{}: {e}", dir.display()), e))?
         .collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(|e| OkfError::Io(format!("{}: {e}", dir.display())))?;
-    entries.sort_by_key(|entry| entry.file_name());
+        .map_err(|e| OkfError::io_with(format!("{}: {e}", dir.display()), e))?;
+    entries.sort_by_key(std::fs::DirEntry::file_name);
 
     for entry in entries {
         let path = entry.path();
@@ -74,7 +74,7 @@ fn walk_dir(
         let name = name.to_string_lossy();
         let ty = entry
             .file_type()
-            .map_err(|e| OkfError::Io(format!("{}: {e}", path.display())))?;
+            .map_err(|e| OkfError::io_with(format!("{}: {e}", path.display()), e))?;
         if ty.is_dir() {
             if !EXCLUDED_DIRS.contains(&name.as_ref())
                 && (physical || !is_support_path(path.strip_prefix(root).unwrap_or(&path)))

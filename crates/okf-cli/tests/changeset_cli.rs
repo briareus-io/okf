@@ -1,11 +1,9 @@
-use assert_cmd::Command;
+mod common;
+use common::okf;
 use predicates::prelude::*;
 use serde_json::Value;
 use std::fs;
 
-fn okf() -> Command {
-    Command::new(assert_cmd::cargo::cargo_bin!("okf"))
-}
 fn rows(output: &[u8]) -> Vec<Value> {
     String::from_utf8_lossy(output)
         .lines()
@@ -59,9 +57,11 @@ fn plan_apply_and_stale_preview_guard() {
         .success();
     assert!(!dir.path().join("old.md").exists());
     assert!(dir.path().join("nested/new.md").exists());
-    assert!(fs::read_to_string(dir.path().join("ref.md"))
-        .unwrap()
-        .contains("/nested/new.md"));
+    assert!(
+        fs::read_to_string(dir.path().join("ref.md"))
+            .unwrap()
+            .contains("/nested/new.md")
+    );
     let edit = "version: 1\noperations:\n- op: edit\n  concept: nested/new\n  body: changed\n";
     okf()
         .args(["changeset", "apply", "--from", edit, "--expect", digest])
@@ -133,10 +133,12 @@ fn unsupported_globals_hidden_and_machine_capabilities_explicit() {
         arg("search", "offset")["requires"],
         serde_json::json!(["limit"])
     );
-    assert!(arg("show", "outline")["conflicts_with"]
-        .as_array()
-        .unwrap()
-        .contains(&serde_json::json!("lines")));
+    assert!(
+        arg("show", "outline")["conflicts_with"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("lines"))
+    );
     assert_eq!(command("changeset plan")["mutates"], false);
     assert_eq!(command("changeset apply")["mutates"], true);
     assert_eq!(command("ontology field-type show")["mutates"], false);
@@ -226,9 +228,11 @@ fn support_markdown_uses_bundle_profile_and_remains_in_the_reviewed_baseline() {
         .arg(dir.path())
         .assert()
         .success();
-    assert!(fs::read_to_string(dir.path().join("note.md"))
-        .unwrap()
-        .contains("Updated body."));
+    assert!(
+        fs::read_to_string(dir.path().join("note.md"))
+            .unwrap()
+            .contains("Updated body.")
+    );
     assert!(dir.path().join("other.md").exists());
     assert_eq!(
         fs::read_to_string(&support).unwrap(),

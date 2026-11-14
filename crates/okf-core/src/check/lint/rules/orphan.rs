@@ -6,7 +6,7 @@ use crate::check::lint::{Finding, RuleContext};
 pub const RULE: &str = "orphan";
 
 /// One finding per concept that has no inbound and no outbound edges.
-pub fn run(ctx: &RuleContext) -> Vec<Finding> {
+pub fn run(ctx: &RuleContext<'_>) -> Vec<Finding> {
     let Some(severity) = ctx.config.orphan else {
         return Vec::new();
     };

@@ -11,16 +11,50 @@ use okf_core::query::search::SearchHit;
 use serde_json::Value as Json;
 use std::cell::RefCell;
 use std::io::{BufWriter, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Set once a write to our stdout fails with `BrokenPipe` (the reader went away).
+static STDOUT_CLOSED: AtomicBool = AtomicBool::new(false);
+
+/// Process stdout that remembers whether the reader closed the pipe, so the exit
+/// path can tell `okf … | head` apart from a broken pipe to a git child process.
+struct Stdout(std::io::Stdout);
+
+impl Stdout {
+    fn note<T>(result: std::io::Result<T>) -> std::io::Result<T> {
+        if let Err(error) = &result
+            && error.kind() == std::io::ErrorKind::BrokenPipe
+        {
+            STDOUT_CLOSED.store(true, Ordering::Relaxed);
+        }
+        result
+    }
+}
+
+impl Write for Stdout {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        Self::note(self.0.write(buf))
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Self::note(self.0.flush())
+    }
+}
+
+/// True when `error` is the broken pipe left by a reader that closed our stdout.
+/// Such a failure ends the command quietly with exit 0, like `SIGPIPE` would.
+pub fn is_closed_stdout(error: &okf_core::error::OkfError) -> bool {
+    STDOUT_CLOSED.load(Ordering::Relaxed) && error.io_kind() == Some(std::io::ErrorKind::BrokenPipe)
+}
 
 thread_local! {
-    static STDOUT: RefCell<BufWriter<std::io::Stdout>> =
-        RefCell::new(BufWriter::with_capacity(64 * 1024, std::io::stdout()));
+    static STDOUT: RefCell<BufWriter<Stdout>> =
+        RefCell::new(BufWriter::with_capacity(64 * 1024, Stdout(std::io::stdout())));
     static OPERATION: RefCell<Option<Operation>> = const { RefCell::new(None) };
 }
 
 #[derive(Debug)]
 struct Operation {
-    command: String,
     publication: &'static str,
     track_publication: bool,
     consistency: &'static str,
@@ -59,7 +93,6 @@ pub fn begin(command: &str, json: bool, write: bool, revision: bool) -> Result<(
             );
     OPERATION.with(|state| {
         *state.borrow_mut() = Some(Operation {
-            command: command.to_string(),
             publication: if publication_applicable {
                 "not-published"
             } else {
@@ -80,7 +113,7 @@ pub fn begin(command: &str, json: bool, write: bool, revision: bool) -> Result<(
             content: "not-applicable",
             reasons: Vec::new(),
             commit_reached: None,
-        })
+        });
     });
     raw_line(
         &serde_json::json!({"kind":"operation-start","schema_version":1,"command":command,"stream_version":1}),
@@ -91,15 +124,6 @@ pub fn mark_committed() {
     OPERATION.with(|state| {
         if let Some(op) = state.borrow_mut().as_mut() {
             op.publication = "committed";
-        }
-    });
-}
-
-pub fn mark_recovery_required(commit_reached: Option<bool>) {
-    OPERATION.with(|state| {
-        if let Some(op) = state.borrow_mut().as_mut() {
-            op.publication = "recovery-required";
-            op.commit_reached = Some(commit_reached);
         }
     });
 }
@@ -160,7 +184,7 @@ pub fn complete(exit_code: i32) -> Result<()> {
         return Ok(());
     };
     if op.track_publication {
-        use okf_core::mutate::transaction::{publication_evidence, PublicationEvidence};
+        use okf_core::mutate::transaction::{PublicationEvidence, publication_evidence};
         match publication_evidence() {
             PublicationEvidence::Committed => op.publication = "committed",
             PublicationEvidence::RecoveryRequired { commit_reached } => {
@@ -200,8 +224,13 @@ pub fn complete(exit_code: i32) -> Result<()> {
 fn raw_line(value: &Json) -> Result<()> {
     STDOUT.with(|output| {
         let mut output = output.borrow_mut();
-        serde_json::to_writer(&mut *output, value)
-            .map_err(|error| okf_core::error::OkfError::Internal(error.to_string()))?;
+        serde_json::to_writer(&mut *output, value).map_err(|error| {
+            if error.is_io() {
+                okf_core::error::OkfError::from(std::io::Error::from(error))
+            } else {
+                okf_core::error::OkfError::Internal(error.to_string())
+            }
+        })?;
         output.write_all(b"\n").map_err(Into::into)
     })
 }
@@ -252,14 +281,6 @@ pub fn print_text_line(args: std::fmt::Arguments<'_>) -> Result<()> {
     })
 }
 
-/// Print a sequence of NDJSON records.
-pub fn print_lines(values: &[Json]) -> Result<()> {
-    for v in values {
-        print_line(v)?;
-    }
-    Ok(())
-}
-
 /// Print a list of concepts as either NDJSON `concept` records or a human table.
 pub fn print_concepts(concepts: &[&Concept], json: bool) -> Result<()> {
     if json {
@@ -270,7 +291,7 @@ pub fn print_concepts(concepts: &[&Concept], json: bool) -> Result<()> {
     }
 
     if concepts.is_empty() {
-        println!("(no concepts)");
+        print_text_line(format_args!("(no concepts)"))?;
         return Ok(());
     }
 
@@ -294,19 +315,15 @@ pub fn print_concepts(concepts: &[&Concept], json: bool) -> Result<()> {
         .unwrap_or(6)
         .max(6);
 
-    let stdout = std::io::stdout();
-    let mut output = BufWriter::with_capacity(64 * 1024, stdout.lock());
-    writeln!(
-        output,
+    print_text_line(format_args!(
         "{:<id_w$}  {:<ty_w$}  {:<tier_w$}  {}",
         "ID",
         "TYPE",
         "TRUST",
         format_args!("{:<status_w$}  {}", "STATUS", "TITLE")
-    )?;
+    ))?;
     for c in concepts {
-        writeln!(
-            output,
+        print_text_line(format_args!(
             "{:<id_w$}  {:<ty_w$}  {:<tier_w$}  {}",
             c.id.0,
             c.concept_type().unwrap_or("-"),
@@ -316,9 +333,9 @@ pub fn print_concepts(concepts: &[&Concept], json: bool) -> Result<()> {
                 c.effective_status(),
                 c.title().unwrap_or("")
             ),
-        )?;
+        ))?;
     }
-    output.flush().map_err(Into::into)
+    flush()
 }
 
 /// Print ranked search hits. Human output retains the concept table; NDJSON adds bounded
@@ -373,10 +390,13 @@ pub fn print_concept(concept: &Concept, json: bool) -> Result<()> {
     if json {
         return print_line(&concept_record(concept));
     }
-    println!("# {}", concept.id.0);
-    println!("trust_tier: {}", concept.trust_tier().as_str());
-    println!();
-    print!("{}", writer::write_concept(concept)?);
+    print_text_line(format_args!("# {}", concept.id.0))?;
+    print_text_line(format_args!(
+        "trust_tier: {}",
+        concept.trust_tier().as_str()
+    ))?;
+    print_text_line(format_args!(""))?;
+    print_text(format_args!("{}", writer::write_concept(concept)?))?;
     Ok(())
 }
 
@@ -398,11 +418,19 @@ pub fn print_concept_outline(concept: &Concept, json: bool) -> Result<()> {
             "headings": outline,
         }));
     }
-    println!("# {}", concept.id.0);
-    println!("trust_tier: {}", concept.trust_tier().as_str());
-    println!();
+    print_text_line(format_args!("# {}", concept.id.0))?;
+    print_text_line(format_args!(
+        "trust_tier: {}",
+        concept.trust_tier().as_str()
+    ))?;
+    print_text_line(format_args!(""))?;
     for h in headings {
-        println!("{}: {} {}", h.line, "#".repeat(h.level), h.text);
+        print_text_line(format_args!(
+            "{}: {} {}",
+            h.line,
+            "#".repeat(h.level),
+            h.text
+        ))?;
     }
     Ok(())
 }
@@ -446,7 +474,7 @@ pub fn print_concept_lines(concept: &Concept, start: usize, end: usize, json: bo
         }));
     }
     for (line, text) in selected {
-        println!("{line}: {text}");
+        print_text_line(format_args!("{line}: {text}"))?;
     }
     Ok(())
 }

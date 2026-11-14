@@ -2,19 +2,17 @@
 use std::io::{BufRead, IsTerminal};
 
 use crate::cli::{
-    AffectedArgs, BundleArgs, ChangedBase, DiffArgs, DoctorArgs, FailOnArgs, LintArgs,
-    SourceScanArgs, StaleArgs,
+    AffectedArgs, ChangedBase, DiffArgs, DoctorArgs, FailOnArgs, LintArgs, SourceScanArgs,
+    StaleArgs,
 };
 use crate::output;
 use okf_core::bundle::loader::{load_bundle, load_bundle_metadata};
 use okf_core::bundle::resolve::resolve_bundle;
 use okf_core::bundle::walk::{walk_files, walk_markdown};
 use okf_core::check::doctor::doctor_in_context;
-use okf_core::check::lint::{lint_bundle, meets_threshold, FailOn, LintConfig};
-use okf_core::check::stale::check_stale;
-use okf_core::check::validate::validate_bundle;
+use okf_core::check::lint::{FailOn, LintConfig, lint_bundle, meets_threshold};
 use okf_core::error::{OkfError, Result};
-use okf_core::graph::affected::{affected_with_sources, AffectedOptions};
+use okf_core::graph::affected::{AffectedOptions, affected_with_sources};
 use okf_core::graph::build::build_graph;
 use okf_core::ports::git::Git;
 use okf_core::ports::git::RealGit;
@@ -53,7 +51,7 @@ pub fn run_source_scan(args: &SourceScanArgs, json_output: bool) -> Result<i32> 
         for path in files {
             let abs = root.join(&path);
             let size = std::fs::metadata(&abs)
-                .map_err(|e| OkfError::Io(format!("{}: {e}", abs.display())))?
+                .map_err(|e| OkfError::io_with(format!("{}: {e}", abs.display()), e))?
                 .len();
             output::print_line(&json!({
                 "kind": "source-file",
@@ -115,7 +113,7 @@ pub fn run_validate(args: &crate::cli::ValidateArgs, json: bool) -> Result<i32> 
 pub fn run_lint(args: &LintArgs, json: bool) -> Result<i32> {
     okf_core::check::lint::validate_configuration(&resolve_bundle(args.bundle.as_deref())?)?;
     let fail_on = match &args.fail_on {
-        Some(s) => FailOn::from_str(s)?,
+        Some(s) => FailOn::from_str(s.as_str())?,
         None => FailOn::default(), // error
     };
     let root = resolve_bundle(args.bundle.as_deref())?;
@@ -336,7 +334,10 @@ pub fn run_stale(args: &StaleArgs, json: bool) -> Result<i32> {
                 &json!({"kind":"diagnostic-summary","schema_version":1,"examined":examined,"displayed":displayed,"omitted":examined-displayed,"provenance_only":provenance_only}),
             )?;
         } else {
-            output::print_text_line(format_args!("examined={examined} displayed={displayed} omitted={} provenance_only={provenance_only}", examined-displayed))?;
+            output::print_text_line(format_args!(
+                "examined={examined} displayed={displayed} omitted={} provenance_only={provenance_only}",
+                examined - displayed
+            ))?;
         }
     }
     if !args.fail_on_state.is_empty() {
@@ -394,7 +395,7 @@ pub fn changed_inputs(args: &AffectedArgs, bundle_root: &Path) -> Result<Vec<Str
         .collect();
     if explicit_stdin == 1 || (args.changed.is_empty() && !std::io::stdin().is_terminal()) {
         for line in std::io::stdin().lock().lines() {
-            let line = line.map_err(|e| OkfError::Io(e.to_string()))?;
+            let line = line.map_err(OkfError::from)?;
             let value = line.trim();
             if !value.is_empty() {
                 raw.push(value.to_string());
@@ -513,18 +514,21 @@ pub fn run_stats(args: &FailOnArgs, json: bool) -> Result<i32> {
             "orphans": s.orphans,
         }))?;
     } else {
-        println!("total: {}", s.total);
-        println!("by type:");
+        output::print_text_line(format_args!("total: {}", s.total))?;
+        output::print_text_line(format_args!("by type:"))?;
         for (ty, n) in &s.by_type {
-            println!("  {ty}: {n}");
+            output::print_text_line(format_args!("  {ty}: {n}"))?;
         }
-        println!("trust:");
-        println!("  unverified: {}", s.trust.unverified);
-        println!("  machine-confirmed: {}", s.trust.machine_confirmed);
-        println!("  human-reviewed: {}", s.trust.human_reviewed);
-        println!("orphans: {}", s.orphans);
+        output::print_text_line(format_args!("trust:"))?;
+        output::print_text_line(format_args!("  unverified: {}", s.trust.unverified))?;
+        output::print_text_line(format_args!(
+            "  machine-confirmed: {}",
+            s.trust.machine_confirmed
+        ))?;
+        output::print_text_line(format_args!("  human-reviewed: {}", s.trust.human_reviewed))?;
+        output::print_text_line(format_args!("orphans: {}", s.orphans))?;
         if let Some(stale) = s.stale {
-            println!("stale: {stale}");
+            output::print_text_line(format_args!("stale: {stale}"))?;
         }
     }
     // Stats is purely informational; only `--fail-on` (non-never) with a non-empty bundle fails.
@@ -533,11 +537,11 @@ pub fn run_stats(args: &FailOnArgs, json: bool) -> Result<i32> {
 
 /// Exit code for the informational discovery commands: `0` unless `--fail-on` is set to
 /// something other than `never` and there is at least one result.
-fn discovery_exit(fail_on: &Option<String>, empty: bool) -> Result<i32> {
+fn discovery_exit(fail_on: &Option<crate::cli::FailOnArg>, empty: bool) -> Result<i32> {
     match fail_on {
         None => Ok(0),
         Some(s) => {
-            let fo = FailOn::from_str(s)?;
+            let fo = FailOn::from_str(s.as_str())?;
             Ok(if !matches!(fo, FailOn::Never) && !empty {
                 1
             } else {
@@ -562,12 +566,12 @@ pub fn run_doctor(args: &DoctorArgs, json_output: bool) -> Result<i32> {
         if json_output {
             output::print_line(
                 &json!({"kind":"migration-plan","plan":plan,"saved":args.migration_plan}),
-            )?
+            )?;
         } else {
             output::print_text_line(format_args!(
                 "{}",
                 serde_yaml::to_string(&plan).map_err(|e| OkfError::Internal(e.to_string()))?
-            ))?
+            ))?;
         }
         return Ok(if plan.unresolved.is_empty() { 0 } else { 1 });
     }
@@ -576,12 +580,12 @@ pub fn run_doctor(args: &DoctorArgs, json_output: bool) -> Result<i32> {
         let report = okf_core::bundle::migration::apply(&plan)?;
         output::mark_committed();
         if json_output {
-            output::print_line(&json!({"kind":"migration-applied","report":report}))?
+            output::print_line(&json!({"kind":"migration-applied","report":report}))?;
         } else {
             output::print_text_line(format_args!(
                 "{}",
                 serde_yaml::to_string(&report).map_err(|e| OkfError::Internal(e.to_string()))?
-            ))?
+            ))?;
         }
         return Ok(0);
     }
@@ -625,7 +629,9 @@ pub fn run_doctor(args: &DoctorArgs, json_output: bool) -> Result<i32> {
             }
         }
         if !normalize_apply && !json_output {
-            eprintln!("relative-link normalization was dry-run only; pass --normalize-relative-links --yes to apply");
+            eprintln!(
+                "relative-link normalization was dry-run only; pass --normalize-relative-links --yes to apply"
+            );
         }
     }
     // Normalization releases its writer lock before this independent diagnostic pass.

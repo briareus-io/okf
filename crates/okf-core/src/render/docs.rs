@@ -11,7 +11,7 @@
 //! - **`obsidian`** — a consolidated markdown variant whose cross-references use Obsidian
 //!   `[[wikilink]]` syntax (keyed by concept id), suitable for pasting into a vault. *Real.*
 //! - **`pdf`** — returns a clear error; PDF needs an external renderer and is not in v1. The
-//!   [`DocsFormat::Pdf`] arm is the documented seam where a `docs-pdf` feature would hook in.
+//!   [`DocsFormat::Pdf`] arm is where a future PDF renderer would hook in.
 //! - **`index`** — not an artifact: it *writes* `index.md` files into the bundle. Handled by
 //!   [`crate::render::index::write_indexes`]; `render_docs` rejects it with guidance.
 //!
@@ -20,10 +20,11 @@
 use crate::bundle::loader::Bundle;
 use crate::error::{OkfError, Result};
 use crate::graph::build::build_graph;
-use crate::graph::render::{render as graph_render, RenderFormat};
+use crate::graph::render::{RenderFormat, render as graph_render};
 use crate::model::concept::Concept;
 use crate::model::link::outbound_links;
 use crate::ontology::schema::Ontology;
+use std::fmt::Write as _;
 
 /// A documentation output format for `okf docs --format …`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,12 +47,12 @@ impl DocsFormat {
     /// Parse a `--format` value, case-insensitive. `markdown` is accepted for `md`.
     pub fn parse(s: &str) -> Option<Self> {
         match s.to_ascii_lowercase().as_str() {
-            "md" | "markdown" => Some(DocsFormat::Md),
-            "html" => Some(DocsFormat::Html),
-            "graphml" => Some(DocsFormat::Graphml),
-            "obsidian" => Some(DocsFormat::Obsidian),
-            "pdf" => Some(DocsFormat::Pdf),
-            "index" => Some(DocsFormat::Index),
+            "md" | "markdown" => Some(Self::Md),
+            "html" => Some(Self::Html),
+            "graphml" => Some(Self::Graphml),
+            "obsidian" => Some(Self::Obsidian),
+            "pdf" => Some(Self::Pdf),
+            "index" => Some(Self::Index),
             _ => None,
         }
     }
@@ -59,12 +60,12 @@ impl DocsFormat {
     /// Stable format name.
     pub fn as_str(&self) -> &'static str {
         match self {
-            DocsFormat::Md => "md",
-            DocsFormat::Html => "html",
-            DocsFormat::Graphml => "graphml",
-            DocsFormat::Obsidian => "obsidian",
-            DocsFormat::Pdf => "pdf",
-            DocsFormat::Index => "index",
+            Self::Md => "md",
+            Self::Html => "html",
+            Self::Graphml => "graphml",
+            Self::Obsidian => "obsidian",
+            Self::Pdf => "pdf",
+            Self::Index => "index",
         }
     }
 
@@ -72,7 +73,7 @@ impl DocsFormat {
     /// artifact string. The CLI should route write formats to
     /// [`crate::render::index::write_indexes`] instead of [`render_docs`].
     pub fn is_write(&self) -> bool {
-        matches!(self, DocsFormat::Index)
+        matches!(self, Self::Index)
     }
 }
 
@@ -108,14 +109,14 @@ fn concept_title(c: &Concept) -> &str {
 
 /// One concept's markdown section: an `##` heading, a metadata list, then the verbatim body.
 fn concept_section(c: &Concept, out: &mut String) {
-    out.push_str(&format!("## {}\n\n", concept_title(c)));
-    out.push_str(&format!("- **ID:** `{}`\n", c.id.as_str()));
+    let _ = writeln!(out, "## {}\n", concept_title(c));
+    let _ = writeln!(out, "- **ID:** `{}`", c.id.as_str());
     if let Some(ty) = c.concept_type() {
-        out.push_str(&format!("- **Type:** {ty}\n"));
+        let _ = writeln!(out, "- **Type:** {ty}");
     }
-    out.push_str(&format!("- **Trust tier:** {}\n", c.trust_tier().as_str()));
+    let _ = writeln!(out, "- **Trust tier:** {}", c.trust_tier().as_str());
     if let Some(d) = c.description() {
-        out.push_str(&format!("- **Description:** {d}\n"));
+        let _ = writeln!(out, "- **Description:** {d}");
     }
     out.push('\n');
     let body = c.body.trim();
@@ -128,13 +129,13 @@ fn concept_section(c: &Concept, out: &mut String) {
 /// Consolidated markdown for the whole bundle.
 fn render_markdown(bundle: &Bundle) -> String {
     let mut out = String::from("# OKF Documentation\n\n");
-    out.push_str(&format!("{} concept(s).\n\n", bundle.concepts.len()));
+    let _ = writeln!(out, "{} concept(s).\n", bundle.concepts.len());
 
     out.push_str("## Contents\n\n");
     for c in &bundle.concepts {
         match c.concept_type() {
-            Some(ty) if !ty.is_empty() => out.push_str(&format!("* {} — {ty}\n", concept_title(c))),
-            _ => out.push_str(&format!("* {}\n", concept_title(c))),
+            Some(ty) if !ty.is_empty() => _ = writeln!(out, "* {} — {ty}", concept_title(c)),
+            _ => _ = writeln!(out, "* {}", concept_title(c)),
         }
     }
     out.push('\n');
@@ -158,20 +159,20 @@ fn render_obsidian(bundle: &Bundle, ontology: Option<&Ontology>) -> String {
 
     out.push_str("## Contents\n\n");
     for c in &bundle.concepts {
-        out.push_str(&format!("* [[{}|{}]]\n", c.id.as_str(), concept_title(c)));
+        let _ = writeln!(out, "* [[{}|{}]]", c.id.as_str(), concept_title(c));
     }
     out.push('\n');
 
     for c in &bundle.concepts {
         out.push_str("---\n\n");
-        out.push_str(&format!("## {}\n\n", concept_title(c)));
-        out.push_str(&format!("- **ID:** `{}`\n", c.id.as_str()));
+        let _ = writeln!(out, "## {}\n", concept_title(c));
+        let _ = writeln!(out, "- **ID:** `{}`", c.id.as_str());
         if let Some(ty) = c.concept_type() {
-            out.push_str(&format!("- **Type:** {ty}\n"));
+            let _ = writeln!(out, "- **Type:** {ty}");
         }
-        out.push_str(&format!("- **Trust tier:** {}\n", c.trust_tier().as_str()));
+        let _ = writeln!(out, "- **Trust tier:** {}", c.trust_tier().as_str());
         if let Some(d) = c.description() {
-            out.push_str(&format!("- **Description:** {d}\n"));
+            let _ = writeln!(out, "- **Description:** {d}");
         }
         let links = outbound_links(c, ontology);
         if !links.is_empty() {
@@ -180,7 +181,7 @@ fn render_obsidian(bundle: &Bundle, ontology: Option<&Ontology>) -> String {
                 .map(|l| format!("[[{}]]", l.as_str()))
                 .collect::<Vec<_>>()
                 .join(", ");
-            out.push_str(&format!("- **Links:** {joined}\n"));
+            let _ = writeln!(out, "- **Links:** {joined}");
         }
         out.push('\n');
         let body = c.body.trim();
@@ -200,7 +201,7 @@ a{color:#0645ad}";
 
 /// Render the consolidated markdown to a self-contained HTML page.
 fn render_html(bundle: &Bundle) -> String {
-    use pulldown_cmark::{html, Options, Parser};
+    use pulldown_cmark::{Options, Parser, html};
 
     let md = render_markdown(bundle);
     let mut opts = Options::empty();

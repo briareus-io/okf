@@ -2,7 +2,7 @@
 use crate::cli::{ArtifactCmd, Cli, Command, OntFieldTypeCmd, OntologyCmd};
 use okf_core::bundle::context::current_context;
 use okf_core::error::{OkfError, Result};
-use okf_core::mutate::transaction::{reader_locks, ReaderGuard};
+use okf_core::mutate::transaction::{ReaderGuard, reader_locks};
 
 /// Mutation families (including their previews) acquire their own writer guards;
 /// nesting a read guard around them would conflict with those exclusive locks.
@@ -29,7 +29,7 @@ pub fn guards_command(command: &Command) -> bool {
         Command::Doctor(args) => {
             args.migration_apply.is_none() && !args.fix_safe && !args.normalize_relative_links
         }
-        Command::Docs(args) => args.format != "index",
+        Command::Docs(args) => args.format != crate::cli::DocsFormatArg::Index,
         Command::Ontology(command) => matches!(
             command,
             OntologyCmd::List(_)

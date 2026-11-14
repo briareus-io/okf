@@ -1,4 +1,5 @@
 //! Source health regressions: adding provenance must not silently bypass drift checks.
+use std::fmt::Write as _;
 use std::path::Path;
 use std::process::{Command, Output};
 
@@ -83,22 +84,30 @@ fn unrecorded_source_is_reported_until_refresh_and_then_detects_changes() {
 
     let lint = run(root.path(), &["lint", "--json", "--fail-on", "warn"]);
     assert_eq!(lint.status.code(), Some(1));
-    assert!(records(&lint)
-        .iter()
-        .any(|record| record["rule"] == "source-unrecorded" && record["severity"] == "warn"));
-    assert!(!records(&lint)
-        .iter()
-        .any(|record| record["rule"] == "source-missing"));
+    assert!(
+        records(&lint)
+            .iter()
+            .any(|record| record["rule"] == "source-unrecorded" && record["severity"] == "warn")
+    );
+    assert!(
+        !records(&lint)
+            .iter()
+            .any(|record| record["rule"] == "source-missing")
+    );
 
     successful(root.path(), &["refresh", "/contracts/x/c"]);
-    assert!(records(&successful(
-        root.path(),
-        &["stale", "--json", "--fail-on", "any"]
-    ))
-    .is_empty());
-    assert!(!records(&successful(root.path(), &["lint", "--json"]))
-        .iter()
-        .any(|record| record["rule"] == "source-unrecorded"));
+    assert!(
+        records(&successful(
+            root.path(),
+            &["stale", "--json", "--fail-on", "any"]
+        ))
+        .is_empty()
+    );
+    assert!(
+        !records(&successful(root.path(), &["lint", "--json"]))
+            .iter()
+            .any(|record| record["rule"] == "source-unrecorded")
+    );
 
     std::fs::write(
         root.path().join("contracts/x/references/s.json"),
@@ -163,10 +172,12 @@ fn malformed_source_entry_reports_unavailable_without_failing_validation() {
         .unwrap();
     assert_eq!(finding["schema_version"], 2);
     assert_eq!(finding["sources"][0]["state"], "unavailable");
-    assert!(finding["sources"][0]["message"]
-        .as_str()
-        .unwrap()
-        .contains("sources[0]"));
+    assert!(
+        finding["sources"][0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("sources[0]")
+    );
 }
 
 #[test]
@@ -189,9 +200,11 @@ fn malformed_source_mappings_remain_visible_while_valid_provenance_is_skipped() 
     let drift = rows.iter().find(|row| row["kind"] == "drift").unwrap();
     let sources = drift["sources"].as_array().unwrap();
     assert_eq!(sources.len(), 4);
-    assert!(sources
-        .iter()
-        .all(|source| source["state"] == "unavailable"));
+    assert!(
+        sources
+            .iter()
+            .all(|source| source["state"] == "unavailable")
+    );
     let summary = rows
         .iter()
         .find(|row| row["kind"] == "diagnostic-summary")
@@ -243,9 +256,11 @@ fn missing_unrecorded_source_fails_health_checks_and_refresh_has_one_error_prefi
 
     let lint = run(root.path(), &["lint", "--json"]);
     assert_eq!(lint.status.code(), Some(1));
-    assert!(records(&lint)
-        .iter()
-        .any(|record| record["rule"] == "source-missing" && record["severity"] == "error"));
+    assert!(
+        records(&lint)
+            .iter()
+            .any(|record| record["rule"] == "source-missing" && record["severity"] == "error")
+    );
 
     let refresh = run(
         root.path(),
@@ -296,12 +311,16 @@ fn deleted_recorded_source_is_also_a_lint_error() {
     std::fs::remove_file(root.path().join("contracts/x/references/s.json")).unwrap();
     let lint = run(root.path(), &["lint", "--json"]);
     assert_eq!(lint.status.code(), Some(1));
-    assert!(records(&lint)
-        .iter()
-        .any(|record| record["rule"] == "source-missing"));
-    assert!(!records(&lint)
-        .iter()
-        .any(|record| record["rule"] == "source-unrecorded"));
+    assert!(
+        records(&lint)
+            .iter()
+            .any(|record| record["rule"] == "source-missing")
+    );
+    assert!(
+        !records(&lint)
+            .iter()
+            .any(|record| record["rule"] == "source-unrecorded")
+    );
 }
 
 #[test]
@@ -342,12 +361,16 @@ fn unrecorded_lint_setting_controls_findings_and_exit_thresholds() {
     std::fs::remove_file(root.path().join("contracts/x/references/s.json")).unwrap();
     let lint = run(root.path(), &["lint", "--json"]);
     assert_eq!(lint.status.code(), Some(1));
-    assert!(records(&lint)
-        .iter()
-        .any(|row| row["rule"] == "source-missing"));
-    assert!(!records(&lint)
-        .iter()
-        .any(|row| row["rule"] == "source-unrecorded"));
+    assert!(
+        records(&lint)
+            .iter()
+            .any(|row| row["rule"] == "source-missing")
+    );
+    assert!(
+        !records(&lint)
+            .iter()
+            .any(|row| row["rule"] == "source-unrecorded")
+    );
 
     std::fs::write(
         root.path().join("okf.toml"),
@@ -395,10 +418,11 @@ fn every_lint_rule_supports_severity_and_off_with_original_defaults() {
         for value in ["off", "info", "warn", "error"] {
             let mut settings = "[bundle_settings.default.lint]\n".to_string();
             for (other, _, _) in rules {
-                settings.push_str(&format!(
-                    "{other} = '{}'\n",
+                let _ = writeln!(
+                    settings,
+                    "{other} = '{}'",
                     if other == key { value } else { "off" }
-                ));
+                );
             }
             std::fs::write(root.path().join("okf.toml"), settings).unwrap();
             let output = run(root.path(), &["lint", "--json", "--fail-on", "warn"]);

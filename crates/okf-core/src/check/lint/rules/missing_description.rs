@@ -6,7 +6,7 @@ use crate::check::lint::{Finding, RuleContext};
 pub const RULE: &str = "missing-description";
 
 /// One finding per concept lacking a non-empty `description`.
-pub fn run(ctx: &RuleContext) -> Vec<Finding> {
+pub fn run(ctx: &RuleContext<'_>) -> Vec<Finding> {
     let Some(severity) = ctx.config.missing_description else {
         return Vec::new();
     };

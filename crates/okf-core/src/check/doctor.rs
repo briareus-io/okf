@@ -8,11 +8,11 @@ use ignore::WalkBuilder;
 
 use crate::bundle::loader::Bundle;
 use crate::bundle::walk::walk_markdown;
-use crate::check::lint::{lint_bundle, LintConfig};
-use crate::check::validate::{validate_document, ValidateRule, Violation};
+use crate::check::lint::{LintConfig, lint_bundle};
+use crate::check::validate::{ValidateRule, Violation, validate_document};
 use crate::error::{OkfError, Result};
 use crate::model::concept::ConceptId;
-use crate::model::link::{classify, raw_links, resolve_link, LinkKind};
+use crate::model::link::{LinkKind, classify, raw_links, resolve_link};
 use crate::parse::{markdown::split_frontmatter, parse_concept};
 use crate::query::artifact::{ArtifactKind, ResolvedArtifact};
 use serde_yaml::Value;
@@ -136,20 +136,40 @@ pub fn doctor_in_context(
         );
     }
     if root.join(".okf-bundle").is_dir() {
-        push(&mut findings, "bundle-profile-support", Some(Path::new(".okf-bundle")),
-             DoctorSeverity::Info, RepairClass::Manual,
-             "support files are excluded by the bundle tooling profile; core-only readers may treat support Markdown as concepts",
-             None, None, Some("use validate --profile bundle for the tooling boundary"), false);
+        push(
+            &mut findings,
+            "bundle-profile-support",
+            Some(Path::new(".okf-bundle")),
+            DoctorSeverity::Info,
+            RepairClass::Manual,
+            "support files are excluded by the bundle tooling profile; core-only readers may treat support Markdown as concepts",
+            None,
+            None,
+            Some("use validate --profile bundle for the tooling boundary"),
+            false,
+        );
     }
     if let Some(config) = crate::bundle::config::find_config(root) {
-        push(&mut findings, "legacy-configuration", Some(&config), DoctorSeverity::Info,
-             RepairClass::Review, "legacy TOML configuration can be migrated through an explicit plan",
-             None, None, Some("plan configuration migration; ordinary doctor safe fixes do not migrate configuration"), false);
+        push(
+            &mut findings,
+            "legacy-configuration",
+            Some(&config),
+            DoctorSeverity::Info,
+            RepairClass::Review,
+            "legacy TOML configuration can be migrated through an explicit plan",
+            None,
+            None,
+            Some(
+                "plan configuration migration; ordinary doctor safe fixes do not migrate configuration",
+            ),
+            false,
+        );
     }
     let mut documents: HashMap<PathBuf, Option<String>> = HashMap::new();
     for path in &paths {
-        let bytes = std::fs::read(root.join(path))
-            .map_err(|error| OkfError::Io(format!("{}: {error}", root.join(path).display())))?;
+        let bytes = std::fs::read(root.join(path)).map_err(|error| {
+            OkfError::io_with(format!("{}: {error}", root.join(path).display()), error)
+        })?;
         documents.insert(path.clone(), String::from_utf8(bytes).ok());
     }
 
@@ -160,7 +180,7 @@ pub fn doctor_in_context(
         .git_exclude(true)
         .parents(true)
         .build()
-        .filter_map(|entry| entry.ok())
+        .filter_map(std::result::Result::ok)
         .filter(|entry| entry.path().is_file())
         .filter_map(|entry| entry.path().strip_prefix(root).ok().map(Path::to_path_buf))
         .collect();
@@ -285,7 +305,7 @@ pub fn doctor_in_context(
     }
     concepts.sort_by(|a, b| a.id.0.cmp(&b.id.0));
     let bundle = Bundle {
-        root: root.to_path_buf(),
+        root: root.clone(),
         concepts,
     };
 
@@ -389,7 +409,9 @@ pub fn doctor_in_context(
                     ),
                     Some(&resource),
                     Some("retrievable artifact, external URI, or explicit scope descriptor"),
-                    Some("confirm the declaring concept and repair the path without inventing provenance"),
+                    Some(
+                        "confirm the declaring concept and repair the path without inventing provenance",
+                    ),
                     false,
                 );
             }
@@ -510,9 +532,13 @@ pub fn doctor_in_context(
                         Some(ontology_finding_path),
                         DoctorSeverity::Warning,
                         RepairClass::Manual,
-                        &format!("ontology type {name:?} is marked attested but is not the exact standard type"),
+                        &format!(
+                            "ontology type {name:?} is marked attested but is not the exact standard type"
+                        ),
                         Some(&format!("{name}: attested: true")),
-                        Some("custom type remains valid; convert only with a reviewed standard contract"),
+                        Some(
+                            "custom type remains valid; convert only with a reviewed standard contract",
+                        ),
                         None,
                         false,
                     );
@@ -545,7 +571,10 @@ pub fn doctor_in_context(
         finding.id = format!("DOC-{}", &digest[..12]);
     }
     if apply && fix_safe {
-        crate::mutate::transaction::commit_locked(root, guard.as_ref().unwrap(), changes)?;
+        let guard = guard
+            .as_ref()
+            .expect("invariant: write guard is acquired whenever apply && fix_safe");
+        crate::mutate::transaction::commit_locked(root, guard, changes)?;
     }
     Ok(DoctorReport {
         target: target.to_string(),
@@ -596,10 +625,12 @@ mod manifest_tests {
         let invalid = "manifest_version: unsupported\n";
         std::fs::write(root.path().join("okf-bundle.yaml"), invalid).unwrap();
         let report = doctor(root.path(), "0.2", false, false).unwrap();
-        assert!(report
-            .findings
-            .iter()
-            .any(|f| f.rule == "manifest-invalid" && f.severity == DoctorSeverity::Blocker));
+        assert!(
+            report
+                .findings
+                .iter()
+                .any(|f| f.rule == "manifest-invalid" && f.severity == DoctorSeverity::Blocker)
+        );
         assert!(!report.ready());
         assert_eq!(
             std::fs::read_to_string(root.path().join("okf-bundle.yaml")).unwrap(),
@@ -613,10 +644,12 @@ mod manifest_tests {
         std::fs::write(root.path().join(".okf-bundle/guide.md"), "Plain guidance").unwrap();
         let report = doctor(root.path(), "0.2", false, false).unwrap();
         assert_eq!(report.concepts_inspected, 0);
-        assert!(report
-            .findings
-            .iter()
-            .any(|f| f.rule == "bundle-profile-support"));
+        assert!(
+            report
+                .findings
+                .iter()
+                .any(|f| f.rule == "bundle-profile-support")
+        );
         assert!(!report.findings.iter().any(|f| f.rule == "missing-type"));
     }
 }

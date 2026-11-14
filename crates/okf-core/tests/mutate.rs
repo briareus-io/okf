@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use okf_core::fingerprint::Engine;
 use okf_core::model::concept::ConceptId;
-use okf_core::model::source::{parse_sources, Source, SourceKind};
+use okf_core::model::source::{Source, SourceKind, parse_sources};
 use okf_core::mutate::{add, edit, init, mv, refresh, rm, verify};
 use okf_core::ontology::load::parse_ontology;
 use okf_core::ontology::schema::Ontology;
@@ -117,7 +117,7 @@ fn add_scaffolds_from_ontology_required_fields() {
     assert_eq!(res.concept_type, "Policy");
     assert_eq!(res.id, ConceptId::from_relative("policies/travel"));
 
-    let c = parse_concept(res.id.clone(), &read_file(root, "policies/travel.md")).unwrap();
+    let c = parse_concept(res.id, &read_file(root, "policies/travel.md")).unwrap();
     let keys: Vec<&str> = c.frontmatter.map.keys().map(String::as_str).collect();
     // type/title/description first, then the required custom field + required reference key.
     assert_eq!(
@@ -177,11 +177,7 @@ fn add_attested_defaults_type_and_scaffolds_block() {
     assert_eq!(res.concept_type, "Attested Computation");
     assert!(res.attested);
 
-    let c = parse_concept(
-        res.id.clone(),
-        &read_file(root, "computations/mileage_calc.md"),
-    )
-    .unwrap();
+    let c = parse_concept(res.id, &read_file(root, "computations/mileage_calc.md")).unwrap();
     assert_eq!(c.frontmatter.get_str("runtime"), Some("python"));
     assert!(c.body.contains("# Computation"));
     assert!(c.frontmatter.get("computation").is_none());
@@ -214,7 +210,7 @@ fn edit_sets_fields_losslessly_preserving_order_and_unknown_keys() {
     .unwrap();
     assert_eq!(res.changes.len(), 3);
 
-    let c = parse_concept(res.id.clone(), &read_file(root, "notes/n.md")).unwrap();
+    let c = parse_concept(res.id, &read_file(root, "notes/n.md")).unwrap();
     let keys: Vec<&str> = c.frontmatter.map.keys().map(String::as_str).collect();
     // Existing keys keep position; new keys appended in order.
     assert_eq!(
@@ -258,7 +254,7 @@ fn edit_unset_add_remove_manage_fields_and_lists() {
         edit::EditChange::Unset { existed: true, .. }
     ));
 
-    let c = parse_concept(res.id.clone(), &read_file(root, "c/x.md")).unwrap();
+    let c = parse_concept(res.id, &read_file(root, "c/x.md")).unwrap();
     // layer removed; remaining keys keep order; new `tags` appended.
     let keys: Vec<&str> = c.frontmatter.map.keys().map(String::as_str).collect();
     assert_eq!(keys, vec!["type", "title", "deps", "tags"]);
@@ -325,10 +321,10 @@ fn edit_allows_source_addition_and_removal_with_different_kinds() {
         root,
         "note",
         &edit::EditSpec {
-            add_sources: vec![Source::from_value(
-                &serde_yaml::from_str("resource: shared\nkind: url\n").unwrap(),
-            )
-            .unwrap()],
+            add_sources: vec![
+                Source::from_value(&serde_yaml::from_str("resource: shared\nkind: url\n").unwrap())
+                    .unwrap(),
+            ],
             remove_sources: vec![edit::SourceSelector {
                 resource: "shared".into(),
                 kind: Some(SourceKind::File),
@@ -562,7 +558,11 @@ fn meaningful_edit_updates_existing_generated_timestamp() {
 fn mv_rewrites_every_inbound_link_and_rebases_moved_relative_links() {
     let tmp = temp_bundle();
     let root = tmp.path();
-    write_file(root, "ontology.yaml", "okf_ontology: '0.1'\nconcepts:\n  Table:\n    references:\n      see: {target: Metric, cardinality: 0..n}\n      rel: {target: Table, cardinality: 0..n}\n  Policy:\n    references:\n      refs: {target: Table, cardinality: 0..n}\n  Metric:\n    references:\n      inputs: {target: Table, cardinality: 0..n}\n  T: {}\n");
+    write_file(
+        root,
+        "ontology.yaml",
+        "okf_ontology: '0.1'\nconcepts:\n  Table:\n    references:\n      see: {target: Metric, cardinality: 0..n}\n      rel: {target: Table, cardinality: 0..n}\n  Policy:\n    references:\n      refs: {target: Table, cardinality: 0..n}\n  Metric:\n    references:\n      inputs: {target: Table, cardinality: 0..n}\n  T: {}\n",
+    );
 
     // The concept being moved: has an outbound RELATIVE link that must be rebased.
     write_file(
@@ -728,7 +728,11 @@ fn mv_handles_a_destination_directory_that_prefixes_the_source_sibling() {
 fn rm_guards_dangling_backlinks_unless_forced() {
     let tmp = temp_bundle();
     let root = tmp.path();
-    write_file(root, "ontology.yaml", "okf_ontology: '0.1'\nconcepts:\n  Table: {}\n  Policy:\n    references:\n      refs: {target: Table, cardinality: 0..n}\n");
+    write_file(
+        root,
+        "ontology.yaml",
+        "okf_ontology: '0.1'\nconcepts:\n  Table: {}\n  Policy:\n    references:\n      refs: {target: Table, cardinality: 0..n}\n",
+    );
     write_file(root, "tables/customers.md", "---\ntype: Table\n---\n# C\n");
     write_file(
         root,
@@ -852,7 +856,7 @@ fn refresh_recomputes_fingerprints_without_overwriting_standard_source_metadata(
     assert_eq!(res.skipped[0].resource, "weird");
     assert_eq!(res.refreshed_at, "2026-09-07T12:00:00Z");
 
-    let c = parse_concept(res.id.clone(), &read_file(root, "computations/mileage.md")).unwrap();
+    let c = parse_concept(res.id, &read_file(root, "computations/mileage.md")).unwrap();
     assert_eq!(
         c.frontmatter.get_str("last_modified"),
         Some("2020-01-01T00:00:00Z")
@@ -911,10 +915,12 @@ fn refresh_treats_empty_declared_kind_as_malformed_not_provenance() {
     let git = FakeGit::new();
     let engine = Engine::new(root, &fs, &git, None);
     let clock = FixedClock("2026-09-08T00:00:00Z".to_string());
-    assert!(refresh::refresh(root, "x", &engine, &clock)
-        .unwrap_err()
-        .to_string()
-        .contains("kind must be a non-empty string"));
+    assert!(
+        refresh::refresh(root, "x", &engine, &clock)
+            .unwrap_err()
+            .to_string()
+            .contains("kind must be a non-empty string")
+    );
     assert_eq!(read_file(root, "x.md"), original);
 }
 
@@ -942,4 +948,49 @@ fn refresh_rejects_non_string_source_fields_without_publication() {
         "{error}"
     );
     assert_eq!(read_file(root, "x.md"), original);
+}
+
+#[test]
+fn mv_relative_link_to_same_stem_directory_keeps_the_file_segment() {
+    let tmp = temp_bundle();
+    let root = tmp.path();
+    write_file(
+        root,
+        "ontology.yaml",
+        "okf_ontology: '0.1'\nconcepts:\n  Note: {}\n",
+    );
+    write_file(root, "a.md", "---\ntype: Note\n---\n");
+    write_file(root, "a/x.md", "---\ntype: Note\n---\n[up](../a.md)\n");
+    write_file(root, "a/y.md", "---\ntype: Note\n---\n[x](./x.md)\n");
+
+    mv::mv(root, "a/x", "a/z").unwrap();
+    assert!(read_file(root, "a/y.md").contains("[x](./z.md)"));
+    assert!(read_file(root, "a/z.md").contains("[up](../a.md)"));
+
+    mv::mv(root, "a", "b").unwrap();
+    assert!(read_file(root, "a/z.md").contains("[up](../b.md)"));
+}
+
+#[test]
+fn mv_preserves_a_leading_bom_without_duplicating_it() {
+    let tmp = temp_bundle();
+    let root = tmp.path();
+    write_file(
+        root,
+        "ontology.yaml",
+        "okf_ontology: '0.1'\nconcepts:\n  Note: {}\n",
+    );
+    write_file(root, "old.md", "\u{feff}---\ntype: Note\n---\nbody\n");
+    write_file(
+        root,
+        "ref.md",
+        "\u{feff}---\ntype: Note\n---\n[o](/old.md)\n",
+    );
+    mv::mv(root, "old", "new").unwrap();
+    let moved = read_file(root, "new.md");
+    assert!(moved.starts_with("\u{feff}---"), "{moved:?}");
+    assert!(!moved.starts_with("\u{feff}\u{feff}"));
+    let referrer = read_file(root, "ref.md");
+    assert!(referrer.starts_with("\u{feff}---"), "{referrer:?}");
+    assert!(referrer.contains("/new.md"));
 }

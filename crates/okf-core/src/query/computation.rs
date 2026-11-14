@@ -38,20 +38,18 @@ pub fn inspect_concept(concept: &Concept) -> ComputationContract<'_> {
         .filter(|s| !s.trim().is_empty())
         .map(str::to_string);
     let mut parameters = Vec::new();
-    if let Some(value) = concept.frontmatter.get("parameters") {
-        if let Some(seq) = value.as_sequence() {
-            for parameter in seq {
-                let name = parameter.get("name").and_then(Value::as_str);
-                let ty = parameter.get("type").and_then(Value::as_str);
-                let required = parameter.get("required").and_then(Value::as_bool);
-                match (name, ty, required) {
-                    (Some(name), Some(ty), Some(required))
-                        if !name.is_empty() && !ty.is_empty() =>
-                    {
-                        parameters.push((name.to_string(), ty.to_string(), required));
-                    }
-                    _ => {}
+    if let Some(value) = concept.frontmatter.get("parameters")
+        && let Some(seq) = value.as_sequence()
+    {
+        for parameter in seq {
+            let name = parameter.get("name").and_then(Value::as_str);
+            let ty = parameter.get("type").and_then(Value::as_str);
+            let required = parameter.get("required").and_then(Value::as_bool);
+            match (name, ty, required) {
+                (Some(name), Some(ty), Some(required)) if !name.is_empty() && !ty.is_empty() => {
+                    parameters.push((name.to_string(), ty.to_string(), required));
                 }
+                _ => {}
             }
         }
     }
@@ -112,7 +110,10 @@ mod tests {
 
     #[test]
     fn inspection_reuses_lint_contract_checks() {
-        let concept = contract("executor: nope\nattester: {}\nparameters:\n- {name: x, type: string, required: true}\n- {name: x, type: string, required: false}\n", "# Computation\n```sql\n```\n```sql\n```\n");
+        let concept = contract(
+            "executor: nope\nattester: {}\nparameters:\n- {name: x, type: string, required: true}\n- {name: x, type: string, required: false}\n",
+            "# Computation\n```sql\n```\n```sql\n```\n",
+        );
         let issues = inspect_concept(&concept).issues;
         for expected in [
             "executor",

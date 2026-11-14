@@ -3,9 +3,9 @@ use super::transaction::FileChange;
 use crate::bundle::loader::Bundle;
 use crate::error::{OkfError, Result};
 use crate::model::concept::{Concept, ConceptId};
-use crate::model::link::{classify, resolve_link, LinkKind};
+use crate::model::link::{LinkKind, classify, resolve_link};
 use crate::ontology::field_types::{
-    check_concept_with_budget, concept_is_a, resolve_field, ViolationKind,
+    ViolationKind, check_concept_with_budget, concept_is_a, resolve_field,
 };
 use crate::ontology::schema::Ontology;
 use serde_yaml::Value;
@@ -124,9 +124,10 @@ fn findings(
             let (code, path) = match &v.kind {
                 ViolationKind::Metadata { code, path } => {
                     if code == "incomplete-check" || code == "metadata-unenforced" {
-                        return Err(OkfError::Policy(format!(
-                            "write-gate-incomplete: {id} {path}: {code}"
-                        )));
+                        return Err(OkfError::classified(
+                            crate::error::FailureReason::WriteGateIncomplete,
+                            format!("{id} {path}: {code}"),
+                        ));
                     }
                     // Reference cardinality/target occurrences are evaluated below with actual
                     // identities/types, avoiding a rendered message or whole-list signature.
@@ -145,20 +146,20 @@ fn findings(
                     ("missing-required-field", path.as_str())
                 }
                 ViolationKind::CardinalityViolation(_) | ViolationKind::WrongReferenceTarget(_) => {
-                    continue
+                    continue;
                 }
             };
             let mut values = Vec::new();
             values_at(&root, "", path, &mut values, 0);
             if values.len() > 1 {
-                return Err(OkfError::Policy(format!(
-                    "write-gate-comparison-ambiguous: {id} {path}"
-                )));
+                return Err(OkfError::classified(
+                    crate::error::FailureReason::WriteGateComparisonAmbiguous,
+                    format!("{id} {path}"),
+                ));
             }
             let evidence = values
                 .first()
-                .map(|v| canonical(v))
-                .unwrap_or_else(|| "absent".into());
+                .map_or_else(|| "absent".into(), |v| canonical(v));
             let field = definition.and_then(|d| {
                 d.fields.iter().find(|(key, _)| {
                     path == key.as_str()
@@ -231,10 +232,12 @@ fn findings(
                 let local_root =
                     std::fs::canonicalize(&bundle.root).unwrap_or_else(|_| bundle.root.clone());
                 if let Some(path) = crate::graph::catalog::ordinary_path(&local_root, &c.id.0, raw)
+                    && !path.starts_with(&local_root)
                 {
-                    if !path.starts_with(&local_root) {
-                        return Err(OkfError::Policy(format!("write-gate-incomplete: reference outside examined bundle: {id} {path:?}")));
-                    }
+                    return Err(OkfError::classified(
+                        crate::error::FailureReason::WriteGateIncomplete,
+                        format!("reference outside examined bundle: {id} {path:?}"),
+                    ));
                 }
                 let target = resolve_link(&c.id, raw);
                 let canonical_id = identities.get(&target.0).unwrap_or(&target.0);
@@ -285,33 +288,32 @@ fn findings(
                 .get(&edge.rule)
                 .and_then(|r| edge.authored_kind.as_ref().and_then(|k| r.kinds.get(k)))
                 .and_then(|k| k.target.as_ref())
+                && let Some(target) = bundle.get(&resolve_link(&c.id, &edge.raw_reference).0)
             {
-                if let Some(target) = bundle.get(&resolve_link(&c.id, &edge.raw_reference).0) {
-                    let actual = target.concept_type().unwrap_or("");
-                    if !targets
-                        .types()
-                        .iter()
-                        .any(|t| concept_is_a(ontology, actual, t))
-                    {
-                        record(
-                            &mut out,
-                            id,
-                            "relationship-target",
-                            &edge.field_path,
-                            &serialized(targets)?,
-                            &format!(
-                                "{}:{actual}",
-                                identities.get(&target.id.0).unwrap_or(&target.id.0)
-                            ),
-                        );
-                    }
+                let actual = target.concept_type().unwrap_or("");
+                if !targets
+                    .types()
+                    .iter()
+                    .any(|t| concept_is_a(ontology, actual, t))
+                {
+                    record(
+                        &mut out,
+                        id,
+                        "relationship-target",
+                        &edge.field_path,
+                        &serialized(targets)?,
+                        &format!(
+                            "{}:{actual}",
+                            identities.get(&target.id.0).unwrap_or(&target.id.0)
+                        ),
+                    );
                 }
             }
         }
     }
     Ok(out)
 }
-fn compare(old: Findings, new: Findings) -> Result<()> {
+fn compare(old: &Findings, new: &Findings) -> Result<()> {
     let introduced: Vec<_> = new
         .iter()
         .filter(|(k, n)| **n > old.get(*k).copied().unwrap_or(0))
@@ -320,16 +322,19 @@ fn compare(old: Findings, new: Findings) -> Result<()> {
     if introduced.is_empty() {
         Ok(())
     } else {
-        Err(OkfError::Policy(format!(
-            "write-gate-rejected: {} new/worsened ontology finding(s): {}",
-            introduced.len(),
-            introduced
-                .iter()
-                .take(5)
-                .map(|s| s.chars().take(240).collect::<String>())
-                .collect::<Vec<_>>()
-                .join("; ")
-        )))
+        Err(OkfError::classified(
+            crate::error::FailureReason::WriteGateRejected,
+            format!(
+                "{} new/worsened ontology finding(s): {}",
+                introduced.len(),
+                introduced
+                    .iter()
+                    .take(5)
+                    .map(|s| s.chars().take(240).collect::<String>())
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            ),
+        ))
     }
 }
 fn identity_payload(c: &Concept, ontology: &Ontology) -> String {
@@ -369,8 +374,12 @@ pub fn check_changes(root: &Path, changes: &[FileChange], strengthen: bool) -> R
         return Ok(());
     }
     let (_, ontology) = crate::bundle::settings::load_for(root)?;
-    let ontology = ontology
-        .ok_or_else(|| OkfError::Policy("write-gate-incomplete: ontology unavailable".into()))?;
+    let ontology = ontology.ok_or_else(|| {
+        OkfError::classified(
+            crate::error::FailureReason::WriteGateIncomplete,
+            "ontology unavailable",
+        )
+    })?;
     let before = crate::bundle::loader::load_bundle(root)?;
     let mut after = before.clone();
     for change in changes {
@@ -385,8 +394,9 @@ pub fn check_changes(root: &Path, changes: &[FileChange], strengthen: bool) -> R
         let id = ConceptId::from_relative(change.path.to_string_lossy().trim_end_matches(".md"));
         after.concepts.retain(|c| c.id != id);
         if let Some(bytes) = &change.after {
-            let text = std::str::from_utf8(bytes)
-                .map_err(|e| OkfError::Usage(format!("invalid UTF-8: {e}")))?;
+            let text = std::str::from_utf8(bytes).map_err(|e| {
+                OkfError::Usage(format!("invalid UTF-8 in {}: {e}", change.path.display()))
+            })?;
             after.concepts.push(crate::parse::parse_concept(id, text)?);
         }
     }
@@ -419,8 +429,8 @@ pub fn check_changes(root: &Path, changes: &[FileChange], strengthen: bool) -> R
         }
     }
     compare(
-        findings(&before, &ontology, &identities)?,
-        findings(&after, &ontology, &BTreeMap::new())?,
+        &findings(&before, &ontology, &identities)?,
+        &findings(&after, &ontology, &BTreeMap::new())?,
     )
 }
 /// Compare the whole consumer bundle under the prior and prospective sidecar definitions.
@@ -438,5 +448,5 @@ pub fn check_ontology_change(
         .map(|o| findings(&bundle, o, &BTreeMap::new()))
         .transpose()?
         .unwrap_or_default();
-    compare(old, findings(&bundle, after, &BTreeMap::new())?)
+    compare(&old, &findings(&bundle, after, &BTreeMap::new())?)
 }

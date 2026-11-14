@@ -1,5 +1,5 @@
 use assert_cmd::prelude::*;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -87,9 +87,11 @@ fn affected_explicit_targets_do_not_read_open_inherited_stdin() {
     let output = child.wait_with_output().unwrap();
     assert!(exited, "affected waited for unused stdin");
     assert_eq!(output.status.code(), Some(0));
-    assert!(rows(&output.stdout)
-        .iter()
-        .any(|row| row["kind"] == "affected" && row["concept"] == "/a"));
+    assert!(
+        rows(&output.stdout)
+            .iter()
+            .any(|row| row["kind"] == "affected" && row["concept"] == "/a")
+    );
 }
 
 #[test]
@@ -126,9 +128,11 @@ fn changed_stdin_is_explicit_and_path_bases_are_distinct() {
         .unwrap();
     let output = child.wait_with_output().unwrap();
     assert_eq!(output.status.code(), Some(0), "{output:?}");
-    assert!(rows(&output.stdout)
-        .iter()
-        .any(|row| row["kind"] == "affected" && row["concept"] == "/b"));
+    assert!(
+        rows(&output.stdout)
+            .iter()
+            .any(|row| row["kind"] == "affected" && row["concept"] == "/b")
+    );
     let duplicate = run(
         temp.path(),
         &[
@@ -185,9 +189,11 @@ fn repo_base_resolves_from_worktree_root_for_nested_bundle() {
         ],
     );
     assert_eq!(output.status.code(), Some(0), "{output:?}");
-    assert!(rows(&output.stdout)
-        .iter()
-        .any(|row| row["kind"] == "affected" && row["concept"] == "/note"));
+    assert!(
+        rows(&output.stdout)
+            .iter()
+            .any(|row| row["kind"] == "affected" && row["concept"] == "/note")
+    );
 }
 
 #[test]
@@ -222,11 +228,13 @@ fn catalog_affected_uses_the_same_explicit_filesystem_namespace() {
         ],
     );
     assert_eq!(output.status.code(), Some(0), "{output:?}");
-    assert!(rows(&output.stdout)
-        .iter()
-        .any(|row| row["kind"] == "bundle-affected"
-            && row["bundle"] == "acme.a"
-            && row["id"] == "/note"));
+    assert!(
+        rows(&output.stdout)
+            .iter()
+            .any(|row| row["kind"] == "bundle-affected"
+                && row["bundle"] == "acme.a"
+                && row["id"] == "/note")
+    );
 }
 
 #[test]
@@ -250,9 +258,11 @@ fn digest_stream_reports_guarded_baseline_without_publication() {
             .to_string_lossy()
             .to_string()
     );
-    assert!(records[1]["base_digest"]
-        .as_str()
-        .is_some_and(|s| !s.is_empty()));
+    assert!(
+        records[1]["base_digest"]
+            .as_str()
+            .is_some_and(|s| !s.is_empty())
+    );
     assert_eq!(
         records[2],
         json!({"kind":"operation-complete","schema_version":1,"outcome":"ok","exit_code":0,"publication":"not-published","completeness":{"examination":"complete","matching":"not-applicable","delivery":"complete","expansion":"not-applicable","content":"not-applicable","consistency":"guarded-baseline"},"reasons":[]})
@@ -268,7 +278,11 @@ fn configured_gate_is_independent_of_lint_display_and_rejects_before_publication
         "ontology.yaml",
         "okf_ontology: '0.1'\nconcepts:\n  Note:\n    fields:\n      age: {type: int}\n",
     );
-    write(temp.path(), "okf.toml", "[bundle_settings.default.lint]\nontology_violation = 'off'\n[bundle_settings.default.write_policy]\nontology_gate = true\n");
+    write(
+        temp.path(),
+        "okf.toml",
+        "[bundle_settings.default.lint]\nontology_violation = 'off'\n[bundle_settings.default.write_policy]\nontology_gate = true\n",
+    );
     let before = std::fs::read(temp.path().join("note.md")).unwrap();
     let output = run(
         temp.path(),

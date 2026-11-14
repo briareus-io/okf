@@ -4,7 +4,7 @@ use crate::output;
 use okf_core::bundle::loader::load_bundle;
 use okf_core::bundle::resolve::resolve_bundle;
 use okf_core::error::{OkfError, Result};
-use okf_core::render::docs::{render_docs, DocsFormat};
+use okf_core::render::docs::{DocsFormat, render_docs};
 use okf_core::render::index::write_indexes;
 use serde_json::json;
 
@@ -14,10 +14,10 @@ pub fn run_docs(args: &DocsArgs, json: bool) -> Result<i32> {
     let root = resolve_bundle(args.bundle.as_deref())?;
     let bundle = load_bundle(&root)?;
     let (_, ontology) = okf_core::bundle::settings::load_for(&root)?;
-    let format = DocsFormat::parse(&args.format).ok_or_else(|| {
+    let format = DocsFormat::parse(args.format.as_str()).ok_or_else(|| {
         OkfError::Usage(format!(
             "unknown docs format {:?}: expected md, html, pdf, graphml, obsidian, or index",
-            args.format
+            args.format.as_str()
         ))
     })?;
 
@@ -33,9 +33,9 @@ pub fn run_docs(args: &DocsArgs, json: bool) -> Result<i32> {
                 }))?;
             }
         } else {
-            println!("wrote {} index.md file(s)", written.len());
+            output::print_text_line(format_args!("wrote {} index.md file(s)", written.len()))?;
             for p in &written {
-                println!("  {}", p.display());
+                output::print_text_line(format_args!("  {}", p.display()))?;
             }
         }
         return Ok(0);
@@ -50,7 +50,7 @@ pub fn run_docs(args: &DocsArgs, json: bool) -> Result<i32> {
             "content": artifact,
         }))?;
     } else {
-        print!("{artifact}");
+        output::print_text(format_args!("{artifact}"))?;
     }
     Ok(0)
 }

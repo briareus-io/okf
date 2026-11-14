@@ -135,13 +135,28 @@ pub(crate) fn save_new_concept_locked(
     Ok(path)
 }
 
-/// Publish bytes through an exclusively created sibling; never follow a planted temp symlink.
-pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
-    atomic_write_mode(path, bytes, false)
+/// How a durable write treats an existing destination.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum WriteMode {
+    /// Atomically replace any existing destination, preserving its permissions.
+    Replace,
+    /// Publish only if the destination does not exist (including as a symlink).
+    CreateNew,
 }
 
-fn atomic_write_mode(path: &Path, bytes: &[u8], create_only: bool) -> Result<()> {
+/// Publish bytes through an exclusively created sibling; never follow a planted temp symlink.
+pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
+    atomic_write_mode(path, bytes, WriteMode::Replace)
+}
+
+pub(crate) fn atomic_write_mode(path: &Path, bytes: &[u8], mode: WriteMode) -> Result<()> {
     crate::bundle::remote::ensure_writable(path)?;
+    durable_write(path, bytes, mode)
+}
+
+/// Shared durable-write protocol: create_new temp, write, fsync, copy permissions,
+/// publish, fsync parent directory. The temp file is removed on every exit path.
+pub(crate) fn durable_write(path: &Path, bytes: &[u8], mode: WriteMode) -> Result<()> {
     use std::io::Write;
     use std::sync::atomic::{AtomicU64, Ordering};
     static NEXT: AtomicU64 = AtomicU64::new(0);
@@ -166,18 +181,22 @@ fn atomic_write_mode(path: &Path, bytes: &[u8], create_only: bool) -> Result<()>
         }
     };
     let result = (|| -> std::io::Result<()> {
-        if let Ok(metadata) = std::fs::metadata(path) {
-            file.set_permissions(metadata.permissions())?;
+        match std::fs::metadata(path) {
+            Ok(metadata) => file.set_permissions(metadata.permissions())?,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
         }
         file.write_all(bytes)?;
         file.sync_all()?;
-        if create_only {
-            // A hard link publishes an already-complete sibling without a check/rename
-            // race: an existing destination, including a symlink, is never replaced.
-            std::fs::hard_link(&temp, path)?;
-            std::fs::remove_file(&temp)?;
-        } else {
-            std::fs::rename(&temp, path)?;
+        drop(file);
+        match mode {
+            WriteMode::CreateNew => {
+                // A hard link publishes an already-complete sibling without a check/rename
+                // race: an existing destination, including a symlink, is never replaced.
+                std::fs::hard_link(&temp, path)?;
+                std::fs::remove_file(&temp)?;
+            }
+            WriteMode::Replace => std::fs::rename(&temp, path)?,
         }
         std::fs::File::open(parent)?.sync_all()
     })();
@@ -289,7 +308,7 @@ impl SourceSelector {
 }
 
 /// One applied change, for reporting (text summary + `--json` detail).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EditChange {
     /// Structured metadata assignments or patch operations were requested.
     Structured,
@@ -346,17 +365,17 @@ pub fn parse_scalar(raw: &str) -> Value {
         "null" | "~" => return Value::Null,
         _ => {}
     }
-    if let Ok(i) = raw.parse::<i64>() {
-        if i.to_string() == raw {
-            return Value::Number(i.into());
-        }
+    if let Ok(i) = raw.parse::<i64>()
+        && i.to_string() == raw
+    {
+        return Value::Number(i.into());
     }
-    if raw.contains('.') || raw.contains('e') || raw.contains('E') {
-        if let Ok(f) = raw.parse::<f64>() {
-            // Only accept as a number when it round-trips exactly (rejects "1.0", "1e",…).
-            if f.to_string() == raw {
-                return Value::Number(serde_yaml::Number::from(f));
-            }
+    if (raw.contains('.') || raw.contains('e') || raw.contains('E'))
+        && let Ok(f) = raw.parse::<f64>()
+    {
+        // Only accept as a number when it round-trips exactly (rejects "1.0", "1e",…).
+        if f.to_string() == raw {
+            return Value::Number(serde_yaml::Number::from(f));
         }
     }
     Value::String(raw.to_string())
@@ -402,12 +421,12 @@ fn apply_add(fm: &mut Frontmatter, key: &str, value: Value) -> Result<bool> {
 
 /// Remove every item equal to `value` from the list field `key`. A missing field is a no-op
 /// (returns 0). Errors if the field exists as a non-list scalar.
-fn apply_remove(fm: &mut Frontmatter, key: &str, value: Value) -> Result<usize> {
+fn apply_remove(fm: &mut Frontmatter, key: &str, value: &Value) -> Result<usize> {
     match fm.map.get_mut(key) {
         None => Ok(0),
         Some(Value::Sequence(seq)) => {
             let before = seq.len();
-            seq.retain(|v| v != &value);
+            seq.retain(|v| v != value);
             Ok(before - seq.len())
         }
         Some(_) => Err(OkfError::Usage(format!(
@@ -511,7 +530,7 @@ pub fn edit(root: &Path, id: &str, spec: &EditSpec) -> Result<EditResult> {
     }
     for (key, raw) in &spec.removes {
         ensure_key(key)?;
-        let removed = apply_remove(&mut concept.frontmatter, key, parse_scalar(raw))?;
+        let removed = apply_remove(&mut concept.frontmatter, key, &parse_scalar(raw))?;
         changes.push(EditChange::Remove {
             key: key.clone(),
             removed,
@@ -613,7 +632,7 @@ pub fn edit(root: &Path, id: &str, spec: &EditSpec) -> Result<EditResult> {
             );
         }
         if let Some(verified) = concept.frontmatter.map.shift_remove("verified") {
-            let removed = verified.as_sequence().map(Vec::len).unwrap_or(1);
+            let removed = verified.as_sequence().map_or(1, Vec::len);
             changes.push(EditChange::InvalidateVerification { removed });
         }
     }
@@ -664,14 +683,14 @@ mod publication_tests {
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("note.md");
         std::fs::write(&path, "independent writer").unwrap();
-        assert!(atomic_write_mode(&path, b"our bytes", true).is_err());
+        assert!(atomic_write_mode(&path, b"our bytes", WriteMode::CreateNew).is_err());
         assert_eq!(
             std::fs::read_to_string(&path).unwrap(),
             "independent writer"
         );
         assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 1);
         let new = root.path().join("new.md");
-        atomic_write_mode(&new, b"complete bytes", true).unwrap();
+        atomic_write_mode(&new, b"complete bytes", WriteMode::CreateNew).unwrap();
         assert_eq!(std::fs::read(&new).unwrap(), b"complete bytes");
     }
 }

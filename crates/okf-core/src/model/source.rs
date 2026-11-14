@@ -20,28 +20,28 @@ impl SourceKind {
     /// Parse the on-disk `kind` string. An unrecognized value round-trips as [`SourceKind::Other`].
     pub fn from_kind_str(s: &str) -> Self {
         match s {
-            "git-commit" => SourceKind::GitCommit,
-            "git-path" => SourceKind::GitPath,
-            "markdown-heading" => SourceKind::MarkdownHeading,
-            "line-range" => SourceKind::LineRange,
-            "file" => SourceKind::File,
-            "url" => SourceKind::Url,
-            "bundle-resource" => SourceKind::BundleResource,
-            other => SourceKind::Other(other.to_string()),
+            "git-commit" => Self::GitCommit,
+            "git-path" => Self::GitPath,
+            "markdown-heading" => Self::MarkdownHeading,
+            "line-range" => Self::LineRange,
+            "file" => Self::File,
+            "url" => Self::Url,
+            "bundle-resource" => Self::BundleResource,
+            other => Self::Other(other.to_string()),
         }
     }
 
     /// The canonical `kind` string as written back to frontmatter.
     pub fn as_kind_str(&self) -> &str {
         match self {
-            SourceKind::GitCommit => "git-commit",
-            SourceKind::GitPath => "git-path",
-            SourceKind::MarkdownHeading => "markdown-heading",
-            SourceKind::LineRange => "line-range",
-            SourceKind::File => "file",
-            SourceKind::Url => "url",
-            SourceKind::BundleResource => "bundle-resource",
-            SourceKind::Other(s) => s,
+            Self::GitCommit => "git-commit",
+            Self::GitPath => "git-path",
+            Self::MarkdownHeading => "markdown-heading",
+            Self::LineRange => "line-range",
+            Self::File => "file",
+            Self::Url => "url",
+            Self::BundleResource => "bundle-resource",
+            Self::Other(s) => s,
         }
     }
 }
@@ -100,7 +100,7 @@ impl Fingerprint {
 /// An OKF `sources[]` entry plus our `kind` + `fingerprint` extension. Any other keys on the
 /// entry (`id`, `author`, `usage_count`, `last_modified`, …) are preserved verbatim in
 /// [`Source::extra`] so `refresh` round-trips losslessly.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Source {
     pub resource: String,
     pub kind: SourceKind,
@@ -128,7 +128,7 @@ impl Source {
                 }
             }
         }
-        Some(Source {
+        Some(Self {
             resource,
             kind: kind.unwrap_or_else(|| SourceKind::Other(String::new())),
             fingerprint,

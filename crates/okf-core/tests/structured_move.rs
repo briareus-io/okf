@@ -46,9 +46,11 @@ fn unaffected_structured_references_do_not_block_moves() {
     fs::write(root.path().join("peer.md"), "---\ntype: Note\n---\n").unwrap();
     mv_with_ontology(root.path(), "old", "nested/new", Some(&ontology)).unwrap();
     assert!(!root.path().join("old.md").exists());
-    assert!(fs::read_to_string(root.path().join("nested/new.md"))
-        .unwrap()
-        .contains("/peer"));
+    assert!(
+        fs::read_to_string(root.path().join("nested/new.md"))
+            .unwrap()
+            .contains("/peer")
+    );
 }
 
 #[test]

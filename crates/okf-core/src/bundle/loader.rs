@@ -36,14 +36,23 @@ pub fn load_concept(root: &Path, id: &str) -> Result<Option<Concept>> {
         return Ok(None);
     }
     let path = root.join(format!("{}.md", id.0.trim_start_matches('/')));
-    match std::fs::symlink_metadata(&path) {
-        Ok(metadata) if metadata.file_type().is_file() => {}
-        Ok(_) => return Ok(None),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(OkfError::Io(format!("{}: {e}", path.display()))),
+    // Every component under the root must be a real entry: a symlinked directory
+    // could otherwise redirect the read outside the bundle.
+    let mut current = root.to_path_buf();
+    for part in Path::new(&format!("{}.md", id.0.trim_start_matches('/'))).components() {
+        current.push(part);
+        match std::fs::symlink_metadata(&current) {
+            Ok(metadata) if metadata.file_type().is_symlink() => return Ok(None),
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(OkfError::io_with(format!("{}: {e}", current.display()), e)),
+        }
+    }
+    if !std::fs::symlink_metadata(&path)?.file_type().is_file() {
+        return Ok(None);
     }
     let content = std::fs::read_to_string(&path)
-        .map_err(|e| OkfError::Io(format!("{}: {e}", path.display())))?;
+        .map_err(|e| OkfError::io_with(format!("{}: {e}", path.display()), e))?;
     parse_concept_file(id, &content, &path).map(Some)
 }
 
@@ -100,7 +109,7 @@ fn load_bundle_with(root: &Path, include_body: bool) -> Result<Bundle> {
 
         let concept = if include_body {
             let content = std::fs::read_to_string(&path)
-                .map_err(|e| OkfError::Io(format!("{}: {e}", path.display())))?;
+                .map_err(|e| OkfError::io_with(format!("{}: {e}", path.display()), e))?;
             parse_concept_file(id, &content, &path)
         } else {
             load_metadata(id, &path)
@@ -130,8 +139,8 @@ fn load_bundle_with(root: &Path, include_body: bool) -> Result<Bundle> {
 }
 
 fn load_metadata(id: ConceptId, path: &Path) -> Result<Concept> {
-    let file =
-        std::fs::File::open(path).map_err(|e| OkfError::Io(format!("{}: {e}", path.display())))?;
+    let file = std::fs::File::open(path)
+        .map_err(|e| OkfError::io_with(format!("{}: {e}", path.display()), e))?;
     let mut lines = std::io::BufReader::new(file).lines();
     let Some(first) = lines
         .next()
@@ -178,6 +187,20 @@ fn load_metadata(id: ConceptId, path: &Path) -> Result<Concept> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn load_concept_rejects_symlinked_directory_components() {
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        std::fs::write(
+            outside.path().join("note.md"),
+            "---\ntype: Note\ntitle: X\n---\nbody\n",
+        )
+        .unwrap();
+        std::os::unix::fs::symlink(outside.path(), root.path().join("linked")).unwrap();
+        assert!(load_concept(root.path(), "linked/note").unwrap().is_none());
+    }
 
     #[test]
     fn metadata_loader_preserves_frontmatter_without_body() {

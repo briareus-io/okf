@@ -1,5 +1,5 @@
 use okf_core::model::frontmatter::Frontmatter;
-use okf_core::ontology::field_types::{check_concept, resolve_type_name, ViolationKind};
+use okf_core::ontology::field_types::{ViolationKind, check_concept, resolve_type_name};
 use okf_core::ontology::load::parse_ontology;
 
 fn codes(ontology: &str, metadata: &str) -> Vec<(String, String)> {
@@ -83,7 +83,10 @@ fn named_composition_cycles_and_inherited_conflicts_are_configuration_errors() {
         "concepts:\n  Note:\n    fields:\n      data: {type: list}\n",
         "concepts:\n  Note:\n    fields:\n      data: {type: bool, min: 1}\n",
     ] {
-        assert!(parse_ontology(&format!("okf_ontology: '0.1'\n{schema}")).is_err(), "{schema}");
+        assert!(
+            parse_ontology(&format!("okf_ontology: '0.1'\n{schema}")).is_err(),
+            "{schema}"
+        );
     }
 }
 
@@ -104,7 +107,10 @@ concepts:
         unique_items: true
 "#;
     assert!(codes(schema, "type: Note\nvalue: 'é😀'\ndate: '2000-02-29'\ntimestamp: '2026-10-04T12:30:00-07:00'\nnumber: 42\nrows: [{a: 1, b: 2}]\n").is_empty());
-    let failures = codes(schema, "type: Note\nvalue: 'é'\ndate: '1900-02-29'\ntimestamp: '2026-10-04T12:30:00'\nnumber: 1.5\nrows: [{a: 1, b: 2}, {b: 2, a: 1}]\n");
+    let failures = codes(
+        schema,
+        "type: Note\nvalue: 'é'\ndate: '1900-02-29'\ntimestamp: '2026-10-04T12:30:00'\nnumber: 1.5\nrows: [{a: 1, b: 2}, {b: 2, a: 1}]\n",
+    );
     assert!(failures.contains(&("metadata-range".into(), "value".into())));
     assert!(failures.contains(&("metadata-type".into(), "date".into())));
     assert!(failures.contains(&("metadata-type".into(), "timestamp".into())));
@@ -123,20 +129,24 @@ fn missing_nested_branches_do_not_become_empty_selected_lists() {
         ),
         body: String::new(),
     };
-    assert!(Condition::parse("tags[] not in [\"draft\"]")
-        .unwrap()
-        .matches(&concept)
-        .unwrap());
+    assert!(
+        Condition::parse("tags[] not in [\"draft\"]")
+            .unwrap()
+            .matches(&concept)
+            .unwrap()
+    );
     assert!(
         !Condition::parse("norms[].deadline.from not in [\"account-created\"]")
             .unwrap()
             .matches(&concept)
             .unwrap()
     );
-    assert!(!Condition::parse("missing[] not in [\"draft\"]")
-        .unwrap()
-        .matches(&concept)
-        .unwrap());
+    assert!(
+        !Condition::parse("missing[] not in [\"draft\"]")
+            .unwrap()
+            .matches(&concept)
+            .unwrap()
+    );
 }
 
 #[test]

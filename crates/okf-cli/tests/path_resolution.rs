@@ -56,12 +56,16 @@ fn doctor_catalog_scope_reaches_source_aware_handler() {
             String::from_utf8_lossy(&scoped.stdout),
             String::from_utf8_lossy(&scoped.stderr)
         );
-        assert!(rows(&scoped)
-            .iter()
-            .any(|r| r["kind"] == "doctor-summary" && r["ready"] == true));
-        assert!(rows(&scoped)
-            .iter()
-            .any(|r| r["kind"] == "operation-complete" && r["outcome"] == "ok"));
+        assert!(
+            rows(&scoped)
+                .iter()
+                .any(|r| r["kind"] == "doctor-summary" && r["ready"] == true)
+        );
+        assert!(
+            rows(&scoped)
+                .iter()
+                .any(|r| r["kind"] == "operation-complete" && r["outcome"] == "ok")
+        );
     }
     let artifact = run(
         root,
@@ -105,10 +109,12 @@ fn doctor_relative_link_normalization_is_explicit_preview_then_apply() {
         .find(|r| r["kind"] == "doctor-normalization")
         .unwrap();
     assert_eq!(mapping["applied"], false);
-    assert!(mapping["diff"]
-        .as_str()
-        .unwrap()
-        .contains("/notes/b.md#heading"));
+    assert!(
+        mapping["diff"]
+            .as_str()
+            .unwrap()
+            .contains("/notes/b.md#heading")
+    );
     assert_eq!(
         fs::read_to_string(root.join("notes/a.md")).unwrap(),
         original
@@ -126,7 +132,9 @@ fn doctor_relative_link_normalization_is_explicit_preview_then_apply() {
     let text = fs::read_to_string(root.join("notes/a.md")).unwrap();
     assert!(text.contains("human:reviewer"));
     assert!(text.contains("[target](/notes/b.md#heading)"));
-    assert!(rows(&applied)
-        .iter()
-        .any(|r| r["kind"] == "doctor-normalization" && r["applied"] == true));
+    assert!(
+        rows(&applied)
+            .iter()
+            .any(|r| r["kind"] == "doctor-normalization" && r["applied"] == true)
+    );
 }

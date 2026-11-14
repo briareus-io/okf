@@ -1,4 +1,4 @@
-use okf_core::bundle::context::{resolve_context, Context};
+use okf_core::bundle::context::{Context, resolve_context};
 use okf_core::fingerprint::{Engine, Fingerprinter};
 use okf_core::graph::catalog::build_catalog_graph;
 use okf_core::model::link::LogicalReference;
@@ -43,9 +43,11 @@ fn parses_once_and_preserves_identity_case() {
     ] {
         assert!(LogicalReference::parse(raw).is_err(), "{raw}");
     }
-    assert!(LogicalReference::parse("https://example.com/x")
-        .unwrap()
-        .is_none());
+    assert!(
+        LogicalReference::parse("https://example.com/x")
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[test]
@@ -53,9 +55,19 @@ fn graph_scope_does_not_fetch_or_invent_local_targets() {
     let (_temp, context) = fixture();
     let graph = build_catalog_graph(&context, &[], false, None).unwrap();
     assert_eq!(graph.edges.len(), 2);
-    assert!(graph.edges.iter().all(|edge| edge.status == "out-of-scope"));
+    assert!(
+        graph
+            .edges
+            .iter()
+            .all(|edge| edge.status == okf_core::graph::catalog::EdgeStatus::OutOfScope)
+    );
     let graph = build_catalog_graph(&context, &["Acme.B".into()], false, None).unwrap();
-    assert!(graph.edges.iter().all(|edge| edge.status == "resolved"));
+    assert!(
+        graph
+            .edges
+            .iter()
+            .all(|edge| edge.status == okf_core::graph::catalog::EdgeStatus::Resolved)
+    );
     assert_eq!(
         graph.target(&context, "okf://Acme.B/target.md").bundle,
         "Acme.B"
@@ -80,9 +92,11 @@ fn logical_artifacts_and_fingerprints_require_explicit_scope() {
     let source = Source::from_value(&value).unwrap();
     let fs = okf_core::ports::fs::RealFs;
     let git = okf_core::ports::git::RealGit;
-    assert!(Engine::new(&context.primary.root, &fs, &git, None)
-        .fingerprint(&source)
-        .is_err());
+    assert!(
+        Engine::new(&context.primary.root, &fs, &git, None)
+            .fingerprint(&source)
+            .is_err()
+    );
     let fp = Engine::new(&context.primary.root, &fs, &git, None)
         .with_bundle_context(&context, &scope)
         .fingerprint(&source)
@@ -104,13 +118,19 @@ fn support_files_are_hidden_but_explicitly_readable() {
     )
     .unwrap();
     fs::write(root.join("okf-bundle.yaml"), "manifest_version: 1\n").unwrap();
-    assert!(list_artifacts(&root, Some(".okf-bundle"), false)
-        .unwrap()
-        .is_empty());
-    assert!(!list_artifacts(&root, None, false)
-        .unwrap()
-        .iter()
-        .any(|e| e.path.starts_with(".okf-bundle") || e.path.to_str() == Some("okf-bundle.yaml")));
+    assert!(
+        list_artifacts(&root, Some(".okf-bundle"), false)
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        !list_artifacts(&root, None, false)
+            .unwrap()
+            .iter()
+            .any(
+                |e| e.path.starts_with(".okf-bundle") || e.path.to_str() == Some("okf-bundle.yaml")
+            )
+    );
     let read = show_artifact(
         &context.primary.root,
         None,
@@ -133,9 +153,11 @@ fn local_logical_links_guard_remove_and_are_rewritten_on_move() {
     .unwrap();
     assert!(okf_core::mutate::rm::rm(&root, "target", false).is_err());
     okf_core::mutate::mv::mv(&root, "target", "renamed").unwrap();
-    assert!(fs::read_to_string(root.join("referrer.md"))
-        .unwrap()
-        .contains("okf://Acme.B/renamed.md#heading"));
+    assert!(
+        fs::read_to_string(root.join("referrer.md"))
+            .unwrap()
+            .contains("okf://Acme.B/renamed.md#heading")
+    );
 }
 
 #[test]
@@ -143,7 +165,10 @@ fn uri_bundle_ref_conflicts_are_not_equivalence() {
     let (temp, context) = fixture();
     fs::write(temp.path().join("a/source.md"), "---\ntype: Note\nsources:\n- resource: okf://Acme.B/target.md\n  bundle_ref: {id: acme.a, path: target.md}\n---\n").unwrap();
     let graph = build_catalog_graph(&context, &["Acme.B".into()], false, None).unwrap();
-    assert_eq!(graph.edges[0].status, "reference-mismatch");
+    assert_eq!(
+        graph.edges[0].status,
+        okf_core::graph::catalog::EdgeStatus::ReferenceMismatch
+    );
 }
 
 #[test]
@@ -181,6 +206,6 @@ fn semantic_logical_occurrences_share_resolved_endpoint_and_scope_status() {
         assert_eq!(relationship.target, "/target");
         assert_eq!(relationship.raw_reference, raw);
         assert_eq!(relationship.status, expected_status);
-        assert_eq!(relationship.status, edge.status);
+        assert_eq!(relationship.status, edge.status.as_str());
     }
 }

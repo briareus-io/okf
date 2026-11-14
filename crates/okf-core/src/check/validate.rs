@@ -55,14 +55,14 @@ impl ValidateRule {
     /// Stable machine identifier for the rule.
     pub fn as_str(self) -> &'static str {
         match self {
-            ValidateRule::MissingFrontmatter => "missing-frontmatter",
-            ValidateRule::UnparseableFrontmatter => "unparseable-frontmatter",
-            ValidateRule::InvalidUtf8 => "invalid-utf8",
-            ValidateRule::MissingType => "missing-type",
-            ValidateRule::ReservedIsConcept => "reserved-is-concept",
-            ValidateRule::ReservedFrontmatter => "reserved-frontmatter",
-            ValidateRule::InvalidIndex => "invalid-index",
-            ValidateRule::InvalidLog => "invalid-log",
+            Self::MissingFrontmatter => "missing-frontmatter",
+            Self::UnparseableFrontmatter => "unparseable-frontmatter",
+            Self::InvalidUtf8 => "invalid-utf8",
+            Self::MissingType => "missing-type",
+            Self::ReservedIsConcept => "reserved-is-concept",
+            Self::ReservedFrontmatter => "reserved-frontmatter",
+            Self::InvalidIndex => "invalid-index",
+            Self::InvalidLog => "invalid-log",
         }
     }
 }
@@ -110,7 +110,7 @@ pub fn validate_document(rel_path: &str, content: &str) -> Vec<Violation> {
         // frontmatter, and that exception is limited to an `okf_version` string.
         if fm_text.is_none() && content.lines().next() == Some("---") {
             out.push(Violation {
-                file: file.clone(),
+                file,
                 rule: ValidateRule::ReservedFrontmatter,
                 message: "reserved-file frontmatter is unclosed".to_string(),
             });
@@ -127,7 +127,7 @@ pub fn validate_document(rel_path: &str, content: &str) -> Vec<Violation> {
                     file: file.clone(),
                     rule: ValidateRule::ReservedFrontmatter,
                     message: "only the bundle-root index.md may carry frontmatter, limited to a string okf_version".to_string(),
-                })
+                });
             }
             Some(Err(_)) => out.push(Violation {
                 file: file.clone(),
@@ -144,14 +144,14 @@ pub fn validate_document(rel_path: &str, content: &str) -> Vec<Violation> {
                 message: "index.md must contain at least one Markdown heading section".to_string(),
             });
         }
-        if base == "log.md" {
-            if let Err(message) = valid_log_body(&body) {
-                out.push(Violation {
-                    file: file.clone(),
-                    rule: ValidateRule::InvalidLog,
-                    message,
-                });
-            }
+        if base == "log.md"
+            && let Err(message) = valid_log_body(&body)
+        {
+            out.push(Violation {
+                file,
+                rule: ValidateRule::InvalidLog,
+                message,
+            });
         }
         return out;
     }
@@ -242,8 +242,11 @@ fn valid_log_body(body: &str) -> std::result::Result<(), String> {
             return Err(
                 "log.md may contain one title and level-two date headings only".to_string(),
             );
-        } else if in_date && (trimmed.starts_with("* ") || trimmed.starts_with("- ")) {
-            *entries_per_date.last_mut().unwrap() += 1;
+        } else if in_date
+            && (trimmed.starts_with("* ") || trimmed.starts_with("- "))
+            && let Some(count) = entries_per_date.last_mut()
+        {
+            *count += 1;
         }
     }
     if dates.is_empty() {
@@ -295,8 +298,8 @@ pub fn validate_bundle_profile(root: &Path, profile: ValidationProfile) -> Resul
     {
         let path = root.join(&rel_path);
         let rel = rel_path.to_string_lossy().to_string();
-        let bytes =
-            std::fs::read(&path).map_err(|e| OkfError::Io(format!("{}: {e}", path.display())))?;
+        let bytes = std::fs::read(&path)
+            .map_err(|e| OkfError::io_with(format!("{}: {e}", path.display()), e))?;
         violations.extend(validate_document_bytes(&rel, &bytes));
     }
 
@@ -336,11 +339,13 @@ mod tests {
         )
         .unwrap();
         std::fs::write(root.path().join("concept.md"), "---\ntype: Note\n---\n").unwrap();
-        assert!(validate_bundle(root.path())
-            .unwrap()
-            .violations
-            .iter()
-            .all(|v| v.file == ".okf-bundle/references/instructions.md"));
+        assert!(
+            validate_bundle(root.path())
+                .unwrap()
+                .violations
+                .iter()
+                .all(|v| v.file == ".okf-bundle/references/instructions.md")
+        );
         assert!(
             validate_bundle_profile(root.path(), ValidationProfile::Bundle)
                 .unwrap()
@@ -354,10 +359,12 @@ mod tests {
         .unwrap();
         let report = validate_bundle_profile(root.path(), ValidationProfile::Bundle).unwrap();
         assert!(!report.violations.is_empty());
-        assert!(report
-            .violations
-            .iter()
-            .all(|v| v.file == "ordinary/.okf-bundle/note.md"));
+        assert!(
+            report
+                .violations
+                .iter()
+                .all(|v| v.file == "ordinary/.okf-bundle/note.md")
+        );
     }
 
     #[test]

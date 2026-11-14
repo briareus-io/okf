@@ -1,5 +1,5 @@
 //! Optional local interpretation settings. Named settings never register or leak to other bundles.
-use super::context::{current_context, Context};
+use super::context::{Context, current_context};
 use crate::{
     error::{OkfError, Result},
     ontology::{load, schema::Ontology},
@@ -183,25 +183,25 @@ fn resolve_settings(
         .and_then(|p| p.parent())
         .unwrap_or(root);
     // Rebase the legacy ontology before comparing it with bundle-relative manifest paths.
-    if let Some(old) = legacy_value.get_mut("ontology") {
-        if let Some(path) = old.as_str() {
-            *old = serde_yaml::Value::String(
-                super::catalog::absolute(&base.join(path))?
-                    .to_string_lossy()
-                    .into_owned(),
-            );
-        }
+    if let Some(old) = legacy_value.get_mut("ontology")
+        && let Some(path) = old.as_str()
+    {
+        *old = serde_yaml::Value::String(
+            super::catalog::absolute(&base.join(path))?
+                .to_string_lossy()
+                .into_owned(),
+        );
     }
     if let Some(manifest) = &loaded {
         let mut portable = manifest.settings_value.clone();
-        if let Some(value) = portable.get_mut("ontology") {
-            if let Some(path) = value.as_str() {
-                *value = serde_yaml::Value::String(
-                    super::catalog::absolute(&root.join(path))?
-                        .to_string_lossy()
-                        .into_owned(),
-                );
-            }
+        if let Some(value) = portable.get_mut("ontology")
+            && let Some(path) = value.as_str()
+        {
+            *value = serde_yaml::Value::String(
+                super::catalog::absolute(&root.join(path))?
+                    .to_string_lossy()
+                    .into_owned(),
+            );
         }
         merge_settings(&mut legacy_value, portable, "settings")?;
     }
@@ -366,12 +366,12 @@ pub fn validate_settings(settings: &BundleSettings) -> Result<()> {
             &settings.write_policy.blocking_threshold,
         ),
     ] {
-        if let Some(value) = value {
-            if !matches!(value.as_str(), "info" | "warn" | "error") {
-                return Err(OkfError::Usage(format!(
-                    "invalid write_policy.{key} {value:?}; expected info, warn, or error"
-                )));
-            }
+        if let Some(value) = value
+            && !matches!(value.as_str(), "info" | "warn" | "error")
+        {
+            return Err(OkfError::Usage(format!(
+                "invalid write_policy.{key} {value:?}; expected info, warn, or error"
+            )));
         }
     }
     if settings.query.scan_limit == Some(0)
@@ -420,12 +420,12 @@ pub fn validate_settings(settings: &BundleSettings) -> Result<()> {
         ("source_unrecorded", &settings.lint.source_unrecorded),
         ("index_coverage", &settings.lint.index_coverage),
     ] {
-        if let Some(value) = severity {
-            if !matches!(value.as_str(), "off" | "info" | "warn" | "error") {
-                return Err(OkfError::Usage(format!(
-                    "invalid {rule} lint severity {value:?}; expected off, info, warn, or error"
-                )));
-            }
+        if let Some(value) = severity
+            && !matches!(value.as_str(), "off" | "info" | "warn" | "error")
+        {
+            return Err(OkfError::Usage(format!(
+                "invalid {rule} lint severity {value:?}; expected off, info, warn, or error"
+            )));
         }
     }
     Ok(())
@@ -479,7 +479,7 @@ pub fn for_context_at(
                 return Err(OkfError::Environment(format!(
                     "historical configuration unavailable: {} at {revision}",
                     path.display()
-                )))
+                )));
             }
             HistoricalFile::External => {}
         }
@@ -513,14 +513,14 @@ pub fn for_context_at(
         .transpose()
         .map_err(|e| OkfError::Usage(e.to_string()))?
         .unwrap_or_else(|| serde_yaml::Value::Mapping(Default::default()));
-    if let Some(old) = merged.get_mut("ontology") {
-        if let Some(path) = old.as_str() {
-            *old = serde_yaml::Value::String(
-                super::catalog::absolute(&base.join(path))?
-                    .to_string_lossy()
-                    .into_owned(),
-            );
-        }
+    if let Some(old) = merged.get_mut("ontology")
+        && let Some(path) = old.as_str()
+    {
+        *old = serde_yaml::Value::String(
+            super::catalog::absolute(&base.join(path))?
+                .to_string_lossy()
+                .into_owned(),
+        );
     }
     match historical(root, &root.join(super::manifest::FILENAME), revision)? {
         HistoricalFile::Bytes(bytes) => {
@@ -532,14 +532,14 @@ pub fn for_context_at(
                 .get("settings")
                 .cloned()
                 .unwrap_or_else(|| serde_yaml::Value::Mapping(Default::default()));
-            if let Some(value) = portable.get_mut("ontology") {
-                if let Some(path) = value.as_str() {
-                    *value = serde_yaml::Value::String(
-                        super::catalog::absolute(&root.join(path))?
-                            .to_string_lossy()
-                            .into_owned(),
-                    );
-                }
+            if let Some(value) = portable.get_mut("ontology")
+                && let Some(path) = value.as_str()
+            {
+                *value = serde_yaml::Value::String(
+                    super::catalog::absolute(&root.join(path))?
+                        .to_string_lossy()
+                        .into_owned(),
+                );
             }
             merge_settings(&mut merged, portable, "settings")?;
         }
@@ -547,7 +547,7 @@ pub fn for_context_at(
         HistoricalFile::External => {
             return Err(OkfError::Usage(
                 "historical manifest unavailable outside repository".into(),
-            ))
+            ));
         }
     }
     let settings: BundleSettings = serde_yaml::from_value(merged)
@@ -562,8 +562,7 @@ pub fn for_context_at(
     let path = settings
         .ontology
         .as_ref()
-        .map(|p| base.join(p))
-        .unwrap_or_else(|| load::ontology_path(root));
+        .map_or_else(|| load::ontology_path(root), |p| base.join(p));
     let bytes = match historical(root, &path, revision)? {
         HistoricalFile::Bytes(bytes) => Some(bytes),
         HistoricalFile::External => {
@@ -638,7 +637,7 @@ pub fn merge_settings(
         (_, _) => {
             return Err(OkfError::Usage(format!(
                 "legacy and manifest settings conflict at {path}"
-            )))
+            )));
         }
     }
     Ok(())

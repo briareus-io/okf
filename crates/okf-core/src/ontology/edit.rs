@@ -333,7 +333,7 @@ pub fn render_ontology(path: &Path, ontology: &Ontology) -> Result<String> {
             return Err(OkfError::Environment(format!(
                 "cannot read {}: {error}",
                 path.display()
-            )))
+            )));
         }
     }
     Ok(text)

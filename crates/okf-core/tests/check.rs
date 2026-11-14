@@ -3,10 +3,10 @@
 //! `StaleChecker` over fake ports, and the `--fail-on` threshold logic.
 use std::path::{Path, PathBuf};
 
-use okf_core::bundle::loader::{load_bundle, Bundle};
-use okf_core::check::lint::{lint_bundle, meets_threshold, FailOn, Finding, LintConfig, Severity};
+use okf_core::bundle::loader::{Bundle, load_bundle};
+use okf_core::check::lint::{FailOn, Finding, LintConfig, Severity, lint_bundle, meets_threshold};
 use okf_core::check::stale::{DriftKind, StaleChecker};
-use okf_core::check::validate::{validate_bundle, ValidateRule};
+use okf_core::check::validate::{ValidateRule, validate_bundle};
 use okf_core::model::concept::{Concept, ConceptId};
 use okf_core::model::frontmatter::Frontmatter;
 use okf_core::ontology::load::load_ontology;
@@ -43,9 +43,11 @@ fn lint_accepts_real_navigation_and_artifacts_but_retains_missing_targets() {
         .filter(|f| f.rule == "broken-link")
         .collect();
     assert_eq!(broken.len(), 3, "{findings:?}");
-    assert!(broken
-        .iter()
-        .all(|f| f.message.contains("missing.json") || f.message.contains("/absent")));
+    assert!(
+        broken
+            .iter()
+            .all(|f| f.message.contains("missing.json") || f.message.contains("/absent"))
+    );
 }
 
 #[cfg(unix)]
@@ -149,10 +151,12 @@ fn validate_includes_gitignored_markdown_and_reports_invalid_utf8_per_file() {
     std::fs::write(root.path().join("binary.md"), [0xff, 0xfe]).unwrap();
     let report = validate_bundle(root.path()).unwrap();
     assert!(report.violations.iter().any(|v| v.file == "ignored.md"));
-    assert!(report
-        .violations
-        .iter()
-        .any(|v| v.file == "binary.md" && v.rule == ValidateRule::InvalidUtf8));
+    assert!(
+        report
+            .violations
+            .iter()
+            .any(|v| v.file == "binary.md" && v.rule == ValidateRule::InvalidUtf8)
+    );
 }
 
 // --- lint engine + rules ----------------------------------------------------
@@ -198,9 +202,10 @@ fn lint_with_ontology_flags_violations() {
 
     let msgs: Vec<&str> = onto.iter().map(|f| f.message.as_str()).collect();
     // `Note` is not defined in the ontology.
-    assert!(msgs
-        .iter()
-        .any(|m| m.contains("Note") && m.contains("not defined")));
+    assert!(
+        msgs.iter()
+            .any(|m| m.contains("Note") && m.contains("not defined"))
+    );
     // Policy requires the `description` built-in, which travel lacks.
     assert!(msgs.iter().any(|m| m.contains("description")));
     // Computation requires `runtime`, which mileage lacks.

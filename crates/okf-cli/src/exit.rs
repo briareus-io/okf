@@ -3,8 +3,9 @@
 //! 0 ok · 1 findings at/above `--fail-on` (later) · 2 usage · 3 env/IO · 4 internal.
 use crate::cli::Cli;
 use crate::commands;
-use clap::error::ErrorKind;
 use clap::FromArgMatches;
+use clap::error::ErrorKind;
+use okf_core::error::FailureReason;
 
 /// Parse argv, dispatch, and return the process exit code.
 pub fn run() -> i32 {
@@ -39,41 +40,24 @@ pub fn run() -> i32 {
                 crate::cli::Command::Changeset(crate::cli::ChangeSetCmd::Recover(_))
             );
         if let Err(err) = crate::output::begin(&name, cli.json, writes, cli.revision.is_some()) {
-            eprintln!("okf: {err}");
-            return err.exit_code();
+            return report(&err);
         }
     }
     let code = match commands::run(cli) {
         Ok(code) => code,
+        Err(err) if crate::output::is_closed_stdout(&err) => return 0,
         Err(err) => {
+            // Emit buffered stdout first so partial output precedes the error on a terminal.
+            let _ = crate::output::flush();
             eprintln!("okf: {err}");
-            let reason = match &err {
-                okf_core::error::OkfError::Policy(message)
-                    if message.starts_with("write-gate-incomplete:") =>
-                {
-                    "write-gate-incomplete"
-                }
-                okf_core::error::OkfError::Policy(message)
-                    if message.starts_with("write-gate-rejected:") =>
-                {
-                    "write-gate-rejected"
-                }
-                okf_core::error::OkfError::Policy(message)
-                    if message.starts_with("write-gate-comparison-ambiguous:") =>
-                {
-                    "write-gate-incomplete"
-                }
-                okf_core::error::OkfError::Usage(message)
-                    if message.starts_with("baseline-conflict:") =>
-                {
-                    "baseline-conflict"
-                }
-                okf_core::error::OkfError::Usage(message)
-                    if message.starts_with("context-invalid:") =>
-                {
-                    "context-invalid"
-                }
-                _ => match err.exit_code() {
+            let reason = match err.reason() {
+                // An ambiguous comparison is reported as an incomplete gate.
+                Some(
+                    FailureReason::WriteGateIncomplete
+                    | FailureReason::WriteGateComparisonAmbiguous,
+                ) => "write-gate-incomplete",
+                Some(reason) => reason.as_str(),
+                None => match err.exit_code() {
                     1 => "policy-rejected",
                     2 => "usage-error",
                     3 => "environment-error",
@@ -88,14 +72,22 @@ pub fn run() -> i32 {
         }
     };
     if let Err(err) = crate::output::complete(code) {
-        eprintln!("okf: {err}");
-        return err.exit_code();
+        return report(&err);
     }
     if let Err(err) = crate::output::flush() {
-        eprintln!("okf: {err}");
-        return err.exit_code();
+        return report(&err);
     }
     code
+}
+
+/// Print a failure that ends the run and return its exit code. A reader that
+/// closed our stdout (`okf … | head`) is not a failure: exit 0 without a message.
+fn report(err: &okf_core::error::OkfError) -> i32 {
+    if crate::output::is_closed_stdout(err) {
+        return 0;
+    }
+    eprintln!("okf: {err}");
+    err.exit_code()
 }
 
 pub(crate) fn command_name(command: &crate::cli::Command) -> String {

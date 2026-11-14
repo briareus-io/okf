@@ -25,6 +25,7 @@ use crate::model::concept::Concept;
 use crate::parse::markdown::split_frontmatter;
 use crate::parse::yaml::parse_frontmatter;
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write as _;
 use std::path::PathBuf;
 
 /// A generated `index.md` for one directory of the bundle.
@@ -106,10 +107,10 @@ pub fn generate_index(bundle: &Bundle, directory: &std::path::Path) -> IndexFile
             .replace('\\', "/");
         if parent == dir {
             direct.push(concept);
-        } else if let Some(rest) = parent.strip_prefix(&prefix) {
-            if let Some(child) = rest.split('/').next().filter(|child| !child.is_empty()) {
-                child_dirs.insert(child.to_string());
-            }
+        } else if let Some(rest) = parent.strip_prefix(&prefix)
+            && let Some(child) = rest.split('/').next().filter(|child| !child.is_empty())
+        {
+            child_dirs.insert(child.to_string());
         }
     }
     IndexFile {
@@ -138,17 +139,16 @@ fn render_dir_index(concepts: &[&Concept], child_dirs: &BTreeSet<String>) -> Str
             let tb = b.title().unwrap_or_else(|| stem_of(b.id.as_str()));
             ta.cmp(tb).then_with(|| a.id.0.cmp(&b.id.0))
         });
-        out.push_str(&format!("# {ty}\n\n"));
+        let _ = writeln!(out, "# {ty}\n");
         for c in cs {
             let stem = stem_of(c.id.as_str());
             let title = escape_label(c.title().unwrap_or(stem));
             let url = escape_destination(&format!("{stem}.md"));
             match c.description() {
-                Some(d) => out.push_str(&format!(
-                    "* [{title}]({url}) - {}\n",
-                    d.replace(['\n', '\r'], " ")
-                )),
-                None => out.push_str(&format!("* [{title}]({url})\n")),
+                Some(d) => {
+                    _ = writeln!(out, "* [{title}]({url}) - {}", d.replace(['\n', '\r'], " "));
+                }
+                None => _ = writeln!(out, "* [{title}]({url})"),
             }
         }
         out.push('\n');
@@ -157,7 +157,7 @@ fn render_dir_index(concepts: &[&Concept], child_dirs: &BTreeSet<String>) -> Str
     if !child_dirs.is_empty() {
         out.push_str("# Subdirectories\n\n");
         for name in child_dirs {
-            out.push_str(&format!("* [{name}/]({name}/)\n"));
+            let _ = writeln!(out, "* [{name}/]({name}/)");
         }
         out.push('\n');
     }
@@ -221,10 +221,11 @@ pub fn write_indexes(bundle: &Bundle) -> Result<Vec<PathBuf>> {
             idx.content.clone()
         };
 
-        let rel = target
+        let rel_path = target
             .strip_prefix(&bundle.root)
             .map_err(|e| crate::error::OkfError::Internal(e.to_string()))?
-            .to_string_lossy();
+            .to_path_buf();
+        let rel = rel_path.to_string_lossy();
         let violations = validate_document(&rel, &final_content);
         if !violations.is_empty() {
             return Err(crate::error::OkfError::Internal(format!(
@@ -242,7 +243,7 @@ pub fn write_indexes(bundle: &Bundle) -> Result<Vec<PathBuf>> {
             continue;
         }
         changes.push(crate::mutate::transaction::FileChange {
-            path: target.strip_prefix(&bundle.root).unwrap().to_path_buf(),
+            path: rel_path.clone(),
             before,
             after: Some(final_content.into_bytes()),
         });

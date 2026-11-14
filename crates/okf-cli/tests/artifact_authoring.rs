@@ -87,10 +87,12 @@ fn list_excludes_concepts_but_retains_artifacts_and_reserved_files() {
                 .map(|line| serde_json::from_str(line).unwrap())
                 .collect();
             assert_eq!(records.len(), 5);
-            assert!(records
-                .iter()
-                .filter(|record| record["kind"] == "artifact")
-                .all(|record| record["artifact_kind"] != "concept"));
+            assert!(
+                records
+                    .iter()
+                    .filter(|record| record["kind"] == "artifact")
+                    .all(|record| record["artifact_kind"] != "concept")
+            );
         }
     }
 

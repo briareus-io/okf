@@ -1,15 +1,17 @@
 //! init, add, edit, mv, rm, verify, refresh. Each emits a `change` record under `--json`.
-use crate::cli::{AddArgs, EditArgs, InitArgs, MvArgs, RefreshArgs, RmArgs, VerifyArgs};
+use crate::cli::{
+    AddArgs, EditArgs, InitArgs, MvArgs, RefreshArgs, RefreshFailOn, RmArgs, VerifyArgs,
+};
 use crate::output;
-use crate::structured::{parse_yaml, InputReader};
+use crate::structured::{InputReader, parse_yaml};
 use okf_core::bundle::resolve::{resolve_bundle, resolve_bundle_target};
 use okf_core::bundle::settings::load_for;
 use okf_core::error::Result;
 use okf_core::fingerprint::Engine;
 use okf_core::model::source::{Fingerprint, Source, SourceKind};
-use okf_core::mutate::add::{add, AddOptions};
-use okf_core::mutate::edit::{edit, parse_kv, EditChange, EditSpec, SourceSelector};
-use okf_core::mutate::init::{init, InitOptions};
+use okf_core::mutate::add::{AddOptions, add};
+use okf_core::mutate::edit::{EditChange, EditSpec, SourceSelector, edit, parse_kv};
+use okf_core::mutate::init::{InitOptions, init};
 use okf_core::mutate::mv::mv_with_ontology;
 use okf_core::mutate::refresh::refresh_with_policy;
 use okf_core::mutate::rm::rm_with_ontology;
@@ -40,12 +42,12 @@ pub fn run_init(args: &InitArgs, json: bool) -> Result<i32> {
             "ontology": r.ontology_path.as_ref().map(|p| p.to_string_lossy().into_owned()),
         }))?;
     } else {
-        println!("initialized bundle at {}", r.root.display());
+        output::print_text_line(format_args!("initialized bundle at {}", r.root.display()))?;
         if let Some(p) = &r.index_path {
-            println!("  wrote {}", p.display());
+            output::print_text_line(format_args!("  wrote {}", p.display()))?;
         }
         if let Some(p) = &r.ontology_path {
-            println!("  wrote {}", p.display());
+            output::print_text_line(format_args!("  wrote {}", p.display()))?;
         }
     }
     Ok(0)
@@ -108,12 +110,12 @@ pub fn run_add(args: &AddArgs, json: bool) -> Result<i32> {
             "attested": r.attested,
         }))?;
     } else {
-        println!(
+        output::print_text_line(format_args!(
             "added {} ({}) at {}",
             r.id.0,
             r.concept_type,
             r.path.display()
-        );
+        ))?;
     }
     Ok(0)
 }
@@ -195,9 +197,9 @@ fn print_preview(
             &json!({"kind": "change", "op": op, "id": id, "path": path.to_string_lossy(), "dry_run": true, "before": before, "after": after, "diff": diff}),
         )?;
     } else if diff.is_empty() {
-        println!("no changes to {id}");
+        output::print_text_line(format_args!("no changes to {id}"))?;
     } else {
-        print!("{diff}");
+        output::print_text(format_args!("{diff}"))?;
     }
     Ok(())
 }
@@ -282,7 +284,11 @@ pub fn run_edit(args: &EditArgs, json: bool) -> Result<i32> {
             "changes": changes,
         }))?;
     } else {
-        println!("edited {} ({} change(s))", r.id.0, r.changes.len());
+        output::print_text_line(format_args!(
+            "edited {} ({} change(s))",
+            r.id.0,
+            r.changes.len()
+        ))?;
     }
     if !json {
         for change in &r.changes {
@@ -292,9 +298,9 @@ pub fn run_edit(args: &EditArgs, json: bool) -> Result<i32> {
                 } else {
                     "removed"
                 };
-                println!(
+                output::print_text_line(format_args!(
                     "verification: {action} {removed} prior verification record(s); review the edited concept again"
-                );
+                ))?;
             }
         }
     }
@@ -323,7 +329,7 @@ fn parse_source_args(args: &[String]) -> Result<Vec<Source>> {
                 })?;
                 match key.trim() {
                     "resource" if !value.trim().is_empty() => {
-                        resource = Some(value.trim().to_string())
+                        resource = Some(value.trim().to_string());
                     }
                     "kind" if !value.trim().is_empty() => kind = Some(value.trim().to_string()),
                     "id" | "title" | "author" | "last_modified" if !value.trim().is_empty() => {
@@ -333,9 +339,13 @@ fn parse_source_args(args: &[String]) -> Result<Vec<Source>> {
                         );
                     }
                     "usage_count" if value.trim().parse::<u64>().is_ok() => {
+                        let count = value
+                            .trim()
+                            .parse::<u64>()
+                            .expect("invariant: guard verified the value parses");
                         extra.insert(
                             "usage_count".to_string(),
-                            serde_yaml::Value::Number(value.trim().parse::<u64>().unwrap().into()),
+                            serde_yaml::Value::Number(count.into()),
                         );
                     }
                     other => {
@@ -351,9 +361,7 @@ fn parse_source_args(args: &[String]) -> Result<Vec<Source>> {
             Ok(Source {
                 resource,
                 kind: kind
-                    .as_deref()
-                    .map(SourceKind::from_kind_str)
-                    .unwrap_or_else(|| SourceKind::Other(String::new())),
+                    .as_deref().map_or_else(|| SourceKind::Other(String::new()), SourceKind::from_kind_str),
                 fingerprint: Fingerprint::default(),
                 extra,
             })
@@ -420,10 +428,10 @@ fn parse_source_selector_args(args: &[String]) -> Result<Vec<SourceSelector>> {
                 })?;
                 match key.trim() {
                     "resource" if !value.trim().is_empty() => {
-                        resource = Some(value.trim().to_string())
+                        resource = Some(value.trim().to_string());
                     }
                     "kind" if !value.trim().is_empty() => {
-                        kind = Some(SourceKind::from_kind_str(value.trim()))
+                        kind = Some(SourceKind::from_kind_str(value.trim()));
                     }
                     other => {
                         return Err(OkfError::Usage(format!(
@@ -479,13 +487,15 @@ fn resolve_opt(arg: &Option<String>, stdin_cache: &mut Option<String>) -> Result
 fn resolve_text(raw: &str, stdin_cache: &mut Option<String>) -> Result<String> {
     use okf_core::error::OkfError;
     if raw == "-" {
-        if stdin_cache.is_none() {
-            let mut buf = String::new();
-            std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf)
-                .map_err(|e| OkfError::Io(format!("reading stdin: {e}")))?;
-            *stdin_cache = Some(buf);
+        if let Some(cached) = stdin_cache {
+            return Ok(cached.clone());
         }
-        return Ok(stdin_cache.clone().unwrap());
+        let mut buf = String::new();
+        std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf)
+            .map_err(|e| OkfError::io_with(format!("reading stdin: {e}"), e))?;
+        // One copy is kept so a later `-` argument can reuse the already-consumed stdin.
+        *stdin_cache = Some(buf.clone());
+        return Ok(buf);
     }
     if let Some(path) = raw.strip_prefix('@') {
         if let Some(escaped) = path.strip_prefix('@') {
@@ -549,12 +559,12 @@ pub fn run_mv(args: &MvArgs, json: bool) -> Result<i32> {
             "rewritten": rewritten,
         }))?;
     } else {
-        println!(
+        output::print_text_line(format_args!(
             "moved {} -> {} ({} referrer(s) rewritten)",
             r.from.0,
             r.to.0,
             r.rewritten.len()
-        );
+        ))?;
     }
     Ok(0)
 }
@@ -577,7 +587,7 @@ pub fn run_rm(args: &RmArgs, json: bool) -> Result<i32> {
             "dangling_referrers": dangling,
         }))?;
     } else {
-        println!("removed {}", r.id.0);
+        output::print_text_line(format_args!("removed {}", r.id.0))?;
         if !r.dangling_referrers.is_empty() {
             eprintln!(
                 "warning: {} referrer(s) now dangle",
@@ -605,7 +615,10 @@ pub fn run_verify(args: &VerifyArgs, json: bool) -> Result<i32> {
             "at": r.at,
         }))?;
     } else {
-        println!("verified {} by {} at {}", r.id.0, r.actor, r.at);
+        output::print_text_line(format_args!(
+            "verified {} by {} at {}",
+            r.id.0, r.actor, r.at
+        ))?;
     }
     Ok(0)
 }
@@ -615,15 +628,6 @@ pub fn run_refresh(args: &RefreshArgs, json: bool) -> Result<i32> {
     let _gate = args
         .require_ontology_gate
         .then(okf_core::mutate::transaction::strengthen_ontology_gate);
-    if let Some(other) = args
-        .fail_on
-        .as_deref()
-        .filter(|value| !matches!(*value, "never" | "skipped" | "any"))
-    {
-        return Err(okf_core::error::OkfError::Usage(format!(
-            "invalid --fail-on {other:?}: expected never, skipped, or any"
-        )));
-    }
     let root = resolve_bundle(args.bundle.as_deref())?;
     let fs = RealFs;
     let git = RealGit;
@@ -631,7 +635,10 @@ pub fn run_refresh(args: &RefreshArgs, json: bool) -> Result<i32> {
     let context = okf_core::bundle::context::current_context(Some(&root.to_string_lossy()), None)?;
     let scope = super::catalog::examination_scope();
     let engine = Engine::new(&root, &fs, &git, None).with_bundle_context(&context, &scope);
-    let reject_skips = matches!(args.fail_on.as_deref(), Some("skipped" | "any"));
+    let reject_skips = matches!(
+        args.fail_on,
+        Some(RefreshFailOn::Skipped | RefreshFailOn::Any)
+    );
     let r = refresh_with_policy(&root, &args.concept, &engine, &clock, reject_skips)?;
     if json {
         let skipped: Vec<_> = r
@@ -649,25 +656,20 @@ pub fn run_refresh(args: &RefreshArgs, json: bool) -> Result<i32> {
             "refreshed_at": r.refreshed_at,
         }))?;
     } else {
-        println!(
+        output::print_text_line(format_args!(
             "refreshed {} ({} updated, {} unchanged, {} skipped)",
             r.id.0,
             r.updated.len(),
             r.unchanged.len(),
             r.skipped.len()
-        );
+        ))?;
         for skipped in &r.skipped {
             eprintln!("  skipped {}: {}", skipped.resource, skipped.reason);
         }
     }
-    let fail = match args.fail_on.as_deref() {
-        None | Some("never") => false,
-        Some("any") | Some("skipped") => !r.skipped.is_empty(),
-        Some(other) => {
-            return Err(okf_core::error::OkfError::Usage(format!(
-                "invalid --fail-on {other:?}: expected never, skipped, or any"
-            )))
-        }
+    let fail = match args.fail_on {
+        None | Some(RefreshFailOn::Never) => false,
+        Some(RefreshFailOn::Any | RefreshFailOn::Skipped) => !r.skipped.is_empty(),
     };
     Ok(if fail { 1 } else { 0 })
 }

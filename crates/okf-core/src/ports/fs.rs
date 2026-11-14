@@ -12,11 +12,12 @@ pub struct RealFs;
 
 impl FileSystem for RealFs {
     fn read(&self, path: &Path) -> Result<Vec<u8>> {
-        std::fs::read(path).map_err(|e| OkfError::Io(format!("{}: {e}", path.display())))
+        std::fs::read(path).map_err(|e| OkfError::io_with(format!("{}: {e}", path.display()), e))
     }
 
     fn write(&self, path: &Path, bytes: &[u8]) -> Result<()> {
-        std::fs::write(path, bytes).map_err(|e| OkfError::Io(format!("{}: {e}", path.display())))
+        std::fs::write(path, bytes)
+            .map_err(|e| OkfError::io_with(format!("{}: {e}", path.display()), e))
     }
 }
 
@@ -51,7 +52,7 @@ impl FileSystem for FakeFs {
         self.files
             .get(path)
             .cloned()
-            .ok_or_else(|| OkfError::Io(format!("no such file (fake): {}", path.display())))
+            .ok_or_else(|| OkfError::io(format!("no such file (fake): {}", path.display())))
     }
 
     fn write(&self, _path: &Path, _bytes: &[u8]) -> Result<()> {

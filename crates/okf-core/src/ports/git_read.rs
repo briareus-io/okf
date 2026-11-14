@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, ChildStdout, Command, Output, Stdio};
+use std::process::{Child, ChildStdin, ChildStdout, Command, ExitStatus, Output, Stdio};
 use std::rc::{Rc, Weak};
 
 type CachedOutput = Result<Output, (io::ErrorKind, String)>;
@@ -52,7 +52,7 @@ pub(crate) fn output(root: &Path, args: &[&str]) -> io::Result<Output> {
     };
     let key = (
         root.to_path_buf(),
-        args.iter().map(|arg| arg.to_string()).collect(),
+        args.iter().map(std::string::ToString::to_string).collect(),
     );
     let mut cache = cache.borrow_mut();
     cache
@@ -77,75 +77,155 @@ pub(crate) fn blob(root: &Path, revision: &str, path: &Path) -> Option<Vec<u8>> 
         return bytes.clone();
     }
     // The line-based batch protocol cannot represent these names. Keep Git's argv semantics.
-    let bytes = if spec.contains(['\n', '\r', '\0']) {
-        command(root)
-            .args(["show", &spec])
-            .output()
-            .ok()
-            .filter(|out| out.status.success())
-            .map(|out| out.stdout)
+    let bytes = if !Batch::representable(&spec) {
+        show(root, &spec)
     } else {
-        cache
+        let reader = cache
             .readers
             .entry(root.to_path_buf())
-            .or_insert_with(|| Batch::new(root).ok())
-            .as_mut()
-            .and_then(|reader| reader.read(&spec).ok().flatten())
+            .or_insert_with(|| Batch::new(root).ok());
+        match reader.as_mut().map(|reader| reader.read(&spec)) {
+            Some(Ok(bytes)) => bytes,
+            Some(Err(_)) => {
+                // A failed read can leave the stream mid-object; a reused reader would then
+                // return another object's bytes. Drop it (killing the process) and do not
+                // cache the failure, so a later read starts a fresh reader.
+                cache.readers.remove(root);
+                return None;
+            }
+            None => None,
+        }
     };
     cache.blobs.insert(key, bytes.clone());
     bytes
 }
-struct Batch {
+/// `git show <spec>` for object names the batch protocol cannot carry.
+pub(crate) fn show(root: &Path, spec: &str) -> Option<Vec<u8>> {
+    command(root)
+        .args(["show", "--end-of-options", spec])
+        .output()
+        .ok()
+        .filter(|out| out.status.success())
+        .map(|out| out.stdout)
+}
+
+/// Owns a child process. Dropping it before [`KillOnDrop::wait`] succeeds kills and reaps the
+/// process, so early returns never leave zombies or orphaned Git processes behind.
+pub(crate) struct KillOnDrop {
     child: Child,
+    reaped: bool,
+}
+impl KillOnDrop {
+    pub(crate) fn new(child: Child) -> Self {
+        Self {
+            child,
+            reaped: false,
+        }
+    }
+    /// Wait for a normal exit; the guard no longer needs to kill the process.
+    pub(crate) fn wait(&mut self) -> io::Result<ExitStatus> {
+        let status = self.child.wait()?;
+        self.reaped = true;
+        Ok(status)
+    }
+}
+impl std::ops::Deref for KillOnDrop {
+    type Target = Child;
+    fn deref(&self) -> &Child {
+        &self.child
+    }
+}
+impl std::ops::DerefMut for KillOnDrop {
+    fn deref_mut(&mut self) -> &mut Child {
+        &mut self.child
+    }
+}
+impl Drop for KillOnDrop {
+    fn drop(&mut self) {
+        if !self.reaped {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+    }
+}
+
+/// A persistent `git cat-file --batch` reader. Any `Err` from [`Batch::read`] means the stream
+/// may be desynchronised; callers must drop the reader rather than reuse it.
+pub(crate) struct Batch {
+    // Field order matters: close our pipe ends before the guard kills and reaps the child.
     stdin: ChildStdin,
     stdout: BufReader<ChildStdout>,
+    _child: KillOnDrop,
 }
 impl Batch {
-    fn new(root: &Path) -> io::Result<Self> {
-        let mut child = command(root)
-            .args(["cat-file", "--batch"])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()?;
-        let stdin = child.stdin.take().unwrap();
-        let stdout = BufReader::new(child.stdout.take().unwrap());
+    pub(crate) fn new(root: &Path) -> io::Result<Self> {
+        let mut child = KillOnDrop::new(
+            command(root)
+                .args(["cat-file", "--batch"])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .spawn()?,
+        );
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| io::Error::other("git cat-file stdin unavailable"))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| io::Error::other("git cat-file stdout unavailable"))?;
         Ok(Self {
-            child,
             stdin,
-            stdout,
+            stdout: BufReader::new(stdout),
+            _child: child,
         })
     }
-    fn read(&mut self, spec: &str) -> io::Result<Option<Vec<u8>>> {
+    /// Whether `spec` fits on one request line of the batch protocol.
+    pub(crate) fn representable(spec: &str) -> bool {
+        !spec.contains(['\n', '\r', '\0'])
+    }
+    /// The blob bytes, or `None` when the object is missing or not a blob.
+    pub(crate) fn read(&mut self, spec: &str) -> io::Result<Option<Vec<u8>>> {
+        if !Self::representable(spec) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "object name cannot be sent to cat-file --batch",
+            ));
+        }
         writeln!(self.stdin, "{spec}")?;
         self.stdin.flush()?;
         let mut header = String::new();
         self.stdout.read_line(&mut header)?;
-        if header.ends_with(" missing\n") {
+        let Some(header) = header.strip_suffix('\n') else {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "truncated cat-file response",
+            ));
+        };
+        if header.ends_with(" missing") || header.ends_with(" ambiguous") {
             return Ok(None);
         }
-        let fields: Vec<_> = header.split_whitespace().collect();
-        let size = fields
-            .get(2)
-            .and_then(|n| n.parse::<usize>().ok())
-            .ok_or_else(|| {
-                io::Error::new(io::ErrorKind::InvalidData, "invalid cat-file response")
-            })?;
+        let fields: Vec<_> = header.split(' ').collect();
+        let size = match fields.as_slice() {
+            [_, _, size] => size.parse::<usize>().ok(),
+            _ => None,
+        }
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid cat-file response"))?;
         let mut bytes = vec![0; size];
         self.stdout.read_exact(&mut bytes)?;
         let mut newline = [0];
         self.stdout.read_exact(&mut newline)?;
-        if fields.get(1) != Some(&"blob") {
+        if newline[0] != b'\n' {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid cat-file response framing",
+            ));
+        }
+        if fields[1] != "blob" {
             return Ok(None);
         }
         Ok(Some(bytes))
-    }
-}
-impl Drop for Batch {
-    fn drop(&mut self) {
-        // Terminate and reap even if the outer operation exits early on a parse error.
-        let _ = self.child.kill();
-        let _ = self.child.wait();
     }
 }
 
@@ -234,5 +314,41 @@ mod tests {
             blob(root, "HEAD", Path::new("space name")),
             Some(vec![0, 255, b'\n', b'X'])
         );
+    }
+    #[test]
+    fn failed_batch_reads_evict_the_reader_and_are_not_cached() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        git(root, &["init", "-q"]);
+        std::fs::write(root.join("a"), b"one").unwrap();
+        std::fs::write(root.join("b"), b"two").unwrap();
+        commit(root);
+        let session = ReadSession::new();
+        assert_eq!(blob(root, "HEAD", Path::new("a")), Some(b"one".to_vec()));
+        // Simulate a reader whose stream broke: its process is gone.
+        {
+            let mut cache = session.0.borrow_mut();
+            let reader = cache.readers.get_mut(root).unwrap().as_mut().unwrap();
+            reader._child.kill().unwrap();
+            reader._child.wait().unwrap();
+        }
+        assert_eq!(blob(root, "HEAD", Path::new("b")), None);
+        assert!(!session.0.borrow().readers.contains_key(root));
+        // The failure was not cached and a fresh reader serves the next request.
+        assert_eq!(blob(root, "HEAD", Path::new("b")), Some(b"two".to_vec()));
+    }
+    #[cfg(unix)]
+    #[test]
+    fn kill_on_drop_reaps_an_unwaited_child() {
+        let child = Command::new("sleep").arg("30").spawn().unwrap();
+        let pid = child.id().to_string();
+        drop(KillOnDrop::new(child));
+        // A zombie would still accept signal 0; a reaped process does not exist.
+        let probe = Command::new("kill")
+            .args(["-0", &pid])
+            .stderr(Stdio::null())
+            .status()
+            .unwrap();
+        assert!(!probe.success());
     }
 }

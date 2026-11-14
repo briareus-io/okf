@@ -2,7 +2,7 @@
 use crate::{
     bundle::loader::Bundle,
     error::{OkfError, Result},
-    model::link::{classify, LinkKind},
+    model::link::{LinkKind, classify},
     parse::markdown::split_frontmatter,
 };
 use pulldown_cmark::{Event, Parser, Tag};
@@ -83,7 +83,12 @@ pub fn check_indexes(bundle: &Bundle, exclusions: &[String]) -> Result<Vec<Index
         let regular_index = match std::fs::symlink_metadata(&file) {
             Ok(metadata) => metadata.file_type().is_file(),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
-            Err(error) => return Err(OkfError::Io(format!("{}: {error}", file.display()))),
+            Err(error) => {
+                return Err(OkfError::io_with(
+                    format!("{}: {error}", file.display()),
+                    error,
+                ));
+            }
         };
         if !regular_index {
             findings.push(IndexFinding {
@@ -95,7 +100,7 @@ pub fn check_indexes(bundle: &Bundle, exclusions: &[String]) -> Result<Vec<Index
             continue;
         }
         let text = std::fs::read_to_string(&file)
-            .map_err(|e| OkfError::Io(format!("{}: {e}", file.display())))?;
+            .map_err(|e| OkfError::io_with(format!("{}: {e}", file.display()), e))?;
         let (_, body) = split_frontmatter(&text);
         let mut covered = BTreeSet::new();
         for event in Parser::new(&body) {
@@ -140,10 +145,10 @@ pub fn check_indexes(bundle: &Bundle, exclusions: &[String]) -> Result<Vec<Index
                 if children.contains(child) {
                     covered.insert(child.to_owned());
                 }
-                if let Some(stem) = child.strip_suffix("/index.md") {
-                    if !stem.contains('/') {
-                        covered.insert(format!("{stem}/"));
-                    }
+                if let Some(stem) = child.strip_suffix("/index.md")
+                    && !stem.contains('/')
+                {
+                    covered.insert(format!("{stem}/"));
                 }
                 if !child.contains('/') {
                     if children.contains(&format!("{child}.md")) {

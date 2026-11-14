@@ -82,7 +82,9 @@ pub fn object_path(raw: &str) -> Result<Vec<String>> {
                     .bytes()
                     .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
             {
-                return Err(usage(format!("invalid object path {raw:?}: use bracket-quoted keys for punctuation or numeric keys")));
+                return Err(usage(format!(
+                    "invalid object path {raw:?}: use bracket-quoted keys for punctuation or numeric keys"
+                )));
             }
             keys.push(segment.to_string());
             rest = &rest[end..];
@@ -231,7 +233,7 @@ impl StructuredEdits {
         );
         for (key, value) in &self.sets {
             root.as_mapping_mut()
-                .unwrap()
+                .expect("invariant: root was constructed as a mapping")
                 .insert(Value::String(key.clone()), value.clone());
         }
         for (path, value) in &self.set_paths {
@@ -281,7 +283,10 @@ fn assign_object(node: &mut Value, keys: &[String], value: Option<Value>) -> Res
         }
         map.insert(key.clone(), Value::Mapping(Mapping::new()));
     }
-    assign_object(map.get_mut(&key).unwrap(), &keys[1..], value)
+    let child = map
+        .get_mut(&key)
+        .ok_or_else(|| OkfError::Internal("object path key missing after insertion".into()))?;
+    assign_object(child, &keys[1..], value)
 }
 
 fn index(token: &str, len: usize, insert: bool) -> Result<usize> {

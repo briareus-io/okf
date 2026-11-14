@@ -1,7 +1,7 @@
 //! Concept and its identity.
 use super::frontmatter::Frontmatter;
 use super::standard::{parse_timestamp, valid_actor};
-use super::trust::{derive_trust_tier, TrustTier};
+use super::trust::{TrustTier, derive_trust_tier};
 use serde_yaml::Value;
 
 /// A concept's ID is its bundle-relative path without the `.md` suffix, with a leading
@@ -15,7 +15,7 @@ impl ConceptId {
     pub fn from_relative(rel: &str) -> Self {
         let rel = rel.replace('\\', "/");
         let trimmed = rel.trim_start_matches('/');
-        ConceptId(format!("/{trimmed}"))
+        Self(format!("/{trimmed}"))
     }
 
     pub fn as_str(&self) -> &str {

@@ -1,22 +1,21 @@
 //! search, list, show, backlinks, links, graph, resolve.
 use crate::cli::{
-    BrowseArgs, BundleArgs, GraphArgs, IdArgs, ResolveArgs, SearchArgs, SearchFieldArg,
-    SearchMatchArg, SearchSortArg, ShowArgs,
+    BrowseArgs, GraphArgs, ResolveArgs, SearchArgs, SearchFieldArg, SearchMatchArg, SearchSortArg,
+    ShowArgs,
 };
 use crate::output;
-use okf_core::bundle::loader::{concept_exists, load_bundle, load_bundle_metadata, load_concept};
+use okf_core::bundle::loader::{concept_exists, load_bundle, load_concept};
 use okf_core::bundle::resolve::resolve_bundle;
 use okf_core::error::{OkfError, Result};
 use okf_core::graph::backlinks::backlinks_of;
 use okf_core::graph::build::build_graph;
-use okf_core::graph::render::{render_neighborhood, GraphDirection, RenderFormat};
+use okf_core::graph::render::{GraphDirection, RenderFormat, render_neighborhood};
 use okf_core::model::concept::Concept;
 use okf_core::model::link::outbound_links;
-use okf_core::ontology::load::try_load;
 use okf_core::query::browse::browse;
 use okf_core::query::resolve::resolve_at;
 use okf_core::query::search::{
-    search_detailed, SearchField, SearchFilter, SearchSort, TextMatchMode,
+    SearchField, SearchFilter, SearchSort, TextMatchMode, search_detailed,
 };
 use serde_json::json;
 
@@ -48,7 +47,7 @@ pub fn run_search_in_scope(
     json_output: bool,
     scope: &[(String, std::path::PathBuf, String)],
 ) -> Result<i32> {
-    use okf_core::query::metadata::{facet, project, Condition};
+    use okf_core::query::metadata::{Condition, facet, project};
     if (args.facets || !args.facet.is_empty()) && !json_output {
         return Err(OkfError::Usage("--facets/--facet require --json".into()));
     }
@@ -380,14 +379,6 @@ pub fn run_search_in_scope(
         }
     }
     let has_more = complete && page_end < matched && offset < matched;
-    let extended = args.offset.is_some()
-        || args.facets
-        || !args.facet.is_empty()
-        || !args.facet_filter.is_empty()
-        || !projection.is_empty()
-        || !expands.is_empty()
-        || args.scan_limit.is_some()
-        || args.full_scan;
     if json_output {
         output::print_line(
             &json!({"kind":"query-summary","schema_version":1,"total_matches":if complete{Some(matched)}else{None},"observed_matches":matched,"returned":page.len(),"offset":offset,"limit":args.limit,"has_more":has_more,"next_offset":if has_more{Some(offset+page.len())}else{None},"scan_complete":complete,"partial":!complete,"examined_documents":examined,"scan_limit":scan_limit,"filters":args.facet_filter,"scope":scope.iter().map(|(id,root,version)|json!({"bundle":id,"root":root,"version":version,"mutable":version=="working-tree"})).collect::<Vec<_>>(),"interpretation":roots.iter().map(|(s,_)|s).collect::<Vec<_>>() }),
@@ -431,7 +422,7 @@ fn print_cells(
     let record = okf_core::query::metadata::project(concept, fields, bundle, version)?;
     let cells = record["fields"]
         .as_array()
-        .unwrap()
+        .expect("invariant: projection record has a fields array")
         .iter()
         .map(|c| {
             if c["present"] == false {
@@ -442,7 +433,7 @@ fn print_cells(
             } else {
                 let values: Vec<_> = c["occurrences"]
                     .as_array()
-                    .unwrap()
+                    .expect("invariant: absent-value cell carries occurrences")
                     .iter()
                     .map(|o| o["value"].clone())
                     .collect();
@@ -576,62 +567,59 @@ pub fn run_backlinks(args: &crate::cli::RelationshipArgs, json: bool) -> Result<
     let root = resolve_bundle(args.bundle.as_deref())?;
     let bundle = load_bundle(&root)?;
     let (_, ontology) = okf_core::bundle::settings::load_for(&root)?;
-    if args.details {
-        if let Some(ontology) = &ontology {
-            let target = okf_core::model::concept::ConceptId::parse(&args.concept)?;
-            let mut matched = std::collections::BTreeSet::new();
-            for concept in &bundle.concepts {
-                for mut edge in okf_core::graph::relationships::relationships(concept, ontology)
-                    .into_iter()
-                    .filter(|e| e.target == target.0)
-                {
-                    edge.status = if bundle.get(&edge.target).is_some() {
-                        "resolved"
-                    } else {
-                        "missing"
-                    }
-                    .into();
-                    matched.insert(concept.id.0.clone());
-                    if json {
-                        output::print_line(
-                            &json!({"kind":"relationship","schema_version":1,"direction":"incoming","bundle":okf_core::bundle::settings::load_for(&root)?.0.bundle,"version":"working-tree","edge":edge}),
-                        )?;
-                    } else {
-                        output::print_text_line(format_args!(
-                            "{} —{}→ {} (authored {})",
-                            edge.target,
-                            edge.inverse.as_deref().unwrap_or("incoming"),
-                            edge.source,
-                            edge.authored_kind.as_deref().unwrap_or("unknown")
-                        ))?;
-                        output::print_text_line(format_args!(
-                            "  source field: {}",
-                            edge.field_path
-                        ))?;
-                        for (key, value) in edge.attributes {
-                            output::print_text_line(format_args!(
-                                "  {}: {}",
-                                key,
-                                serde_json::to_string(&value).unwrap_or_default()
-                            ))?;
-                        }
-                    }
-                }
-            }
-            for id in backlinks_of(&bundle, Some(ontology), &args.concept)
+    if args.details
+        && let Some(ontology) = &ontology
+    {
+        let target = okf_core::model::concept::ConceptId::parse(&args.concept)?;
+        let mut matched = std::collections::BTreeSet::new();
+        for concept in &bundle.concepts {
+            for mut edge in okf_core::graph::relationships::relationships(concept, ontology)
                 .into_iter()
-                .filter(|id| !matched.contains(&id.0))
+                .filter(|e| e.target == target.0)
             {
+                edge.status = if bundle.get(&edge.target).is_some() {
+                    "resolved"
+                } else {
+                    "missing"
+                }
+                .into();
+                matched.insert(concept.id.0.clone());
                 if json {
                     output::print_line(
-                        &json!({"kind":"relationship","schema_version":1,"direction":"incoming","source":id.0,"target":target.0,"authored_kind":null,"inverse":null,"status":"resolved"}),
+                        &json!({"kind":"relationship","schema_version":1,"direction":"incoming","bundle":okf_core::bundle::settings::load_for(&root)?.0.bundle,"version":"working-tree","edge":edge}),
                     )?;
                 } else {
-                    output::print_text_line(format_args!("{} ← {}", target.0, id.0))?;
+                    output::print_text_line(format_args!(
+                        "{} —{}→ {} (authored {})",
+                        edge.target,
+                        edge.inverse.as_deref().unwrap_or("incoming"),
+                        edge.source,
+                        edge.authored_kind.as_deref().unwrap_or("unknown")
+                    ))?;
+                    output::print_text_line(format_args!("  source field: {}", edge.field_path))?;
+                    for (key, value) in edge.attributes {
+                        output::print_text_line(format_args!(
+                            "  {}: {}",
+                            key,
+                            serde_json::to_string(&value).unwrap_or_default()
+                        ))?;
+                    }
                 }
             }
-            return Ok(0);
         }
+        for id in backlinks_of(&bundle, Some(ontology), &args.concept)
+            .into_iter()
+            .filter(|id| !matched.contains(&id.0))
+        {
+            if json {
+                output::print_line(
+                    &json!({"kind":"relationship","schema_version":1,"direction":"incoming","source":id.0,"target":target.0,"authored_kind":null,"inverse":null,"status":"resolved"}),
+                )?;
+            } else {
+                output::print_text_line(format_args!("{} ← {}", target.0, id.0))?;
+            }
+        }
+        return Ok(0);
     }
     let ids = backlinks_of(&bundle, ontology.as_ref(), &args.concept);
     let concepts: Vec<&Concept> = ids.iter().filter_map(|id| bundle.get(&id.0)).collect();
@@ -754,7 +742,7 @@ fn run_filtered_relationship(
     json_output: bool,
     direction: okf_core::graph::filter::Direction,
 ) -> Result<i32> {
-    use okf_core::graph::filter::{query_local, Direction, QueryOptions};
+    use okf_core::graph::filter::{Direction, QueryOptions, query_local};
     let root = resolve_bundle(args.bundle.as_deref())?;
     let operation = if matches!(direction, Direction::Incoming) {
         "backlinks"
@@ -805,28 +793,28 @@ fn run_filtered_relationship(
         }
     }
     if !result.evidence.scan_complete {
-        output::mark_partial("examination", "relationship-scan-limit")
+        output::mark_partial("examination", "relationship-scan-limit");
     }
     if !result.evidence.delivery_complete {
-        output::mark_partial("delivery", "relationship-result-limit")
+        output::mark_partial("delivery", "relationship-result-limit");
     }
     if result.evidence.unresolved_candidates > 0 {
-        output::mark_partial("matching", "unresolved-related-metadata")
+        output::mark_partial("matching", "unresolved-related-metadata");
     }
     for row in result.occurrences {
         if json_output {
             if details {
                 output::print_line(
                     &json!({"kind":"relationship","direction":operation,"source":row.source,"target":row.target,"related":row.related,"exists":row.exists,"edge":row.relationship}),
-                )?
+                )?;
             } else if matches!(direction, Direction::Incoming) {
                 if let Some(c) = bundle.get(&row.related) {
-                    output::print_concepts(&[c], true)?
+                    output::print_concepts(&[c], true)?;
                 }
             } else {
                 output::print_line(
                     &json!({"kind":"link","source":row.source,"target":row.target,"exists":row.exists}),
-                )?
+                )?;
             }
         } else {
             output::print_text_line(format_args!(
@@ -838,20 +826,20 @@ fn run_filtered_relationship(
                     .and_then(|r| r.authored_kind.as_ref())
                     .map(|k| format!(" [{k}]"))
                     .unwrap_or_default()
-            ))?
+            ))?;
         }
     }
     if json_output {
         output::print_line(
             &json!({"kind":"relationship-query-summary","evidence":result.evidence,"eligible_documents":eligible_documents,"total_matches":if result.evidence.scan_complete{Some(result.evidence.matched_concepts)}else{None}}),
-        )?
+        )?;
     } else {
         eprintln!(
             "matched {} concepts, {} occurrences; scan complete: {}",
             result.evidence.matched_concepts,
             result.evidence.matched_occurrences,
             result.evidence.scan_complete
-        )
+        );
     }
     Ok(0)
 }
@@ -861,10 +849,10 @@ pub fn run_graph(args: &GraphArgs, json_output: bool) -> Result<i32> {
     let root = resolve_bundle(args.bundle.as_deref())?;
     let bundle = load_bundle(&root)?;
     let (_, ontology) = okf_core::bundle::settings::load_for(&root)?;
-    let format = RenderFormat::parse(&args.format).ok_or_else(|| {
+    let format = RenderFormat::parse(args.format.as_str()).ok_or_else(|| {
         OkfError::Usage(format!(
             "unknown graph format {:?}: expected mermaid, dot, or graphml",
-            args.format
+            args.format.as_str()
         ))
     })?;
     let direction = args
@@ -907,7 +895,7 @@ pub fn run_graph(args: &GraphArgs, json_output: bool) -> Result<i32> {
             )?
         };
         if evidence.unresolved_candidates > 0 {
-            output::mark_partial("matching", "unresolved-related-metadata")
+            output::mark_partial("matching", "unresolved-related-metadata");
         }
         graph
     } else {
@@ -947,12 +935,12 @@ pub fn run_resolve(args: &ResolveArgs, json: bool) -> Result<i32> {
             "exists": r.exists,
         }))?;
     } else {
-        println!(
+        output::print_text_line(format_args!(
             "{}\t{}\t{}",
             r.id.0,
             r.path.display(),
             if r.exists { "exists" } else { "missing" }
-        );
+        ))?;
     }
     Ok(if r.exists { 0 } else { 1 })
 }
@@ -1040,8 +1028,7 @@ fn emit_expansion(
         for raw in rules {
             let (declaring, name) = raw
                 .split_once(':')
-                .map(|(b, r)| (Some(b), r))
-                .unwrap_or((None, raw.as_str()));
+                .map_or((None, raw.as_str()), |(b, r)| (Some(b), r));
             if declaring.is_none() && *i != 0 {
                 continue;
             }
@@ -1120,25 +1107,21 @@ fn emit_expansion(
             });
             let mut fetch_limited = false;
             if let (Some(n), Some(id), Some(key)) = (target_index, id.as_ref(), target_key.as_ref())
+                && bundles[n].get(id).is_none()
+                && !fetched_targets.contains_key(key)
             {
-                if bundles[n].get(id).is_none() && !fetched_targets.contains_key(key) {
-                    if fetched_targets.len() >= args.expansion_targets
-                        || emitted_targets >= args.expansion_targets
-                    {
-                        reasons.insert("target-limit");
-                        fetch_limited = true;
+                if fetched_targets.len() >= args.expansion_targets
+                    || emitted_targets >= args.expansion_targets
+                {
+                    reasons.insert("target-limit");
+                    fetch_limited = true;
+                } else {
+                    let concept = if let Some(revision) = scope[n].2.strip_prefix("git:") {
+                        okf_core::graph::catalog::read_concept_at(&bundles[n].root, id, revision)?
                     } else {
-                        let concept = if let Some(revision) = scope[n].2.strip_prefix("git:") {
-                            okf_core::graph::catalog::read_concept_at(
-                                &bundles[n].root,
-                                id,
-                                revision,
-                            )?
-                        } else {
-                            load_concept(&bundles[n].root, id)?
-                        };
-                        fetched_targets.insert(key.clone(), concept);
-                    }
+                        load_concept(&bundles[n].root, id)?
+                    };
+                    fetched_targets.insert(key.clone(), concept);
                 }
             }
             let target = target_index.and_then(|n| {
@@ -1189,42 +1172,38 @@ fn emit_expansion(
                 }
                 .into();
             }
-            if let Some((n, c)) = target {
-                if let Some(ct) = ontology
+            if let Some((n, c)) = target
+                && let Some(ct) = ontology
                     .concepts
                     .get(hit.concept.concept_type().unwrap_or(""))
-                {
-                    if let Some(mapped) = ct.relationships.get(&edge.rule) {
-                        if let Some(reference) = ct.references.get(&mapped.reference) {
-                            let restriction = edge
-                                .authored_kind
+                && let Some(mapped) = ct.relationships.get(&edge.rule)
+                && let Some(reference) = ct.references.get(&mapped.reference)
+            {
+                let restriction = edge
+                    .authored_kind
+                    .as_ref()
+                    .and_then(|kind| mapped.kinds.get(kind))
+                    .and_then(|k| k.target.as_ref())
+                    .unwrap_or(&reference.target);
+                let allowed = restriction.types().iter().any(|expected| {
+                    let (expected_bundle, expected_type) =
+                        expected.split_once(':').unwrap_or((&scope[*i].0, expected));
+                    expected_bundle == scope[n].0
+                        && c.concept_type().is_some_and(|actual| {
+                            settings[n]
+                                .1
                                 .as_ref()
-                                .and_then(|kind| mapped.kinds.get(kind))
-                                .and_then(|k| k.target.as_ref())
-                                .unwrap_or(&reference.target);
-                            let allowed = restriction.types().iter().any(|expected| {
-                                let (expected_bundle, expected_type) =
-                                    expected.split_once(':').unwrap_or((&scope[*i].0, expected));
-                                expected_bundle == scope[n].0
-                                    && c.concept_type().is_some_and(|actual| {
-                                        settings[n]
-                                            .1
-                                            .as_ref()
-                                            .map(|ont| {
-                                                okf_core::ontology::field_types::concept_is_a(
-                                                    ont,
-                                                    actual,
-                                                    expected_type,
-                                                )
-                                            })
-                                            .unwrap_or(actual == expected_type)
-                                    })
-                            });
-                            if !allowed {
-                                edge.status = "wrong-type".into();
-                            }
-                        }
-                    }
+                                .map_or(actual == expected_type, |ont| {
+                                    okf_core::ontology::field_types::concept_is_a(
+                                        ont,
+                                        actual,
+                                        expected_type,
+                                    )
+                                })
+                        })
+                });
+                if !allowed {
+                    edge.status = "wrong-type".into();
                 }
             }
             let identity = target.map(|(n, c)| format!("{}:{}@{}", scope[n].0, c.id.0, scope[n].2));
@@ -1239,16 +1218,16 @@ fn emit_expansion(
                 records[0]["target_payload_status"] = json!("target-limit");
                 records[0]["target_identity"] = json!(target_key);
             }
-            if let (Some(identity), Some(mut payload)) = (&identity, payload) {
-                if !targets.contains(identity) {
-                    if emitted_targets >= args.expansion_targets {
-                        reasons.insert("target-limit");
-                        records[0]["target_payload_status"] = json!("target-limit");
-                    } else {
-                        payload["kind"] = json!("related-concept");
-                        payload["identity"] = json!(identity);
-                        records.push(payload);
-                    }
+            if let (Some(identity), Some(mut payload)) = (&identity, payload)
+                && !targets.contains(identity)
+            {
+                if emitted_targets >= args.expansion_targets {
+                    reasons.insert("target-limit");
+                    records[0]["target_payload_status"] = json!("target-limit");
+                } else {
+                    payload["kind"] = json!("related-concept");
+                    payload["identity"] = json!(identity);
+                    records.push(payload);
                 }
             }
             let size = records
@@ -1313,7 +1292,7 @@ fn emit_expansion(
     if json_output {
         output::print_line(&summary)?;
     } else if !reasons.is_empty() {
-        output::print_text_line(format_args!("expansion truncated: {}", summary))?;
+        output::print_text_line(format_args!("expansion truncated: {summary}"))?;
     }
     for reason in reasons {
         let bound = match reason {

@@ -3,8 +3,10 @@
 //! Resolution/checks never fetch. Only `plan_update` and `sync(check=false)` acquire objects.
 use crate::error::{OkfError, Result};
 use crate::fingerprint::canonicalize::sha256_hex;
+use crate::ports::git_read::KillOnDrop;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write as _;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -273,7 +275,9 @@ fn validate_url(url: &str) -> Result<()> {
             return Err(usage("invalid SSH URL or embedded credential"));
         }
     } else {
-        return Err(usage("Git registrations require https:// or ssh:// URLs; use directory registrations for local paths"));
+        return Err(usage(
+            "Git registrations require https:// or ssh:// URLs; use directory registrations for local paths",
+        ));
     }
     Ok(())
 }
@@ -301,7 +305,7 @@ pub fn registrations(catalog: &Path) -> Result<BTreeMap<String, GitRegistration>
     let value: serde_yaml::Value = yaml(&std::fs::read(catalog)?, "catalog")?;
     let version = value
         .get("catalog_version")
-        .and_then(|v| v.as_u64())
+        .and_then(serde_yaml::Value::as_u64)
         .ok_or_else(|| usage("catalog_version is required"))?;
     if !matches!(version, 1 | 2) {
         return Err(usage("unsupported catalog_version"));
@@ -404,17 +408,57 @@ fn checked_lock(
             return Err(environment(format!(
                 "cannot read {}: {e}; plan and apply the initial dependency lock",
                 path.display()
-            )))
+            )));
         }
     };
-    let lock: LockFile = yaml(&bytes, "catalog lock")?;
+    let mut lock: LockFile = yaml(&bytes, "catalog lock")?;
+    normalize_lock(&mut lock);
     validate_lock(&lock, declarations)?;
     Ok(Some(lock))
 }
-fn validate_lock(lock: &LockFile, declarations: &BTreeMap<String, GitRegistration>) -> Result<()> {
+/// Commit IDs compare equal to Git's (lowercase) output only after normalisation.
+fn normalize_lock(lock: &mut LockFile) {
+    for repo in lock.repositories.values_mut() {
+        repo.commit.make_ascii_lowercase();
+    }
+}
+/// Checks that hold for any lock, independent of the current declarations. The lock is
+/// committed to the consumer repository, so its URLs, commits and paths are untrusted until
+/// they pass here; only then may they reach Git or the cache.
+fn validate_lock_identities(lock: &LockFile) -> Result<()> {
     if lock.lock_version != 1 {
         return Err(usage("unsupported lock_version"));
     }
+    let mut repo_commits = BTreeMap::new();
+    for (key, repo) in &lock.repositories {
+        validate_url(&repo.url)?;
+        if !full_oid(&repo.commit)
+            || !matches!(
+                (repo.object_format.as_str(), repo.commit.len()),
+                ("sha1", 40) | ("sha256", 64)
+            )
+        {
+            return Err(usage(format!(
+                "invalid locked identity for repository {key}"
+            )));
+        }
+        if repo_commits
+            .insert(&repo.url, &repo.commit)
+            .is_some_and(|old| old != &repo.commit)
+        {
+            return Err(usage("one repository has multiple locked revisions"));
+        }
+    }
+    for (id, bundle) in &lock.bundles {
+        if !lock.repositories.contains_key(&bundle.repository) {
+            return Err(usage(format!("missing locked repository for {id}")));
+        }
+        safe_relative(&bundle.path)?;
+    }
+    Ok(())
+}
+fn validate_lock(lock: &LockFile, declarations: &BTreeMap<String, GitRegistration>) -> Result<()> {
+    validate_lock_identities(lock)?;
     if lock.declaration_digest != digest(declarations)? {
         return Err(usage(
             "catalog dependency declarations differ from lock; create a registration-change plan",
@@ -422,15 +466,6 @@ fn validate_lock(lock: &LockFile, declarations: &BTreeMap<String, GitRegistratio
     }
     if lock.bundles.len() != declarations.len() {
         return Err(usage("lock registration set differs from catalog"));
-    }
-    let mut repo_commits = BTreeMap::new();
-    for repo in lock.repositories.values() {
-        if repo_commits
-            .insert(&repo.url, &repo.commit)
-            .is_some_and(|old| old != &repo.commit)
-        {
-            return Err(usage("one repository has multiple locked revisions"));
-        }
     }
     for (id, decl) in declarations {
         let b = lock
@@ -441,13 +476,7 @@ fn validate_lock(lock: &LockFile, declarations: &BTreeMap<String, GitRegistratio
             .repositories
             .get(&b.repository)
             .ok_or_else(|| usage("missing locked repository"))?;
-        if r.url != decl.url
-            || b.path != decl.path
-            || !full_oid(&r.commit)
-            || !matches!(r.object_format.as_str(), "sha1" | "sha256")
-            || (r.object_format == "sha1" && r.commit.len() != 40)
-            || (r.object_format == "sha256" && r.commit.len() != 64)
-        {
+        if r.url != decl.url || b.path != decl.path {
             return Err(usage(format!("invalid locked identity for {id}")));
         }
     }
@@ -524,13 +553,13 @@ fn guard(path: &Path) -> Result<Guard> {
     if let Some(p) = path.parent() {
         std::fs::create_dir_all(p)?;
     }
-    if let Ok(meta) = std::fs::symlink_metadata(path) {
-        if !meta.is_file() || meta.file_type().is_symlink() {
-            return Err(environment(format!(
-                "lock must be a regular file: {}",
-                path.display()
-            )));
-        }
+    if let Ok(meta) = std::fs::symlink_metadata(path)
+        && (!meta.is_file() || meta.file_type().is_symlink())
+    {
+        return Err(environment(format!(
+            "lock must be a regular file: {}",
+            path.display()
+        )));
     }
     let file = std::fs::OpenOptions::new()
         .read(true)
@@ -569,6 +598,11 @@ fn ensure_store(url: &str, object_format: &str) -> Result<PathBuf> {
 fn fetch(url: &str, reference: &str) -> Result<LockedRepository> {
     validate_url(url)?;
     validate_ref(reference)?;
+    let reference = &if full_oid(reference) {
+        reference.to_ascii_lowercase()
+    } else {
+        reference.to_owned()
+    };
     let object_format = if full_oid(reference) {
         if reference.len() == 64 {
             "sha256"
@@ -602,21 +636,32 @@ fn fetch(url: &str, reference: &str) -> Result<LockedRepository> {
     })
 }
 struct BlobReader {
-    child: std::process::Child,
+    // Field order matters: close our pipe ends before the guard kills and reaps the child.
     input: std::process::ChildStdin,
     output: std::io::BufReader<std::process::ChildStdout>,
+    _child: KillOnDrop,
 }
 impl BlobReader {
     fn new(store: &Path) -> Result<Self> {
-        let mut child = git_command(store)
-            .args(["cat-file", "--batch"])
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .spawn()?;
+        let mut child = KillOnDrop::new(
+            git_command(store)
+                .args(["cat-file", "--batch"])
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .spawn()?,
+        );
+        let input = child
+            .stdin
+            .take()
+            .ok_or_else(|| OkfError::Internal("git cat-file stdin unavailable".into()))?;
+        let output = child
+            .stdout
+            .take()
+            .ok_or_else(|| OkfError::Internal("git cat-file stdout unavailable".into()))?;
         Ok(Self {
-            input: child.stdin.take().unwrap(),
-            output: std::io::BufReader::new(child.stdout.take().unwrap()),
-            child,
+            input,
+            output: std::io::BufReader::new(output),
+            _child: child,
         })
     }
     fn blob(&mut self, oid: &str) -> Result<Vec<u8>> {
@@ -647,12 +692,6 @@ impl BlobReader {
             return Err(environment("invalid Git blob response framing"));
         }
         Ok(bytes)
-    }
-}
-impl Drop for BlobReader {
-    fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
     }
 }
 fn tree(repo: &LockedRepository) -> Result<BTreeMap<String, Member>> {
@@ -873,14 +912,14 @@ fn observe(root: &Path, decl: &GitRegistration, snapshot: &Snapshot) -> Result<O
     let index = root.join("index.md");
     if index.is_file() {
         let text = std::fs::read_to_string(index)?;
-        if let Some(rest) = text.strip_prefix("---\n") {
-            if let Some((front, _)) = rest.split_once("\n---") {
-                let v: serde_yaml::Value = yaml(front.as_bytes(), "root index")?;
-                observed.okf_spec = v
-                    .get("okf_version")
-                    .and_then(|v| v.as_str())
-                    .map(str::to_owned);
-            }
+        if let Some(rest) = text.strip_prefix("---\n")
+            && let Some((front, _)) = rest.split_once("\n---")
+        {
+            let v: serde_yaml::Value = yaml(front.as_bytes(), "root index")?;
+            observed.okf_spec = v
+                .get("okf_version")
+                .and_then(|v| v.as_str())
+                .map(str::to_owned);
         }
     }
     if observed.okf_spec.as_deref().is_some_and(|v| v != "0.2") {
@@ -903,7 +942,7 @@ fn observe(root: &Path, decl: &GitRegistration, snapshot: &Snapshot) -> Result<O
         let v: serde_yaml::Value = yaml(&bytes, "remote manifest")?;
         let version = v
             .get("manifest_version")
-            .and_then(|v| v.as_u64())
+            .and_then(serde_yaml::Value::as_u64)
             .ok_or_else(|| usage("remote manifest requires manifest_version"))?;
         if version != 1 {
             return Err(usage("unsupported remote manifest version"));
@@ -1047,15 +1086,23 @@ pub fn plan_update(
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
         Err(e) => return Err(e.into()),
     };
+    // The old lock reaches ls-tree, rev-list and the object store: validate it like the new one
+    // (its declarations may legitimately differ, which is what a registration change is).
     let old = old_bytes
         .as_ref()
-        .map(|b| yaml::<LockFile>(b, "old catalog lock"))
+        .map(|b| {
+            let mut lock = yaml::<LockFile>(b, "old catalog lock")?;
+            if lock.lock_version != 1 {
+                return Err(usage("unsupported old lock version"));
+            }
+            normalize_lock(&mut lock);
+            validate_lock_identities(&lock)
+                .map_err(|e| usage(format!("invalid old catalog lock: {e}")))?;
+            Ok(lock)
+        })
         .transpose()?;
     if ids.is_empty() && old.as_ref().is_none_or(|l| l.bundles.is_empty()) {
         return Err(usage("catalog has no Git registrations to update"));
-    }
-    if old.as_ref().is_some_and(|l| l.lock_version != 1) {
-        return Err(usage("unsupported old lock version"));
     }
     let declaration_digest = digest(&declarations)?;
     let registration_change = old
@@ -1102,7 +1149,7 @@ pub fn plan_update(
             match old_tree.as_ref().and_then(|t| t.get(p)) {
                 None => added.push(p.clone()),
                 Some(old) if old.object != m.object || old.mode != m.mode => {
-                    changed.push(p.clone())
+                    changed.push(p.clone());
                 }
                 _ => {}
             }
@@ -1322,7 +1369,9 @@ pub fn apply_plan(
         return Err(usage("plan impact evidence changed or is inconsistent"));
     }
     if !plan.impact_complete && !allow_incomplete {
-        return Err(usage("impact evidence is incomplete; review reported gaps and explicitly use --allow-incomplete-impact"));
+        return Err(usage(
+            "impact evidence is incomplete; review reported gaps and explicitly use --allow-incomplete-impact",
+        ));
     }
     for (id, b) in &plan.candidate.bundles {
         if !selected_ids.contains(id) {
@@ -1427,21 +1476,21 @@ pub fn ensure_writable(path: &Path) -> Result<()> {
         let declarations = registrations(&catalog)?;
         // Protection uses declared ownership, not successful lock compatibility: a stale lock
         // must not prevent repairing local catalog configuration or unlock managed snapshots.
-        if let Ok(bytes) = std::fs::read(lock_path(&catalog)) {
-            if let Ok(lock) = yaml::<LockFile>(&bytes, "catalog lock") {
-                for (id, decl) in &declarations {
-                    if let Some(bundle) = lock.bundles.get(id) {
-                        if let Some(repo) = lock.repositories.get(&bundle.repository) {
-                            let root = snapshot_dir(repo)?
-                                .join("tree")
-                                .join(safe_relative(&decl.path)?);
-                            if abs.starts_with(canonical_existing(&root)?) {
-                                return Err(OkfError::Policy(format!(
-                                    "remote bundle {id} is read-only ({})",
-                                    decl.url
-                                )));
-                            }
-                        }
+        if let Ok(bytes) = std::fs::read(lock_path(&catalog))
+            && let Ok(lock) = yaml::<LockFile>(&bytes, "catalog lock")
+        {
+            for (id, decl) in &declarations {
+                if let Some(bundle) = lock.bundles.get(id)
+                    && let Some(repo) = lock.repositories.get(&bundle.repository)
+                {
+                    let root = snapshot_dir(repo)?
+                        .join("tree")
+                        .join(safe_relative(&decl.path)?);
+                    if abs.starts_with(canonical_existing(&root)?) {
+                        return Err(OkfError::Policy(format!(
+                            "remote bundle {id} is read-only ({})",
+                            decl.url
+                        )));
                     }
                 }
             }
@@ -1458,16 +1507,14 @@ pub fn ensure_writable(path: &Path) -> Result<()> {
             let value: serde_yaml::Value = yaml(&std::fs::read(&path)?, "catalog overrides")?;
             if let Some(map) = value.get("bundles").and_then(|v| v.as_mapping()) {
                 for (id, location) in map {
-                    if id.as_str().is_some_and(|id| declarations.contains_key(id)) {
-                        if let Some(location) = location.as_str() {
-                            let root = canonical_existing(
-                                &path.parent().unwrap_or(Path::new(".")).join(location),
-                            )?;
-                            if abs.starts_with(root) {
-                                return Err(OkfError::Policy(
-                                    "remote override is read-only".into(),
-                                ));
-                            }
+                    if id.as_str().is_some_and(|id| declarations.contains_key(id))
+                        && let Some(location) = location.as_str()
+                    {
+                        let root = canonical_existing(
+                            &path.parent().unwrap_or(Path::new(".")).join(location),
+                        )?;
+                        if abs.starts_with(root) {
+                            return Err(OkfError::Policy("remote override is read-only".into()));
                         }
                     }
                 }
@@ -1562,6 +1609,7 @@ pub fn read_snapshot(root: &Path, commit: &str, relative: &Path) -> Result<Vec<u
     if !full_oid(commit) {
         return Err(usage("snapshot read requires a full immutable commit ID"));
     }
+    let commit = &commit.to_ascii_lowercase();
     safe_relative(&relative.to_string_lossy())?;
     let root = std::fs::canonicalize(root)?;
     for ancestor in root.ancestors() {
@@ -1669,31 +1717,33 @@ pub fn materialize_local(root: &Path, revision: &str) -> Result<LocalSnapshot> {
             )?;
         }
         let _guard = guard(&store.with_extension("local.lock"))?;
-        let mut pack = git_command(&repository)
-            .args(["pack-objects", "--stdout", "--revs"])
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .spawn()?;
+        let mut pack = KillOnDrop::new(
+            git_command(&repository)
+                .args(["pack-objects", "--stdout", "--revs"])
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .spawn()?,
+        );
         {
             use std::io::Write;
-            pack.stdin
+            let mut stdin = pack
+                .stdin
                 .take()
-                .unwrap()
-                .write_all(format!("{commit}\n").as_bytes())?;
+                .ok_or_else(|| OkfError::Internal("git pack-objects stdin unavailable".into()))?;
+            stdin.write_all(format!("{commit}\n").as_bytes())?;
         }
-        let mut unpack = match git_command(&store)
-            .args(["index-pack", "--stdin"])
-            .stdin(std::process::Stdio::from(pack.stdout.take().unwrap()))
-            .stdout(std::process::Stdio::null())
-            .spawn()
-        {
-            Ok(child) => child,
-            Err(error) => {
-                let _ = pack.kill();
-                let _ = pack.wait();
-                return Err(error.into());
-            }
-        };
+        let packed = pack
+            .stdout
+            .take()
+            .ok_or_else(|| OkfError::Internal("git pack-objects stdout unavailable".into()))?;
+        // Both guards kill and reap their process if anything below returns early.
+        let mut unpack = KillOnDrop::new(
+            git_command(&store)
+                .args(["index-pack", "--stdin"])
+                .stdin(std::process::Stdio::from(packed))
+                .stdout(std::process::Stdio::null())
+                .spawn()?,
+        );
         let unpack_status = unpack.wait()?;
         let pack_status = pack.wait()?;
         if !unpack_status.success() || !pack_status.success() {
@@ -1795,7 +1845,7 @@ mod tests {
     fn plans_pin_exact_objects_detect_stale_inputs_and_preserve_read_only_snapshots() {
         let _serial = ENV_LOCK
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = tempfile::tempdir().unwrap();
         let _env = CacheEnv::set(&dir.path().join("cache"));
         let (upstream, catalog) = fixture(dir.path());
@@ -1819,17 +1869,21 @@ mod tests {
         let accepted = resolve_registration(&catalog, "test.docs").unwrap();
         assert!(accepted.available);
         assert_ne!(accepted.origin.commit.as_deref(), Some(newer.as_str()));
-        assert!(std::fs::read_to_string(accepted.root.join("a.md"))
-            .unwrap()
-            .contains("# A"));
+        assert!(
+            std::fs::read_to_string(accepted.root.join("a.md"))
+                .unwrap()
+                .contains("# A")
+        );
         assert!(ensure_writable(&accepted.root.join("new.md")).is_err());
         assert!(sync(&catalog, None, true).is_ok());
         assert!(apply_plan(&catalog, &plan, true).is_err());
         let next = plan_update(&catalog, None, &[]).unwrap();
         assert_eq!(next.kind, "update");
-        assert!(next.changes[0]
-            .changed
-            .contains(&"bundles/docs/a.md".into()));
+        assert!(
+            next.changes[0]
+                .changed
+                .contains(&"bundles/docs/a.md".into())
+        );
         let old_origin = origin(&accepted.root).unwrap().unwrap();
         assert_eq!(
             read_snapshot(
@@ -1847,16 +1901,65 @@ mod tests {
         assert!(sync(&catalog, None, true).is_err());
         let recovery = recover_cache(&catalog, None).unwrap();
         assert_eq!(recovery.quarantined.len(), 1);
-        assert!(recovery.quarantined[0]
-            .join("tree/bundles/docs/extra.md")
-            .is_file());
+        assert!(
+            recovery.quarantined[0]
+                .join("tree/bundles/docs/extra.md")
+                .is_file()
+        );
         assert!(sync(&catalog, None, true).is_ok());
+    }
+    #[test]
+    fn old_locks_are_validated_and_commit_ids_normalised() {
+        let _serial = ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let dir = tempfile::tempdir().unwrap();
+        let _env = CacheEnv::set(&dir.path().join("cache"));
+        let (_upstream, catalog) = fixture(dir.path());
+        let plan = plan_update(&catalog, None, &[]).unwrap();
+        apply_plan(&catalog, &plan, true).unwrap();
+        let lock_file = lock_path(&catalog);
+        let accepted = std::fs::read_to_string(&lock_file).unwrap();
+        let commit = plan
+            .candidate
+            .repositories
+            .values()
+            .next()
+            .unwrap()
+            .commit
+            .clone();
+
+        // Uppercase hex is the same commit: it normalises and still matches Git's output.
+        std::fs::write(
+            &lock_file,
+            accepted.replace(&commit, &commit.to_ascii_uppercase()),
+        )
+        .unwrap();
+        assert!(
+            resolve_registration(&catalog, "test.docs")
+                .unwrap()
+                .available
+        );
+        assert_eq!(plan_update(&catalog, None, &[]).unwrap().kind, "update");
+
+        // A tampered old lock must not reach Git, even in a registration-change plan.
+        for (from, to) in [
+            (commit.as_str(), "--output=/tmp/okf-pwned"),
+            ("bundles/docs", "../outside"),
+        ] {
+            std::fs::write(&lock_file, accepted.replace(from, to)).unwrap();
+            let error = plan_update(&catalog, None, &[]).unwrap_err();
+            assert!(
+                error.to_string().contains("invalid old catalog lock"),
+                "{error}"
+            );
+        }
     }
     #[test]
     fn consumer_baselines_and_unsupported_entries_are_not_waived() {
         let _serial = ENV_LOCK
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = tempfile::tempdir().unwrap();
         let _env = CacheEnv::set(&dir.path().join("cache"));
         let (upstream, catalog) = fixture(dir.path());
@@ -1878,7 +1981,7 @@ mod tests {
     fn complete_scoped_plan_and_registration_removal_preserve_accepted_state() {
         let _serial = ENV_LOCK
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = tempfile::tempdir().unwrap();
         let _env = CacheEnv::set(&dir.path().join("cache"));
         let (_upstream, catalog) = fixture(dir.path());
@@ -1908,7 +2011,7 @@ mod tests {
     fn repository_groups_update_together_and_reject_unsafe_overrides() {
         let _serial = ENV_LOCK
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = tempfile::tempdir().unwrap();
         let _env = CacheEnv::set(&dir.path().join("cache"));
         let (upstream, catalog) = fixture(dir.path());
@@ -1920,7 +2023,11 @@ mod tests {
         .unwrap();
         commit(&upstream, "second bundle");
         let mut source = std::fs::read_to_string(&catalog).unwrap();
-        source.push_str(&format!("  test.other:\n    location:\n      type: git\n      url: '{}'\n      ref: refs/heads/main\n      path: bundles/other\n",upstream.display()));
+        let _ = writeln!(
+            source,
+            "  test.other:\n    location:\n      type: git\n      url: '{}'\n      ref: refs/heads/main\n      path: bundles/other",
+            upstream.display()
+        );
         std::fs::write(&catalog, &source).unwrap();
         let plan = plan_update(&catalog, Some("test.docs"), &[]).unwrap();
         assert_eq!(plan.selected_bundles, vec!["test.docs", "test.other"]);
@@ -1937,7 +2044,9 @@ mod tests {
     }
     #[test]
     fn acquisition_cannot_bypass_conformance_or_read_external_ontology_without_consumers() {
-        let _serial = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let _serial = ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = tempfile::tempdir().unwrap();
         let _env = CacheEnv::set(&dir.path().join("cache"));
         let (upstream, catalog) = fixture(dir.path());
@@ -1947,10 +2056,12 @@ mod tests {
         )
         .unwrap();
         commit(&upstream, "invalid concept");
-        assert!(plan_update(&catalog, None, &[])
-            .unwrap_err()
-            .to_string()
-            .contains("conformance"));
+        assert!(
+            plan_update(&catalog, None, &[])
+                .unwrap_err()
+                .to_string()
+                .contains("conformance")
+        );
         std::fs::write(upstream.join("bundles/docs/a.md"), "---\ntype: Note\n---\n").unwrap();
         std::fs::write(
             upstream.join("bundles/docs/okf-bundle.yaml"),
@@ -1958,10 +2069,12 @@ mod tests {
         )
         .unwrap();
         commit(&upstream, "external ontology");
-        assert!(plan_update(&catalog, None, &[])
-            .unwrap_err()
-            .to_string()
-            .contains("bundle-relative"));
+        assert!(
+            plan_update(&catalog, None, &[])
+                .unwrap_err()
+                .to_string()
+                .contains("bundle-relative")
+        );
         assert!(!lock_path(&catalog).exists());
     }
 
@@ -1969,7 +2082,7 @@ mod tests {
     fn root_and_dot_prefixed_bundles_reject_unsupported_entries() {
         let _serial = ENV_LOCK
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = tempfile::tempdir().unwrap();
         let _env = CacheEnv::set(&dir.path().join("cache"));
         let (upstream, catalog) = fixture(dir.path());

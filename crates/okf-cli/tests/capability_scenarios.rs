@@ -1,6 +1,6 @@
 //! Black-box scenarios derived from knowledge/contributing/design capability documents.
 //! These supplement the core contract and earlier CLI integration tests.
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     fs,
     path::Path,
@@ -59,7 +59,11 @@ fn catalog() -> tempfile::TempDir {
         "okf.toml",
         "catalog='config/catalog.yaml'\ndefault_bundle={id='acme.a'}\n",
     );
-    write(d.path(),"config/catalog.yaml","catalog_version: 1\nbundles:\n  acme.a: {location: {type: directory, path: ../a}}\n  acme.b: {location: {type: directory, path: ../b}}\n");
+    write(
+        d.path(),
+        "config/catalog.yaml",
+        "catalog_version: 1\nbundles:\n  acme.a: {location: {type: directory, path: ../a}}\n  acme.b: {location: {type: directory, path: ../b}}\n",
+    );
     write(
         d.path(),
         "a/one.md",
@@ -227,9 +231,11 @@ fn invalid_catalog_is_separate_from_standalone_conformance() {
     );
     reject(d.path(), &["catalog", "--json"]);
     rows(run(d.path(), &["validate", "a", "--json"]));
-    assert!(query(d.path(), &["list", "a", "--json"])
-        .iter()
-        .any(|r| r["title"] == "Alpha"));
+    assert!(
+        query(d.path(), &["list", "a", "--json"])
+            .iter()
+            .any(|r| r["title"] == "Alpha")
+    );
 }
 #[test]
 fn catalog_rejects_selection_scope_and_revision_flags() {
@@ -268,11 +274,13 @@ fn unavailable_scope_members_and_unknown_ids_are_distinct() {
         d.path(),
         &["list", "--catalog-scope", "--full-scan", "--json"],
     );
-    assert!(record(&records, "scope")["unavailable"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|v| v == "acme.missing"));
+    assert!(
+        record(&records, "scope")["unavailable"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v == "acme.missing")
+    );
     assert_eq!(record(&records, "query-summary")["total_matches"], 2);
     reject(d.path(), &["list", "--scope-bundle", "acme.unknown"]);
 }
@@ -281,7 +289,11 @@ fn explicit_settings_do_not_leak_to_unregistered_paths() {
     let d = catalog();
     let root = d.path();
     write(root, "outside/x.md", "---\ntype: Note\n---\n");
-    write(root,"okf.toml","catalog='config/catalog.yaml'\ndefault_bundle={id='acme.a'}\n[bundle_settings.\"acme.a\"]\nontology='missing.yaml'\n[bundle_settings.default.query]\nscan_limit=1\n");
+    write(
+        root,
+        "okf.toml",
+        "catalog='config/catalog.yaml'\ndefault_bundle={id='acme.a'}\n[bundle_settings.\"acme.a\"]\nontology='missing.yaml'\n[bundle_settings.default.query]\nscan_limit=1\n",
+    );
     reject(root, &["list", "--bundle-id", "acme.a"]);
     let records = query(
         root,
@@ -329,7 +341,13 @@ fn snapshots_cover_digest_label_commit_ref_missing_and_mismatch() {
         ),
     ];
     for (request, status) in cases {
-        write(root,"a/one.md",&format!("---\ntype: Note\nsources:\n- id: policy\n  resource: ../b/one.md\n  bundle_ref:\n    id: acme.b\n    path: one.md\n    snapshot: {request}\n---\n[Beta](../b/one.md)\n"));
+        write(
+            root,
+            "a/one.md",
+            &format!(
+                "---\ntype: Note\nsources:\n- id: policy\n  resource: ../b/one.md\n  bundle_ref:\n    id: acme.b\n    path: one.md\n    snapshot: {request}\n---\n[Beta](../b/one.md)\n"
+            ),
+        );
         let before = fs::read(root.join("a/one.md")).unwrap();
         let records = query(
             root,
@@ -348,19 +366,25 @@ fn snapshots_cover_digest_label_commit_ref_missing_and_mismatch() {
             source["snapshot"]["candidate"].is_null(),
             status == "matched"
         );
-        assert!(records
-            .iter()
-            .filter(|r| r["location"]
-                .as_str()
-                .is_some_and(|s| s.starts_with("body:")))
-            .all(|r| r["snapshot"].is_null()));
+        assert!(
+            records
+                .iter()
+                .filter(|r| r["location"]
+                    .as_str()
+                    .is_some_and(|s| s.starts_with("body:")))
+                .all(|r| r["snapshot"].is_null())
+        );
         assert_eq!(fs::read(root.join("a/one.md")).unwrap(), before);
     }
 }
 #[test]
 fn declared_url_mapping_is_unchecked_and_never_fetched() {
     let d = catalog();
-    write(d.path(),"a/one.md","---\ntype: Note\nsources:\n- resource: https://does-not-exist.invalid/policy.md\n  bundle_ref: {id: acme.b, path: one.md}\n---\n");
+    write(
+        d.path(),
+        "a/one.md",
+        "---\ntype: Note\nsources:\n- resource: https://does-not-exist.invalid/policy.md\n  bundle_ref: {id: acme.b, path: one.md}\n---\n",
+    );
     let records = query(
         d.path(),
         &["links", "one", "--scope-bundle", "acme.b", "--json"],
@@ -378,7 +402,14 @@ fn historical_external_ontology_reports_current_digest_without_replacing_interna
         "ontology.yaml",
         "okf_ontology: '0.1'\nconcepts: {Note: {}}\n",
     );
-    write(d.path(),"okf.toml",&format!("catalog='config/catalog.yaml'\ndefault_bundle={{id='acme.a'}}\n[bundle_settings.\"acme.a\"]\nontology='{}'\n",external.path().join("ontology.yaml").display()));
+    write(
+        d.path(),
+        "okf.toml",
+        &format!(
+            "catalog='config/catalog.yaml'\ndefault_bundle={{id='acme.a'}}\n[bundle_settings.\"acme.a\"]\nontology='{}'\n",
+            external.path().join("ontology.yaml").display()
+        ),
+    );
     let revision = commit(d.path());
     write(
         external.path(),
@@ -396,10 +427,12 @@ fn historical_external_ontology_reports_current_digest_without_replacing_interna
             &fs::read(external.path().join("ontology.yaml")).unwrap()
         )
     );
-    assert!(record(&records, "query-summary")["scope"][0]["version"]
-        .as_str()
-        .unwrap()
-        .starts_with("git:"));
+    assert!(
+        record(&records, "query-summary")["scope"][0]["version"]
+            .as_str()
+            .unwrap()
+            .starts_with("git:")
+    );
 }
 #[test]
 fn published_structured_example_lints_and_expands_paired_obligations() {
@@ -444,7 +477,11 @@ fn published_structured_example_lints_and_expands_paired_obligations() {
 #[test]
 fn projections_distinguish_missing_null_literal_keys_and_authored_identity() {
     let d = tempfile::tempdir().unwrap();
-    write(d.path(),"a.md","---\ntype: Note\nbundle: authored\nversion: authored\npolicy.status: literal\nnullable: null\ntags: []\n---\n");
+    write(
+        d.path(),
+        "a.md",
+        "---\ntype: Note\nbundle: authored\nversion: authored\npolicy.status: literal\nnullable: null\ntags: []\n---\n",
+    );
     let records = query(
         d.path(),
         &[
@@ -480,7 +517,11 @@ fn projections_distinguish_missing_null_literal_keys_and_authored_identity() {
 fn views_preserve_legacy_json_until_explicit_machine_opt_in() {
     let d = structured();
     let root = d.path();
-    write(root,"okf.toml","[bundle_settings.default.views.compact]\ncolumns=['$id','title']\nexpand=['obligations']\n[bundle_settings.default.views.extended]\ncolumns=['$id','title']\nexpand=['obligations']\nextended_output=true\n");
+    write(
+        root,
+        "okf.toml",
+        "[bundle_settings.default.views.compact]\ncolumns=['$id','title']\nexpand=['obligations']\n[bundle_settings.default.views.extended]\ncolumns=['$id','title']\nexpand=['obligations']\nextended_output=true\n",
+    );
     let ordinary = query(
         root,
         &[
@@ -493,9 +534,11 @@ fn views_preserve_legacy_json_until_explicit_machine_opt_in() {
         ],
     );
     assert!(ordinary.iter().any(|r| r["title"] == "Account onboarding"));
-    assert!(!ordinary
-        .iter()
-        .any(|r| r["kind"] == "projection" || r["kind"] == "relationship"));
+    assert!(
+        !ordinary
+            .iter()
+            .any(|r| r["kind"] == "projection" || r["kind"] == "relationship")
+    );
     let extended = query(
         root,
         &[
@@ -531,7 +574,11 @@ fn views_preserve_legacy_json_until_explicit_machine_opt_in() {
 #[test]
 fn typed_filter_errors_and_literal_key_compatibility() {
     let d = tempfile::tempdir().unwrap();
-    write(d.path(),"a.md","---\ntype: Note\nx: 2\ntags: [security, production]\npolicy.status: live\nobj: {key: value}\n---\n");
+    write(
+        d.path(),
+        "a.md",
+        "---\ntype: Note\nx: 2\ntags: [security, production]\npolicy.status: live\nobj: {key: value}\n---\n",
+    );
     for filter in [
         "x=\"2\"",
         "x=null",
@@ -644,9 +691,10 @@ fn facets_threshold_output_cap_and_explicit_inclusion_are_independent() {
     assert_eq!(facet["truncated"], true);
     assert_eq!(facet["omitted_values"], 1);
     assert_eq!(facet["values"].as_array().unwrap().len(), 1000);
-    assert!(full
-        .iter()
-        .any(|r| r["kind"] == "warning" && r["reason"] == "facet-output-limit"));
+    assert!(
+        full.iter()
+            .any(|r| r["kind"] == "warning" && r["reason"] == "facet-output-limit")
+    );
 }
 #[test]
 fn facets_ignore_missing_null_and_empty_but_keep_empty_string_and_types() {
@@ -674,9 +722,11 @@ fn facets_ignore_missing_null_and_empty_but_keep_empty_string_and_types() {
     assert_eq!(values.len(), 4);
     for v in [json!(""), json!(false), json!(2), json!("2")] {
         let expected = if v == json!(2) { 2 } else { 1 };
-        assert!(values
-            .iter()
-            .any(|r| r["value"] == v && r["count"] == expected));
+        assert!(
+            values
+                .iter()
+                .any(|r| r["value"] == v && r["count"] == expected)
+        );
     }
     assert_eq!(values[0]["value"], 2);
     write(
@@ -694,10 +744,12 @@ fn facets_ignore_missing_null_and_empty_but_keep_empty_string_and_types() {
     write(d.path(), "object.md", "---\ntype: Note\nvalue: {}\n---\n");
     let invalid = query(d.path(), &["search", "--facet", "value", "--json"]);
     assert_eq!(record(&invalid, "facet")["complete"], false);
-    assert!(!record(&invalid, "facet")["diagnostics"]
-        .as_array()
-        .unwrap()
-        .is_empty());
+    assert!(
+        !record(&invalid, "facet")["diagnostics"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
 }
 #[test]
 fn pagination_is_globally_ordered_and_beyond_end_has_no_continuation() {
@@ -809,7 +861,11 @@ fn expansion_rule_qualification_and_occurrence_deduplication() {
     let d = catalog();
     let root = d.path();
     for bundle in ["a", "b"] {
-        write(root,&format!("{bundle}/ontology.yaml"),"okf_ontology: '0.1'\nconcepts:\n  Note:\n    references:\n      peers: {selector: 'relations[].target', target: Note, cardinality: 0..n}\n    relationships:\n      deps: {reference: peers, kind: depends-on, inverse: dependency-of}\n");
+        write(
+            root,
+            &format!("{bundle}/ontology.yaml"),
+            "okf_ontology: '0.1'\nconcepts:\n  Note:\n    references:\n      peers: {selector: 'relations[].target', target: Note, cardinality: 0..n}\n    relationships:\n      deps: {reference: peers, kind: depends-on, inverse: dependency-of}\n",
+        );
         write(
             root,
             &format!("{bundle}/one.md"),
@@ -824,10 +880,12 @@ fn expansion_rule_qualification_and_occurrence_deduplication() {
         short.iter().filter(|r| r["kind"] == "relationship").count(),
         2
     );
-    assert!(short
-        .iter()
-        .filter(|r| r["kind"] == "relationship")
-        .all(|r| r["bundle"] == "acme.a"));
+    assert!(
+        short
+            .iter()
+            .filter(|r| r["kind"] == "relationship")
+            .all(|r| r["bundle"] == "acme.a")
+    );
     let qualified = query(
         root,
         &[
@@ -969,7 +1027,11 @@ fn lint_severity_and_finding_budget_preserve_conformance_separation() {
     )
     .unwrap();
     query(root, &["validate", "--json"]);
-    write(root,"okf.toml","[bundle_settings.default.lint]\nontology_violation='error'\nfinding_budget=1\nindex_coverage='info'\n");
+    write(
+        root,
+        "okf.toml",
+        "[bundle_settings.default.lint]\nontology_violation='error'\nfinding_budget=1\nindex_coverage='info'\n",
+    );
     let records = query(root, &["lint", "--fail-on", "never", "--json"]);
     assert!(
         records
@@ -991,7 +1053,7 @@ fn index_coverage_uses_real_immediate_links_not_mentions_or_images() {
     }
     write(root, "artifacts/file.txt", "opaque");
     write(root, ".git/ignored.md", "---\ntype: Note\n---\n");
-    let good="# Index\n[A][a]\n[a]: a#section\n[Space](space%20name.md)\n[Sub](sub/index.md)\n[A again](a.md)\n";
+    let good = "# Index\n[A][a]\n[a]: a#section\n[Space](space%20name.md)\n[Sub](sub/index.md)\n[A again](a.md)\n";
     write(root, "index.md", good);
     write(root, "sub/index.md", "# Sub\n[Deep](deep.md)\n");
     let before = fs::read(root.join("index.md")).unwrap();
@@ -1001,7 +1063,11 @@ fn index_coverage_uses_real_immediate_links_not_mentions_or_images() {
         "{records:?}"
     );
     assert_eq!(fs::read(root.join("index.md")).unwrap(), before);
-    write(root,"index.md","# Index\na.md\n![A](a.md)\n`[Space](space%20name.md)`\n[Deep](sub/deep.md)\n[Remote](https://example.invalid/a.md)\n");
+    write(
+        root,
+        "index.md",
+        "# Index\na.md\n![A](a.md)\n`[Space](space%20name.md)`\n[Deep](sub/deep.md)\n[Remote](https://example.invalid/a.md)\n",
+    );
     let bad = query(root, &["lint", "--fail-on", "never", "--json"]);
     assert_eq!(
         bad.iter()
@@ -1052,9 +1118,11 @@ fn scan_exact_boundary_is_complete_and_limits_never_hide_empty_scan_warning() {
     );
     assert_eq!(record(&empty, "query-summary")["observed_matches"], 0);
     assert!(record(&empty, "query-summary")["total_matches"].is_null());
-    assert!(empty
-        .iter()
-        .any(|r| r["kind"] == "warning" && r["reason"] == "scan-limit"));
+    assert!(
+        empty
+            .iter()
+            .any(|r| r["kind"] == "warning" && r["reason"] == "scan-limit")
+    );
     let human = run(root, &["search", "--type", "Absent", "--scan-limit", "1"]);
     assert!(String::from_utf8_lossy(&human.stdout).contains("scan-limit"));
 }
@@ -1071,7 +1139,14 @@ fn historical_git_calls_disable_lazy_fetch_and_never_invoke_fetch() {
         .unwrap();
     let real = String::from_utf8(which.stdout).unwrap();
     let shim = tempfile::tempdir().unwrap();
-    write(shim.path(),"git",&format!("#!/bin/sh\nprintf '%s|%s\\n' \"$GIT_NO_LAZY_FETCH\" \"$*\" >> \"$OKF_GIT_AUDIT\"\nexec '{}' \"$@\"\n",real.trim().replace('\'',"'\\''")));
+    write(
+        shim.path(),
+        "git",
+        &format!(
+            "#!/bin/sh\nprintf '%s|%s\\n' \"$GIT_NO_LAZY_FETCH\" \"$*\" >> \"$OKF_GIT_AUDIT\"\nexec '{}' \"$@\"\n",
+            real.trim().replace('\'', "'\\''")
+        ),
+    );
     fs::set_permissions(shim.path().join("git"), fs::Permissions::from_mode(0o755)).unwrap();
     let log = root.join("git-audit.log");
     let mut c = command(
@@ -1099,9 +1174,11 @@ fn historical_git_calls_disable_lazy_fetch_and_never_invoke_fetch() {
     assert!(!calls.is_empty());
     for line in calls.lines() {
         assert!(line.starts_with("1|"), "lazy fetch enabled: {line}");
-        assert!(!line
-            .split_whitespace()
-            .any(|word| matches!(word, "fetch" | "pull" | "clone")));
+        assert!(
+            !line
+                .split_whitespace()
+                .any(|word| matches!(word, "fetch" | "pull" | "clone"))
+        );
     }
 }
 
@@ -1177,12 +1254,16 @@ fn same_catalog_can_span_independent_git_repositories() {
     );
     let scope = record(&r, "scope");
     let examined = scope["examined"].as_array().unwrap();
-    assert!(examined
-        .iter()
-        .any(|s| s["id"] == "acme.a" && s["version"] == format!("git:{a}")));
-    assert!(examined
-        .iter()
-        .any(|s| s["id"] == "acme.b" && s["version"] == format!("git:{b}")));
+    assert!(
+        examined
+            .iter()
+            .any(|s| s["id"] == "acme.a" && s["version"] == format!("git:{a}"))
+    );
+    assert!(
+        examined
+            .iter()
+            .any(|s| s["id"] == "acme.b" && s["version"] == format!("git:{b}"))
+    );
 }
 #[test]
 fn missing_historical_config_and_configured_ontology_are_diagnosed() {
@@ -1202,7 +1283,11 @@ fn missing_historical_config_and_configured_ontology_are_diagnosed() {
     assert!(!r.status.success());
     assert!(String::from_utf8_lossy(&r.stderr).contains("historical configuration unavailable"));
     // Historical config exists but names an ontology that did not exist at that revision.
-    write(root,"okf.toml","catalog='config/catalog.yaml'\ndefault_bundle={id='acme.a'}\n[bundle_settings.\"acme.a\"]\nontology='later.yaml'\n");
+    write(
+        root,
+        "okf.toml",
+        "catalog='config/catalog.yaml'\ndefault_bundle={id='acme.a'}\n[bundle_settings.\"acme.a\"]\nontology='later.yaml'\n",
+    );
     let configured = commit(root);
     write(
         root,
@@ -1231,7 +1316,13 @@ fn source_drift_is_reported_separately_from_successful_target_and_snapshot() {
     commit(root);
     let digest =
         okf_core::fingerprint::canonicalize::sha256_hex(&fs::read(root.join("b/one.md")).unwrap());
-    write(root,"a/one.md",&format!("---\ntype: Note\nsources:\n- resource: b/one.md\n  kind: git-path\n  fingerprint: {{blob: wrong}}\n  bundle_ref:\n    id: acme.b\n    path: one.md\n    snapshot: {{digest: '{digest}'}}\n---\n"));
+    write(
+        root,
+        "a/one.md",
+        &format!(
+            "---\ntype: Note\nsources:\n- resource: b/one.md\n  kind: git-path\n  fingerprint: {{blob: wrong}}\n  bundle_ref:\n    id: acme.b\n    path: one.md\n    snapshot: {{digest: '{digest}'}}\n---\n"
+        ),
+    );
     let r = query(
         root,
         &["links", "one", "--scope-bundle", "acme.b", "--json"],
@@ -1255,7 +1346,11 @@ fn unreadable_index_content_reports_io_instead_of_empty_coverage() {
 fn catalog_canonicalization_rejects_symlink_aliases_of_registered_roots() {
     let d = catalog();
     std::os::unix::fs::symlink(d.path().join("a"), d.path().join("alias")).unwrap();
-    write(d.path(),"config/catalog.yaml","catalog_version: 1\nbundles:\n  acme.a: {location: {type: directory, path: ../a}}\n  acme.alias: {location: {type: directory, path: ../alias}}\n");
+    write(
+        d.path(),
+        "config/catalog.yaml",
+        "catalog_version: 1\nbundles:\n  acme.a: {location: {type: directory, path: ../a}}\n  acme.alias: {location: {type: directory, path: ../alias}}\n",
+    );
     reject(d.path(), &["catalog", "--json"]);
 }
 
@@ -1329,10 +1424,12 @@ fn partial_clone_missing_blob_is_unavailable_without_invoking_remote_helper() {
     );
     if output.status.success() {
         let r = rows(output);
-        assert!(!record(&r, "scope")["unavailable"]
-            .as_array()
-            .unwrap()
-            .is_empty());
+        assert!(
+            !record(&r, "scope")["unavailable"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
     } else {
         assert!(!output.stderr.is_empty());
     }
@@ -1360,7 +1457,13 @@ fn deferred_acquisition_and_cross_bundle_artifact_reads_are_not_enabled_by_catal
         "catalog unexpectedly allowed cross-bundle artifact reading"
     );
     for kind in ["git", "http"] {
-        write(root,"config/catalog.yaml",&format!("catalog_version: 1\nbundles:\n  acme.a: {{location: {{type: {kind}, path: ../a}}}}\n"));
+        write(
+            root,
+            "config/catalog.yaml",
+            &format!(
+                "catalog_version: 1\nbundles:\n  acme.a: {{location: {{type: {kind}, path: ../a}}}}\n"
+            ),
+        );
         let result = run(root, &["catalog", "--json"]);
         assert!(!result.status.success());
         let expected = if kind == "git" {
@@ -1380,7 +1483,11 @@ fn deferred_acquisition_and_cross_bundle_artifact_reads_are_not_enabled_by_catal
 fn expansion_follows_only_one_hop_and_only_the_selected_primary_page() {
     let d = tempfile::tempdir().unwrap();
     let root = d.path();
-    write(root,"ontology.yaml","okf_ontology: '0.1'\nconcepts:\n  Note:\n    references:\n      next: {target: Note, cardinality: 0..1}\n    relationships:\n      follows: {reference: next, kind: follows}\n");
+    write(
+        root,
+        "ontology.yaml",
+        "okf_ontology: '0.1'\nconcepts:\n  Note:\n    references:\n      next: {target: Note, cardinality: 0..1}\n    relationships:\n      follows: {reference: next, kind: follows}\n",
+    );
     write(
         root,
         "a.md",
@@ -1401,9 +1508,10 @@ fn expansion_follows_only_one_hop_and_only_the_selected_primary_page() {
         let r = query(root, &args);
         assert_eq!(r.iter().filter(|v| v["kind"] == "relationship").count(), 1);
         assert_eq!(record(&r, "related-concept")["id"], "/b");
-        assert!(!r
-            .iter()
-            .any(|v| v["kind"] == "related-concept" && v["id"] == "/c"));
+        assert!(
+            !r.iter()
+                .any(|v| v["kind"] == "related-concept" && v["id"] == "/c")
+        );
     }
 }
 
@@ -1422,9 +1530,13 @@ fn scoped_lint_honors_named_bundle_rule_settings() {
         "okf_ontology: '0.1'\nconcepts:\n  Note: {}\n",
     );
     for value in ["off", "info", "warn", "error"] {
-        write(root, "okf.toml", &format!(
-            "catalog='config/catalog.yaml'\ndefault_bundle={{id='acme.a'}}\n[bundle_settings.\"acme.b\".lint]\nmissing_title='off'\nmissing_description='off'\norphan='off'\nindex_coverage='off'\n[bundle_settings.\"acme.a\".lint]\nmissing_title='off'\nmissing_description='off'\norphan='off'\nindex_coverage='off'\nontology_violation='{value}'\nbroken_link='{value}'\n"
-        ));
+        write(
+            root,
+            "okf.toml",
+            &format!(
+                "catalog='config/catalog.yaml'\ndefault_bundle={{id='acme.a'}}\n[bundle_settings.\"acme.b\".lint]\nmissing_title='off'\nmissing_description='off'\norphan='off'\nindex_coverage='off'\n[bundle_settings.\"acme.a\".lint]\nmissing_title='off'\nmissing_description='off'\norphan='off'\nindex_coverage='off'\nontology_violation='{value}'\nbroken_link='{value}'\n"
+            ),
+        );
         let output = run(
             root,
             &["lint", "--json", "--catalog-scope", "--fail-on", "warn"],

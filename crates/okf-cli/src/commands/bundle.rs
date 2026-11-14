@@ -8,7 +8,7 @@ use okf_core::{
     bundle::{manifest, resolve::resolve_bundle},
     error::{OkfError, Result},
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{collections::BTreeMap, io::Read, path::Path};
 
 fn read_token(raw: &str) -> Result<ContextReceipt> {
@@ -35,8 +35,9 @@ pub fn check_execution_context(cli: &mut crate::cli::Cli) -> Result<()> {
         || !cli.bundle_revision.is_empty()
         || okf_core::bundle::snapshot_context::is_inspection_active()
     {
-        return Err(OkfError::Usage(
-            "context-invalid: execution tokens cannot be used for historical inspection".into(),
+        return Err(OkfError::classified(
+            okf_core::error::FailureReason::ContextInvalid,
+            "execution tokens cannot be used for historical inspection",
         ));
     }
     let operation = crate::exit::command_name(&cli.command);
@@ -46,17 +47,18 @@ pub fn check_execution_context(cli: &mut crate::cli::Cli) -> Result<()> {
     let scope =
         okf_core::graph::catalog::resolve_scope(&selected, &cli.scope_bundle, cli.catalog_scope)?;
     if !scope.unavailable.is_empty() {
-        return Err(OkfError::Usage(format!(
-            "context-invalid: unavailable bundles: {}",
-            scope.unavailable.join(", ")
-        )));
+        return Err(OkfError::classified(
+            okf_core::error::FailureReason::ContextInvalid,
+            format!("unavailable bundles: {}", scope.unavailable.join(", ")),
+        ));
     }
     let mut receipts = BTreeMap::new();
     for raw in &cli.context {
         let receipt = read_token(raw)?;
         if receipts.insert(receipt.root.clone(), receipt).is_some() {
-            return Err(OkfError::Usage(
-                "context-invalid: duplicate bundle token".into(),
+            return Err(OkfError::classified(
+                okf_core::error::FailureReason::ContextInvalid,
+                "duplicate bundle token",
             ));
         }
     }
@@ -66,14 +68,21 @@ pub fn check_execution_context(cli: &mut crate::cli::Cli) -> Result<()> {
         .map(|m| std::fs::canonicalize(&m.root))
         .collect::<std::io::Result<Vec<_>>>()?;
     if receipts.keys().any(|root| !roots.contains(root)) {
-        return Err(OkfError::Usage(
-            "context-invalid: token bundle is outside requested scope".into(),
+        return Err(OkfError::classified(
+            okf_core::error::FailureReason::ContextInvalid,
+            "token bundle is outside requested scope",
         ));
     }
     for root in roots {
-        let receipt = receipts.get(&root).ok_or_else(|| OkfError::Usage(format!(
-            "context-invalid: missing token for {}; reload bundle context for the requested scope", root.display()
-        )))?;
+        let receipt = receipts.get(&root).ok_or_else(|| {
+            OkfError::classified(
+                okf_core::error::FailureReason::ContextInvalid,
+                format!(
+                    "missing token for {}; reload bundle context for the requested scope",
+                    root.display()
+                ),
+            )
+        })?;
         receipt.check(&root, std::slice::from_ref(&operation), &command_names())?;
     }
     Ok(())
@@ -88,16 +97,16 @@ pub fn command_names() -> Vec<String> {
         };
         if cmd.has_subcommands() {
             for child in cmd.get_subcommands() {
-                collect(child, &name, out)
+                collect(child, &name, out);
             }
         } else {
-            out.push(name)
+            out.push(name);
         }
     }
     let tree = crate::cli::command_tree();
     let mut out = Vec::new();
     for child in tree.get_subcommands() {
-        collect(child, "", &mut out)
+        collect(child, "", &mut out);
     }
     out.push("catalog".into());
     out
@@ -119,7 +128,7 @@ pub fn run(command: &BundleCmd, json_output: bool) -> Result<i32> {
             if json_output {
                 output::print_line(
                     &json!({"kind":"manifest-validation","root":root,"present":loaded.is_some(),"valid":true}),
-                )?
+                )?;
             } else {
                 output::print_text_line(format_args!(
                     "manifest: {}",
@@ -128,7 +137,7 @@ pub fn run(command: &BundleCmd, json_output: bool) -> Result<i32> {
                     } else {
                         "absent (optional)"
                     }
-                ))?
+                ))?;
             }
             Ok(0)
         }
@@ -143,9 +152,9 @@ pub fn run(command: &BundleCmd, json_output: bool) -> Result<i32> {
                     if json_output {
                         output::print_line(
                             &json!({"kind":"bundle-resource","path":path,"size":size}),
-                        )?
+                        )?;
                     } else {
-                        output::print_text_line(format_args!("{}\t{}", path.display(), size))?
+                        output::print_text_line(format_args!("{}\t{}", path.display(), size))?;
                     }
                 }
             }
@@ -314,13 +323,15 @@ fn context_one(
     if json_output {
         let mut head =
             serde_json::to_value(&context).map_err(|e| OkfError::Internal(e.to_string()))?;
-        head.as_object_mut().unwrap().remove("records");
-        head.as_object_mut().unwrap().remove("state_components");
+        if let Some(object) = head.as_object_mut() {
+            object.remove("records");
+            object.remove("state_components");
+        }
         head["effective_settings"] = settings.clone();
         if args.settings_detail == "compact" {
             head["setting_origins"]
                 .as_object_mut()
-                .unwrap()
+                .expect("invariant: setting_origins serializes as an object")
                 .retain(|path, _| {
                     let mut value = &settings["settings"];
                     for part in path.split('.') {
@@ -335,7 +346,7 @@ fn context_one(
         head["primary"] = json!(primary);
         output::print_line(&head)?;
         for record in &context.records {
-            output::print_line(record)?
+            output::print_line(record)?;
         }
     } else {
         output::print_text_line(format_args!(
@@ -345,8 +356,7 @@ fn context_one(
             context
                 .manifest
                 .as_ref()
-                .map(|m| m.to_string())
-                .unwrap_or("absent".into())
+                .map_or("absent".into(), std::string::ToString::to_string)
         ))?;
         output::print_text_line(format_args!(
             "Effective settings:\n{}",
@@ -366,9 +376,11 @@ fn context_one(
             ))?;
         }
         for r in &context.records {
-            print_context_record(r)?
+            print_context_record(r)?;
         }
-        output::print_text_line(format_args!("Delivery: all applicable mandatory instructions delivered; other rules and workflows listed for discovery. Inspection-only bodies do not activate tasks."))?;
+        output::print_text_line(format_args!(
+            "Delivery: all applicable mandatory instructions delivered; other rules and workflows listed for discovery. Inspection-only bodies do not activate tasks."
+        ))?;
     }
     if args.stats || args.guidance_budget.is_some() {
         print_stats(&context, args.guidance_budget, json_output)?;
@@ -445,11 +457,12 @@ fn add_selection_metadata(record: &mut Value, selection: &manifest::ContextReque
             id,
             "--json".into(),
         ];
-        record["expand_command"] = json!(argv
-            .iter()
-            .map(|a| shell_word(a))
-            .collect::<Vec<_>>()
-            .join(" "));
+        record["expand_command"] = json!(
+            argv.iter()
+                .map(|a| shell_word(a))
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
         record["expand_argv"] = json!(argv);
     }
 }
@@ -519,13 +532,16 @@ fn settings_view(context: &manifest::BundleContext, detail: &str) -> Result<(Val
         groups.extend(relevant.iter().copied());
     }
     if !all {
-        value["settings"].as_object_mut().unwrap().retain(|key, _| {
-            let retain = groups.contains(key.as_str());
-            if !retain {
-                omitted.push(format!("{key}: outside selected operations"));
-            }
-            retain
-        });
+        value["settings"]
+            .as_object_mut()
+            .expect("invariant: settings view is an object")
+            .retain(|key, _| {
+                let retain = groups.contains(key.as_str());
+                if !retain {
+                    omitted.push(format!("{key}: outside selected operations"));
+                }
+                retain
+            });
     }
     fn prune(value: &mut Value, path: &str, omitted: &mut Vec<String>) {
         if let Some(map) = value.as_object_mut() {
@@ -537,8 +553,8 @@ fn settings_view(context: &manifest::BundleContext, detail: &str) -> Result<(Val
                 };
                 prune(value, &path, omitted);
                 let empty = value.is_null()
-                    || value.as_object().is_some_and(|v| v.is_empty())
-                    || value.as_array().is_some_and(|v| v.is_empty());
+                    || value.as_object().is_some_and(serde_json::Map::is_empty)
+                    || value.as_array().is_some_and(std::vec::Vec::is_empty);
                 if empty {
                     omitted.push(format!("{path}: unset or empty"));
                 }
@@ -555,7 +571,7 @@ fn text_settings(mut value: Value) -> Value {
         for value in map.values_mut() {
             *value = text_settings(value.take());
         }
-        map.retain(|_, v| !v.is_null() && !v.as_object().is_some_and(|m| m.is_empty()));
+        map.retain(|_, v| !v.is_null() && !v.as_object().is_some_and(serde_json::Map::is_empty));
     }
     value
 }
@@ -569,12 +585,12 @@ fn print_stats(
         .map(|r| json!({"id":r["id"],"kind":r["kind"],"delivered_bytes":r["instructions"].as_str().map_or(0, str::len),"mandatory":r["instruction_role"] == "task-guidance"})).collect();
     let total: u64 = sections
         .iter()
-        .map(|r| r["delivered_bytes"].as_u64().unwrap())
+        .filter_map(|r| r["delivered_bytes"].as_u64())
         .sum();
     let mandatory: u64 = sections
         .iter()
         .filter(|r| r["mandatory"] == true)
-        .map(|r| r["delivered_bytes"].as_u64().unwrap())
+        .filter_map(|r| r["delivered_bytes"].as_u64())
         .sum();
     let exceeded = budget.is_some_and(|b| mandatory > b as u64);
     if json_output {
@@ -585,12 +601,14 @@ fn print_stats(
         for section in sections {
             output::print_text_line(format_args!(
                 "Instruction bytes: {} {} = {}",
-                section["kind"].as_str().unwrap(),
-                section["id"].as_str().unwrap(),
+                section["kind"].as_str().unwrap_or_default(),
+                section["id"].as_str().unwrap_or_default(),
                 section["delivered_bytes"]
             ))?;
         }
-        output::print_text_line(format_args!("Delivered instruction bytes: {total}; mandatory: {mandatory}; budget exceeded: {exceeded}"))?;
+        output::print_text_line(format_args!(
+            "Delivered instruction bytes: {total}; mandatory: {mandatory}; budget exceeded: {exceeded}"
+        ))?;
     }
     Ok(())
 }
@@ -624,16 +642,16 @@ fn print_context_record(r: &Value) -> Result<()> {
         output::print_text_line(format_args!("  expand: {command}"))?;
     }
     if let Some(d) = r["description"].as_str() {
-        output::print_text_line(format_args!("  {d}"))?
+        output::print_text_line(format_args!("  {d}"))?;
     }
     if let Some(body) = r["instructions"].as_str() {
-        output::print_text_line(format_args!("{body}"))?
+        output::print_text_line(format_args!("{body}"))?;
     }
     if r.get("inputs_complete").is_some() {
         output::print_text_line(format_args!(
             "  inputs complete: {}; missing: {}",
             r["inputs_complete"], r["missing_required"]
-        ))?
+        ))?;
     }
     Ok(())
 }
@@ -652,7 +670,7 @@ fn resource_show(args: &BundleResourceShowArgs, json_output: bool) -> Result<i32
     }
     let path = manifest::local_path(&root, &args.resource)?;
     let mut bytes = Vec::new();
-    std::fs::File::open(&path)?
+    manifest::open_regular_nofollow(&path)?
         .take(args.max_bytes as u64 + 1)
         .read_to_end(&mut bytes)?;
     let truncated = bytes.len() > args.max_bytes;
@@ -687,20 +705,20 @@ fn resource_show(args: &BundleResourceShowArgs, json_output: bool) -> Result<i32
         body
     };
     if truncated {
-        output::mark_partial("content", "resource-truncated")
+        output::mark_partial("content", "resource-truncated");
     }
     if json_output {
         output::print_line(
             &json!({"kind":"bundle-resource","path":path,"resource":args.resource,"sha256":digest,"content":body,"truncated":truncated,"bytes":bytes.len()}),
-        )?
+        )?;
     } else if let Some(body) = body {
-        output::print_text_line(format_args!("{body}"))?
+        output::print_text_line(format_args!("{body}"))?;
     } else {
         output::print_text_line(format_args!(
             "binary resource: {} ({} bytes inspected)",
             path.display(),
             bytes.len()
-        ))?
+        ))?;
     }
     Ok(0)
 }
@@ -744,12 +762,14 @@ pub fn incidental(
             context.effective_settings.bundle.as_deref(),
         );
         if mode == "summary" {
-            record.as_object_mut().unwrap().remove("instructions");
+            if let Some(object) = record.as_object_mut() {
+                object.remove("instructions");
+            }
             record["content"] = json!("summary");
-            record["omission_reason"] = json!("display-summary")
+            record["omission_reason"] = json!("display-summary");
         }
         if json_output {
-            output::print_line(&record)?
+            output::print_line(&record)?;
         } else {
             eprintln!(
                 "guidance [{}] {}: {}",
@@ -757,8 +777,7 @@ pub fn incidental(
                     .effective_settings
                     .bundle
                     .as_deref()
-                    .map(str::to_owned)
-                    .unwrap_or_else(|| root.display().to_string()),
+                    .map_or_else(|| root.display().to_string(), str::to_owned),
                 record["id"].as_str().unwrap_or(""),
                 record["description"]
                     .as_str()
@@ -766,14 +785,14 @@ pub fn incidental(
             );
             if mode == "full" {
                 if let Some(body) = record["instructions"].as_str() {
-                    eprintln!("{body}")
+                    eprintln!("{body}");
                 }
             } else {
                 eprintln!(
                     "  Read: okf bundle context '{}' --operation '{}'",
                     root.display(),
                     command
-                )
+                );
             }
         }
     }

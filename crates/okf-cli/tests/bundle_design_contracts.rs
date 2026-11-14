@@ -42,7 +42,11 @@ fn context_digest(rows: &[Value]) -> String {
 #[test]
 fn instruction_file_changes_invalidate_context_and_inspection_does_not_activate() {
     let t = tempfile::tempdir().unwrap();
-    write(t.path(), "okf-bundle.yaml", "manifest_version: 1\nguidance:\n  instructions_file: .okf-bundle/instructions.md\nworkflows:\n  inspect:\n    description: Inspect evidence\n    instructions: Read the selected concept.\n");
+    write(
+        t.path(),
+        "okf-bundle.yaml",
+        "manifest_version: 1\nguidance:\n  instructions_file: .okf-bundle/instructions.md\nworkflows:\n  inspect:\n    description: Inspect evidence\n    instructions: Read the selected concept.\n",
+    );
     write(t.path(), ".okf-bundle/instructions.md", "Preserve URLs.\n");
     let first = rows(&run(t.path(), &["bundle", "context", ".", "--json"]));
     write(
@@ -56,13 +60,17 @@ fn instruction_file_changes_invalidate_context_and_inspection_does_not_activate(
         t.path(),
         &["bundle", "context", ".", "--all", "--json"],
     ));
-    assert!(inspected
-        .iter()
-        .filter(|r| r["kind"] == "guidance")
-        .all(|r| r["instruction_role"] == "inspected"));
-    assert!(inspected
-        .iter()
-        .any(|r| r["kind"] == "workflow" && r["selected"] == false && r["content"] == "full"));
+    assert!(
+        inspected
+            .iter()
+            .filter(|r| r["kind"] == "guidance")
+            .all(|r| r["instruction_role"] == "inspected")
+    );
+    assert!(
+        inspected
+            .iter()
+            .any(|r| r["kind"] == "workflow" && r["selected"] == false && r["content"] == "full")
+    );
 }
 #[test]
 fn support_files_are_hidden_from_knowledge_but_core_validation_keeps_its_boundary() {
@@ -76,20 +84,30 @@ fn support_files_are_hidden_from_knowledge_but_core_validation_keeps_its_boundar
     );
     let listed = rows(&run(t.path(), &["list", ".", "--json"]));
     assert!(listed.iter().any(|r| r["id"] == "/visible"));
-    assert!(!listed.iter().any(|r| r["id"]
-        .as_str()
-        .is_some_and(|id| id.contains(".okf-bundle"))));
-    assert!(!run(t.path(), &["validate", ".", "--profile", "core"])
-        .status
-        .success());
-    assert!(run(t.path(), &["validate", ".", "--profile", "bundle"])
-        .status
-        .success());
+    assert!(!listed.iter().any(|r| {
+        r["id"]
+            .as_str()
+            .is_some_and(|id| id.contains(".okf-bundle"))
+    }));
+    assert!(
+        !run(t.path(), &["validate", ".", "--profile", "core"])
+            .status
+            .success()
+    );
+    assert!(
+        run(t.path(), &["validate", ".", "--profile", "bundle"])
+            .status
+            .success()
+    );
 }
 #[test]
 fn yaml_catalog_selects_bundle_without_legacy_toml() {
     let t = tempfile::tempdir().unwrap();
-    write(t.path(), "okf-catalog.yaml", "catalog_version: 2\ndefault_bundle: example.docs\nbundles:\n  example.docs:\n    location: {type: directory, path: docs}\n");
+    write(
+        t.path(),
+        "okf-catalog.yaml",
+        "catalog_version: 2\ndefault_bundle: example.docs\nbundles:\n  example.docs:\n    location: {type: directory, path: docs}\n",
+    );
     write(t.path(), "docs/okf-bundle.yaml", "manifest_version: 1\n");
     write(t.path(), "docs/note.md", "---\ntype: Note\n---\n");
     let out = rows(&run(t.path(), &["list", "--json"]));
@@ -102,16 +120,26 @@ fn invalid_manifest_cannot_be_silently_ignored_but_core_diagnosis_remains_availa
     write(t.path(), "note.md", "---\ntype: Note\n---\n");
     assert!(!run(t.path(), &["list", "."]).status.success());
     assert!(!run(t.path(), &["bundle", "validate", "."]).status.success());
-    assert!(run(t.path(), &["validate", ".", "--profile", "core"])
-        .status
-        .success());
+    assert!(
+        run(t.path(), &["validate", ".", "--profile", "core"])
+            .status
+            .success()
+    );
 }
 
 #[test]
 fn expansion_filters_before_edge_limit_without_filtering_primary_hits() {
     let t = tempfile::tempdir().unwrap();
-    write(t.path(), "ontology.yaml", "okf_ontology: '0.1'\nconcepts:\n  Note:\n    references:\n      targets: {selector: 'relations[].target', target: Note, cardinality: 0..n}\n    relationships:\n      relations:\n        reference: targets\n        kind_selector: 'relations[].kind'\n        kinds:\n          cites: {inverse: cited-by}\n          blocks: {inverse: is-blocked-by}\n");
-    write(t.path(), "a.md", "---\ntype: Note\nrole: anchor\nrelations:\n- {target: /b, kind: cites}\n- {target: /c, kind: blocks}\n---\n");
+    write(
+        t.path(),
+        "ontology.yaml",
+        "okf_ontology: '0.1'\nconcepts:\n  Note:\n    references:\n      targets: {selector: 'relations[].target', target: Note, cardinality: 0..n}\n    relationships:\n      relations:\n        reference: targets\n        kind_selector: 'relations[].kind'\n        kinds:\n          cites: {inverse: cited-by}\n          blocks: {inverse: is-blocked-by}\n",
+    );
+    write(
+        t.path(),
+        "a.md",
+        "---\ntype: Note\nrole: anchor\nrelations:\n- {target: /b, kind: cites}\n- {target: /c, kind: blocks}\n---\n",
+    );
     write(t.path(), "b.md", "---\ntype: Note\n---\n");
     write(t.path(), "c.md", "---\ntype: Note\n---\n");
     let out = rows(&run(
@@ -142,7 +170,11 @@ fn migration_plan_output_cannot_overwrite_managed_snapshot() {
     let t = tempfile::tempdir().unwrap();
     write(t.path(), "okf.toml", "bundle = 'docs'\n");
     write(t.path(), "docs/note.md", "---\ntype: Note\n---\n");
-    write(t.path(), "cache/snapshot.yaml", "profile: 1\nurl: https://example.invalid/upstream.git\ncommit: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nobject_format: sha1\nmembers: {}\n");
+    write(
+        t.path(),
+        "cache/snapshot.yaml",
+        "profile: 1\nurl: https://example.invalid/upstream.git\ncommit: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nobject_format: sha1\nmembers: {}\n",
+    );
     write(t.path(), "cache/tree/report.yaml", "original");
     let out = run(
         t.path(),

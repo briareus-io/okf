@@ -239,20 +239,24 @@ mod tests {
                 "fixture",
             ],
         ] {
-            assert!(Command::new("git")
-                .current_dir(root)
-                .args(args)
-                .status()
-                .unwrap()
-                .success());
+            assert!(
+                Command::new("git")
+                    .current_dir(root)
+                    .args(args)
+                    .status()
+                    .unwrap()
+                    .success()
+            );
         }
         let bundle = load_bundle(root).unwrap();
         assert_eq!(bundle.concepts.len(), 1);
         assert!(diff(&bundle, &RealGit, "HEAD").unwrap().is_empty());
         // Even a removed historical symlink was never a concept.
         std::fs::remove_file(root.join("alias.md")).unwrap();
-        assert!(diff(&load_bundle(root).unwrap(), &RealGit, "HEAD")
-            .unwrap()
-            .is_empty());
+        assert!(
+            diff(&load_bundle(root).unwrap(), &RealGit, "HEAD")
+                .unwrap()
+                .is_empty()
+        );
     }
 }

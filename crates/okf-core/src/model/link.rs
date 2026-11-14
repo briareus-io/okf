@@ -41,7 +41,9 @@ impl LogicalReference {
             return Ok(None);
         }
         let fail = || {
-            OkfError::Usage(format!("invalid logical reference {raw:?}: expected okf://<bundle-id>/<bundle-relative-path>"))
+            OkfError::Usage(format!(
+                "invalid logical reference {raw:?}: expected okf://<bundle-id>/<bundle-relative-path>"
+            ))
         };
         let value = raw.strip_prefix("okf://").ok_or_else(fail)?;
         let (body, fragment) = value
@@ -248,14 +250,13 @@ pub fn raw_links(concept: &Concept, ontology: Option<&Ontology>) -> Vec<String> 
             {
                 continue;
             }
-            if let Some(resource) = source.get("resource").and_then(Value::as_str) {
-                if resource
+            if let Some(resource) = source.get("resource").and_then(Value::as_str)
+                && resource
                     .split(['#', '?'])
                     .next()
                     .is_some_and(|p| p.ends_with(".md"))
-                {
-                    raw.push(resource.to_string());
-                }
+            {
+                raw.push(resource.to_string());
             }
         }
     }

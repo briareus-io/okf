@@ -212,8 +212,8 @@ pub fn list_artifacts_with_support(
         if !include_support && crate::bundle::walk::is_support_path(&rel) {
             continue;
         }
-        let metadata =
-            std::fs::metadata(&abs).map_err(|e| OkfError::Io(format!("{}: {e}", abs.display())))?;
+        let metadata = std::fs::metadata(&abs)
+            .map_err(|e| OkfError::io_with(format!("{}: {e}", abs.display()), e))?;
         let kind = classify_existing(&rel);
         let sha256 = digest
             .then(|| std::fs::read(&abs).map(|b| hex_sha256(&b)))
@@ -301,7 +301,7 @@ fn resolve_artifact_with_root(
                 exists: false,
                 size: None,
                 message: Some(e.to_string()),
-            }
+            };
         }
     };
     let abs = root.join(&rel);
@@ -357,8 +357,10 @@ pub fn resolve_artifact_in_context(
         {
             let base = from
                 .and_then(|id| Path::new(id.trim_start_matches('/')).parent())
-                .map(|parent| context.primary.root.join(parent))
-                .unwrap_or_else(|| context.primary.root.clone());
+                .map_or_else(
+                    || context.primary.root.clone(),
+                    |parent| context.primary.root.join(parent),
+                );
             let clean = resource.split(['#', '?']).next().unwrap_or(resource);
             return resolve_registered_path(context, scope_ids, &base.join(clean), resource);
         }
@@ -411,10 +413,10 @@ fn resolve_registered_path(
     let (root, relative) = if let Ok(relative) = path.strip_prefix(&primary) {
         (primary.clone(), relative.to_path_buf())
     } else {
-        let entry = context
+        let (entry, entry_relative) = context
             .catalog
             .as_ref()
-            .and_then(|catalog| crate::graph::catalog::entry_for_path(&catalog.entries, &path))
+            .and_then(|catalog| crate::graph::catalog::entry_with_rel(&catalog.entries, &path))
             .ok_or_else(|| OkfError::Usage("artifact path escapes registered bundles".into()))?;
         if !scope_ids.contains(&entry.id) {
             return Err(OkfError::Usage(format!(
@@ -428,10 +430,7 @@ fn resolve_registered_path(
                 entry.id
             )));
         }
-        (
-            entry.root.clone(),
-            path.strip_prefix(&entry.root).unwrap().to_path_buf(),
-        )
+        (entry.root.clone(), entry_relative.to_path_buf())
     };
     let mut resolved = resolve_literal_path(&root, &relative.to_string_lossy());
     resolved.resource = resource.into();
@@ -485,12 +484,12 @@ pub fn resolve_source_in_context(
             "bundle_ref.path must stay relative to target bundle root".into(),
         ));
     }
-    if let Some(reference) = logical {
-        if reference.bundle != declared.id || reference.path != declared.path {
-            return Err(OkfError::Usage(
-                "reference-mismatch: logical URI and bundle_ref disagree".into(),
-            ));
-        }
+    if let Some(reference) = logical
+        && (reference.bundle != declared.id || reference.path != declared.path)
+    {
+        return Err(OkfError::Usage(
+            "reference-mismatch: logical URI and bundle_ref disagree".into(),
+        ));
     }
     let catalog = context
         .catalog
@@ -522,35 +521,33 @@ pub fn resolve_source_in_context(
             ));
         }
     }
-    if mapped.exists {
-        if let Some(snapshot) = &declared.snapshot {
-            let checked = crate::graph::catalog::resolve_snapshot(
-                snapshot,
-                &entry.root,
-                &mapped_path,
-                None,
-                true,
-            );
-            if matches!(checked.status.as_str(), "mismatched" | "unavailable") {
-                return Err(OkfError::Usage(format!(
-                    "source snapshot {}: {}",
-                    checked.status, checked.evidence
-                )));
-            }
-            if let (Some(expected), Some(origin)) = (
-                &snapshot.commit,
-                crate::bundle::remote::origin(&entry.root)?,
-            ) {
-                if origin
-                    .commit
-                    .as_ref()
-                    .is_some_and(|selected| selected != expected)
-                {
-                    return Err(OkfError::Usage(
-                        "source snapshot mismatched: selected catalog commit differs".into(),
-                    ));
-                }
-            }
+    if mapped.exists
+        && let Some(snapshot) = &declared.snapshot
+    {
+        let checked = crate::graph::catalog::resolve_snapshot(
+            snapshot,
+            &entry.root,
+            &mapped_path,
+            None,
+            true,
+        );
+        if matches!(checked.status.as_str(), "mismatched" | "unavailable") {
+            return Err(OkfError::Usage(format!(
+                "source snapshot {}: {}",
+                checked.status, checked.evidence
+            )));
+        }
+        if let (Some(expected), Some(origin)) = (
+            &snapshot.commit,
+            crate::bundle::remote::origin(&entry.root)?,
+        ) && origin
+            .commit
+            .as_ref()
+            .is_some_and(|selected| selected != expected)
+        {
+            return Err(OkfError::Usage(
+                "source snapshot mismatched: selected catalog commit differs".into(),
+            ));
         }
     }
     Ok((entry.root.clone(), mapped))
@@ -595,7 +592,7 @@ pub fn show_artifact(
     }
     let rel = resolved.path.as_ref().unwrap();
     let mut file = std::fs::File::open(root.join(rel))
-        .map_err(|e| OkfError::Io(format!("{}: {e}", rel.display())))?;
+        .map_err(|e| OkfError::io_with(format!("{}: {e}", rel.display()), e))?;
     let mut digest = Sha256::new();
     let mut prefix = Vec::with_capacity(max_bytes.min(64 * 1024));
     let mut buffer = [0u8; 64 * 1024];
@@ -603,7 +600,7 @@ pub fn show_artifact(
     loop {
         let read = file
             .read(&mut buffer)
-            .map_err(|e| OkfError::Io(format!("{}: {e}", rel.display())))?;
+            .map_err(|e| OkfError::io_with(format!("{}: {e}", rel.display()), e))?;
         if read == 0 {
             break;
         }
@@ -702,7 +699,7 @@ fn fetch_impl(resource: &str, max_bytes: usize) -> Result<ArtifactContent> {
         .into_reader()
         .take(max_bytes as u64 + 1)
         .read_to_end(&mut bytes)
-        .map_err(|e| OkfError::Io(format!("remote artifact read failed: {e}")))?;
+        .map_err(|e| OkfError::io_with(format!("remote artifact read failed: {e}"), e))?;
     let truncated = bytes.len() > max_bytes;
     bytes.truncate(max_bytes);
     let sha256 = hex_sha256(&bytes);
@@ -742,15 +739,15 @@ fn normalize_local_impl(resource: &str, from: Option<&str>, literal_path: bool) 
     }
     .replace('\\', "/");
     let mut joined = PathBuf::new();
-    if !core.starts_with('/') {
-        if let Some(from) = from {
-            let from = from
-                .trim_start_matches('/')
-                .strip_suffix(".md")
-                .unwrap_or(from.trim_start_matches('/'));
-            if let Some(parent) = Path::new(from).parent() {
-                joined.push(parent);
-            }
+    if !core.starts_with('/')
+        && let Some(from) = from
+    {
+        let from = from
+            .trim_start_matches('/')
+            .strip_suffix(".md")
+            .unwrap_or(from.trim_start_matches('/'));
+        if let Some(parent) = Path::new(from).parent() {
+            joined.push(parent);
         }
     }
     joined.push(core.trim_start_matches('/'));
@@ -767,7 +764,7 @@ fn normalize_local_impl(resource: &str, from: Option<&str>, literal_path: bool) 
             Component::RootDir | Component::Prefix(_) => {
                 return Err(OkfError::Usage(
                     "artifact path must be bundle-relative".to_string(),
-                ))
+                ));
             }
         }
     }

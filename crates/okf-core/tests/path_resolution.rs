@@ -5,7 +5,7 @@ use okf_core::{
     },
     check::doctor::{doctor, doctor_in_context},
     mutate::changeset::{self, ChangeSet, Operation},
-    query::artifact::{resolve_artifact_in_context, show_artifact_in_context, ArtifactKind},
+    query::artifact::{ArtifactKind, resolve_artifact_in_context, show_artifact_in_context},
 };
 use std::{fs, path::Path};
 
@@ -18,7 +18,11 @@ fn write(root: &Path, path: &str, text: &str) {
 fn catalog(root: &Path) -> Context {
     fs::create_dir_all(root.join("a")).unwrap();
     fs::create_dir_all(root.join("b")).unwrap();
-    write(root, "okf-catalog.yaml", "catalog_version: 2\nbundles:\n  demo.a: {location: {type: directory, path: a}}\n  demo.b: {location: {type: directory, path: b}}\ndefault_bundle: demo.a\n");
+    write(
+        root,
+        "okf-catalog.yaml",
+        "catalog_version: 2\nbundles:\n  demo.a: {location: {type: directory, path: a}}\n  demo.b: {location: {type: directory, path: b}}\ndefault_bundle: demo.a\n",
+    );
     let catalog = load_catalog(&root.join("okf-catalog.yaml"), None).unwrap();
     Context {
         primary: SelectedBundle {
@@ -40,7 +44,11 @@ fn doctor_preserves_typed_source_namespaces_and_reports_missing_files() {
         "refs/note.md",
         "---\ntype: Note\n---\n# Evidence\nproof\n",
     );
-    write(root.path(), "nested/concept.md", "---\ntype: Note\nsources:\n- {resource: refs/code.py, kind: file}\n- {resource: 'refs/code.py#L1-1', kind: line-range}\n- {resource: 'refs/note.md#evidence', kind: markdown-heading}\n---\n");
+    write(
+        root.path(),
+        "nested/concept.md",
+        "---\ntype: Note\nsources:\n- {resource: refs/code.py, kind: file}\n- {resource: 'refs/code.py#L1-1', kind: line-range}\n- {resource: 'refs/note.md#evidence', kind: markdown-heading}\n---\n",
+    );
     let report = doctor(root.path(), "0.2", false, false).unwrap();
     assert!(report.ready(), "{:?}", report.findings);
     fs::remove_file(root.path().join("refs/code.py")).unwrap();
@@ -60,7 +68,11 @@ fn typed_file_sources_do_not_become_scope_descriptors_or_uri_schemes() {
     let root = tempfile::tempdir().unwrap();
     write(root.path(), "refs/file with spaces.py", "print(1)\n");
     write(root.path(), "data:part.csv", "1,2\n");
-    write(root.path(), "nested/concept.md", "---\ntype: Note\nsources:\n- {resource: 'refs/file with spaces.py', kind: file}\n- {resource: 'data:part.csv', kind: file}\n---\n");
+    write(
+        root.path(),
+        "nested/concept.md",
+        "---\ntype: Note\nsources:\n- {resource: 'refs/file with spaces.py', kind: file}\n- {resource: 'data:part.csv', kind: file}\n---\n",
+    );
     assert!(doctor(root.path(), "0.2", false, false).unwrap().ready());
     fs::remove_file(root.path().join("refs/file with spaces.py")).unwrap();
     fs::remove_file(root.path().join("data:part.csv")).unwrap();
@@ -102,20 +114,24 @@ fn refreshed_file_source_has_consistent_doctor_stale_and_graph_resolution() {
         &okf_core::ports::clock::FixedClock("2026-11-01T00:00:00Z".into()),
     )
     .unwrap();
-    assert!(doctor_in_context(&context, &[], "0.2", false, false)
-        .unwrap()
-        .ready());
+    assert!(
+        doctor_in_context(&context, &[], "0.2", false, false)
+            .unwrap()
+            .ready()
+    );
     let bundle = okf_core::bundle::loader::load_bundle(&context.primary.root).unwrap();
-    assert!(okf_core::check::stale::check_stale(&bundle)
-        .concepts
-        .is_empty());
+    assert!(
+        okf_core::check::stale::check_stale(&bundle)
+            .concepts
+            .is_empty()
+    );
     let graph = okf_core::graph::catalog::build_catalog_graph(&context, &[], false, None).unwrap();
     let edge = graph
         .edges
         .iter()
         .find(|e| e.location == "sources[0].resource")
         .unwrap();
-    assert_eq!(edge.status, "resolved");
+    assert_eq!(edge.status, okf_core::graph::catalog::EdgeStatus::Resolved);
     assert_eq!(edge.fingerprint_status.as_deref(), Some("unchanged"));
 }
 
@@ -143,13 +159,10 @@ fn ordinary_cross_bundle_artifacts_require_scope_and_keep_target_root_for_reads(
         show_artifact_in_context(&context, &scope, Some("/notes/n"), resource, 1024, None).unwrap();
     assert_eq!(content.text.as_deref(), Some("print(2)\n"));
     write(root.path(), "outside/code.py", "secret");
-    assert!(resolve_artifact_in_context(
-        &context,
-        &scope,
-        Some("/notes/n"),
-        "../../outside/code.py"
-    )
-    .is_err());
+    assert!(
+        resolve_artifact_in_context(&context, &scope, Some("/notes/n"), "../../outside/code.py")
+            .is_err()
+    );
     let (_, missing) = resolve_artifact_in_context(
         &context,
         &scope,
@@ -171,24 +184,45 @@ fn doctor_resolves_scoped_sources_and_enforces_bundle_mapping_and_snapshot() {
     );
     let scope = vec!["demo.b".into()];
     for resource in ["../../b/specs/x.md", "okf://demo.b/specs/x.md"] {
-        write(root.path(), "a/notes/n.md", &format!("---\ntype: Note\nsources:\n- resource: {resource}\n  bundle_ref: {{id: demo.b, path: specs/x.md}}\n---\n"));
+        write(
+            root.path(),
+            "a/notes/n.md",
+            &format!(
+                "---\ntype: Note\nsources:\n- resource: {resource}\n  bundle_ref: {{id: demo.b, path: specs/x.md}}\n---\n"
+            ),
+        );
         let report = doctor_in_context(&context, &[], "0.2", false, false).unwrap();
         assert!(!report.ready());
         let report = doctor_in_context(&context, &scope, "0.2", false, false).unwrap();
         assert!(report.ready(), "{:?}", report.findings);
     }
-    write(root.path(), "a/notes/n.md", "---\ntype: Note\nsources:\n- resource: okf://demo.b/specs/x.md\n  bundle_ref: {id: demo.b, path: specs/other.md}\n---\n");
+    write(
+        root.path(),
+        "a/notes/n.md",
+        "---\ntype: Note\nsources:\n- resource: okf://demo.b/specs/x.md\n  bundle_ref: {id: demo.b, path: specs/other.md}\n---\n",
+    );
     let report = doctor_in_context(&context, &scope, "0.2", false, false).unwrap();
-    assert!(report
-        .findings
-        .iter()
-        .any(|f| f.message.contains("reference-mismatch")));
-    write(root.path(), "a/notes/n.md", &format!("---\ntype: Note\nsources:\n- resource: okf://demo.b/specs/x.md\n  bundle_ref:\n    id: demo.b\n    path: specs/x.md\n    snapshot: {{digest: '{}'}}\n---\n", "0".repeat(64)));
+    assert!(
+        report
+            .findings
+            .iter()
+            .any(|f| f.message.contains("reference-mismatch"))
+    );
+    write(
+        root.path(),
+        "a/notes/n.md",
+        &format!(
+            "---\ntype: Note\nsources:\n- resource: okf://demo.b/specs/x.md\n  bundle_ref:\n    id: demo.b\n    path: specs/x.md\n    snapshot: {{digest: '{}'}}\n---\n",
+            "0".repeat(64)
+        ),
+    );
     let report = doctor_in_context(&context, &scope, "0.2", false, false).unwrap();
-    assert!(report
-        .findings
-        .iter()
-        .any(|f| f.message.contains("snapshot mismatched")));
+    assert!(
+        report
+            .findings
+            .iter()
+            .any(|f| f.message.contains("snapshot mismatched"))
+    );
 }
 
 #[cfg(unix)]
@@ -216,7 +250,11 @@ fn scoped_resolution_does_not_follow_escaping_symlinks() {
         root.path().join("a/escape.txt"),
     )
     .unwrap();
-    write(root.path(), "a/note.md", "---\ntype: Note\nsources:\n- resource: escape.txt\n  bundle_ref: {id: demo.b, path: specs/x.md}\n---\n");
+    write(
+        root.path(),
+        "a/note.md",
+        "---\ntype: Note\nsources:\n- resource: escape.txt\n  bundle_ref: {id: demo.b, path: specs/x.md}\n---\n",
+    );
     let report = doctor_in_context(&context, &["demo.b".into()], "0.2", false, false).unwrap();
     assert!(
         report
@@ -242,9 +280,11 @@ fn changeset_concept_id_is_not_shadowed_by_same_named_directory() {
     };
     changeset::prepare(root.path(), &changes).unwrap();
     fs::remove_file(root.path().join("m/M1.md")).unwrap();
-    assert!(changeset::prepare(root.path(), &changes)
-        .err()
-        .unwrap()
-        .to_string()
-        .contains("dangling/blocked"));
+    assert!(
+        changeset::prepare(root.path(), &changes)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("dangling/blocked")
+    );
 }

@@ -14,17 +14,21 @@ fn should_sign(os: &str, ci_present: bool) -> bool {
 }
 
 /// Cargo reports actual executable paths, including custom profiles and target directories.
-pub fn build(root: &Path, args: &[&str]) {
+pub fn build(root: &Path, args: &[&str]) -> Result<(), String> {
     let mut child = Command::new(env!("CARGO"))
         .args(args)
         .arg("--message-format=json-render-diagnostics")
         .current_dir(root)
         .stdout(Stdio::piped())
         .spawn()
-        .expect("spawn cargo build");
+        .map_err(|e| format!("spawn cargo build: {e}"))?;
     let mut binaries = BTreeSet::new();
-    for line in BufReader::new(child.stdout.take().unwrap()).lines() {
-        let line = line.expect("read cargo build output");
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or("cargo build stdout was not captured")?;
+    for line in BufReader::new(stdout).lines() {
+        let line = line.map_err(|e| format!("read cargo build output: {e}"))?;
         match serde_json::from_str::<Value>(&line) {
             Ok(record) => {
                 if let Some(path) = executable(&record) {
@@ -34,13 +38,16 @@ pub fn build(root: &Path, args: &[&str]) {
             Err(_) => println!("{line}"),
         }
     }
-    let status = child.wait().expect("wait for cargo build");
+    let status = child
+        .wait()
+        .map_err(|e| format!("wait for cargo build: {e}"))?;
     if !status.success() {
         std::process::exit(status.code().unwrap_or(1));
     }
     for binary in binaries {
-        sign(&binary);
+        sign(&binary)?;
     }
+    Ok(())
 }
 
 // The running build helper is tooling, not an application artifact to re-sign.
@@ -59,12 +66,13 @@ pub fn install_root(root: &Path) -> PathBuf {
     if let Some(path) = std::env::var_os("CARGO_INSTALL_ROOT") {
         return root.join(path);
     }
-    let cargo_home = std::env::var_os("CARGO_HOME")
-        .map(|path| root.join(path))
-        .unwrap_or_else(|| {
+    let cargo_home = std::env::var_os("CARGO_HOME").map_or_else(
+        || {
             PathBuf::from(std::env::var_os("HOME").expect("HOME or CARGO_HOME required"))
                 .join(".cargo")
-        });
+        },
+        |path| root.join(path),
+    );
     // With --path, Cargo discovers configuration from the package directory upward.
     let package = root.join("crates/okf-cli");
     let mut dirs: Vec<_> = package.ancestors().map(|dir| dir.join(".cargo")).collect();
@@ -92,14 +100,16 @@ pub fn install_root(root: &Path) -> PathBuf {
     cargo_home
 }
 
-pub fn sign(binary: &Path) {
+pub fn sign(binary: &Path) -> Result<(), String> {
     // Cross-compilation on a Mac may produce ELF/PE executables. Only sign Mach-O.
-    let mut file = std::fs::File::open(binary).expect("open built executable");
+    let mut file = std::fs::File::open(binary)
+        .map_err(|e| format!("open built executable {}: {e}", binary.display()))?;
     let mut magic = [0; 4];
     use std::io::Read;
-    file.read_exact(&mut magic).expect("read executable format");
+    file.read_exact(&mut magic)
+        .map_err(|e| format!("read executable format of {}: {e}", binary.display()))?;
     if !is_macho(magic) {
-        return;
+        return Ok(());
     }
     eprintln!("Ad-hoc signing {}", binary.display());
     for args in [
@@ -110,11 +120,12 @@ pub fn sign(binary: &Path) {
             .args(args)
             .arg(binary)
             .status()
-            .expect("run codesign");
+            .map_err(|e| format!("run codesign: {e}"))?;
         if !status.success() {
             std::process::exit(status.code().unwrap_or(1));
         }
     }
+    Ok(())
 }
 
 fn is_macho(magic: [u8; 4]) -> bool {

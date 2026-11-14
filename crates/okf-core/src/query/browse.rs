@@ -45,10 +45,10 @@ pub fn browse(root: &Path, directory: Option<&str>) -> Result<BrowseResult> {
     }
     let canonical_root = root
         .canonicalize()
-        .map_err(|e| OkfError::Io(format!("{}: {e}", root.display())))?;
+        .map_err(|e| OkfError::io_with(format!("{}: {e}", root.display()), e))?;
     let canonical_dir = absolute_dir
         .canonicalize()
-        .map_err(|e| OkfError::Io(format!("{}: {e}", absolute_dir.display())))?;
+        .map_err(|e| OkfError::io_with(format!("{}: {e}", absolute_dir.display()), e))?;
     if !canonical_dir.starts_with(&canonical_root) {
         return Err(OkfError::Usage(format!(
             "directory must stay inside the bundle: {:?}",
@@ -64,7 +64,7 @@ pub fn browse(root: &Path, directory: Option<&str>) -> Result<BrowseResult> {
             return Err(OkfError::Usage("index path escapes bundle".to_string()));
         }
         let content = std::fs::read_to_string(&canonical_index)
-            .map_err(|e| OkfError::Io(format!("{}: {e}", absolute_index.display())))?;
+            .map_err(|e| OkfError::io_with(format!("{}: {e}", absolute_index.display()), e))?;
         return Ok(BrowseResult {
             directory: display_directory(&relative),
             path,
@@ -93,7 +93,7 @@ fn normalize_directory(raw: &str) -> Result<PathBuf> {
             Component::ParentDir | Component::Prefix(_) => {
                 return Err(OkfError::Usage(format!(
                     "directory must stay inside the bundle: {raw:?}"
-                )))
+                )));
             }
         }
     }

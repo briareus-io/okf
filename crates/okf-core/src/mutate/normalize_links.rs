@@ -4,17 +4,19 @@
 //! Only destination byte ranges change; YAML, labels, titles and surrounding Markdown
 //! remain exact. Unknown or ambiguous destination syntax is left for review.
 
+use std::borrow::Cow;
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use pulldown_cmark::{Event, LinkType, Parser, Tag};
 
 use crate::bundle::walk::walk_markdown;
 use crate::error::Result;
-use crate::model::link::{classify, LinkKind};
+use crate::model::link::{LinkKind, classify};
 use crate::parse::markdown::split_frontmatter;
 use crate::query::artifact::{ArtifactKind, ArtifactResolver};
 
-use super::transaction::{commit_locked, writer_lock, FileChange};
+use super::transaction::{FileChange, commit_locked, writer_lock};
 
 #[derive(Debug, Clone)]
 pub struct NormalizedLink {
@@ -52,18 +54,14 @@ pub fn normalize_relative_links(root: &Path, apply: bool) -> Result<Normalizatio
         let parser = Parser::new(&body);
         for (_, definition) in parser.reference_definitions().iter() {
             let span = &body[definition.span.clone()];
-            if let Some(colon) = span.find("]:") {
-                if let Some((start, end)) = destination_span(span, colon + 2) {
-                    if &span[start..end] == definition.dest.as_ref() {
-                        if let Some(to) = normalize_target(&resolver, &from, &definition.dest) {
-                            edits.push((
-                                definition.span.start + start,
-                                definition.span.start + end,
-                                to,
-                            ));
-                        }
-                    }
-                }
+            if let Some((start, end)) = find_definition_destination(span, &definition.dest)
+                && let Some(to) = normalize_target(&resolver, &from, &definition.dest)
+            {
+                edits.push((
+                    definition.span.start + start,
+                    definition.span.start + end,
+                    to,
+                ));
             }
         }
         for (event, range) in parser.into_offset_iter() {
@@ -86,25 +84,9 @@ pub fn normalize_relative_links(root: &Path, apply: bool) -> Result<Normalizatio
                 continue;
             };
             let span = &body[range.clone()];
-            // Locate the destination using the parsed link's full span. Checking the
-            // remaining title/closing delimiter avoids matching text inside a label.
-            for (open, _) in span.match_indices("](") {
-                let Some((start, end)) = destination_span(span, open + 2) else {
-                    continue;
-                };
-                if &span[start..end] != dest_url.as_ref() {
-                    continue;
-                }
-                let after = if span.as_bytes().get(end) == Some(&b'>') {
-                    end + 1
-                } else {
-                    end
-                };
-                if !valid_inline_tail(&span[after..]) {
-                    continue;
-                }
+            let span = &body[range.clone()];
+            if let Some((start, end)) = find_inline_destination(span, &dest_url) {
                 edits.push((range.start + start, range.start + end, to));
-                break;
             }
         }
         if edits.is_empty() {
@@ -180,10 +162,164 @@ fn normalize_target(resolver: &ArtifactResolver, from: &str, raw: &str) -> Optio
     let path = target.path?;
     let replacement = format!(
         "/{}{}",
-        path.to_string_lossy().replace('\\', "/"),
+        encode_destination(&path.to_string_lossy().replace('\\', "/")),
         &raw[suffix_start..]
     );
     (replacement != raw).then_some(replacement)
+}
+
+/// Locate the raw destination of an inline link/image inside its full parsed `span`.
+/// `dest` is the parser's (unescaped) destination. Checking the title/closing tail avoids
+/// matching text inside a label or an inner image.
+pub(super) fn find_inline_destination(span: &str, dest: &str) -> Option<(usize, usize)> {
+    for (open, _) in span.match_indices("](") {
+        let Some((start, end)) = destination_span(span, open + 2) else {
+            continue;
+        };
+        if unescape_backslashes(&span[start..end]) != dest {
+            continue;
+        }
+        let after = if span.as_bytes().get(end) == Some(&b'>') {
+            end + 1
+        } else {
+            end
+        };
+        if valid_inline_tail(&span[after..]) {
+            return Some((start, end));
+        }
+    }
+    None
+}
+
+/// Locate the raw destination of a link reference definition within its `span`.
+pub(super) fn find_definition_destination(span: &str, dest: &str) -> Option<(usize, usize)> {
+    let colon = span.find("]:")?;
+    let (start, end) = destination_span(span, colon + 2)?;
+    (unescape_backslashes(&span[start..end]) == dest).then_some((start, end))
+}
+
+/// Resolve CommonMark backslash escapes and entity/numeric character references, as the
+/// parser does for link destinations. Unknown entities stay literal.
+fn unescape_backslashes(raw: &str) -> Cow<'_, str> {
+    if !raw.contains(['\\', '&']) {
+        return raw.into();
+    }
+    let mut out = String::with_capacity(raw.len());
+    let mut rest = raw;
+    while let Some(c) = rest.chars().next() {
+        let after = &rest[c.len_utf8()..];
+        if c == '\\'
+            && let Some(n) = after.chars().next().filter(char::is_ascii_punctuation)
+        {
+            out.push(n);
+            rest = &after[n.len_utf8()..];
+            continue;
+        }
+        if c == '&'
+            && let Some((decoded, len)) = decode_entity(after)
+        {
+            out.push(decoded);
+            rest = &after[len..];
+            continue;
+        }
+        out.push(c);
+        rest = after;
+    }
+    out.into()
+}
+
+/// Decode one reference body following `&` (e.g. `amp;`, `#38;`, `#x26;`); returns the
+/// character and the number of bytes consumed after the ampersand.
+fn decode_entity(after: &str) -> Option<(char, usize)> {
+    let end = after.find(';')?;
+    if end == 0 || end > 10 {
+        return None;
+    }
+    let name = &after[..end];
+    let decoded = if let Some(num) = name.strip_prefix('#') {
+        let code = match num.strip_prefix(['x', 'X']) {
+            Some(hex) if !hex.is_empty() && hex.len() <= 6 => u32::from_str_radix(hex, 16).ok()?,
+            Some(_) => return None,
+            None if !num.is_empty() && num.len() <= 7 => num.parse().ok()?,
+            None => return None,
+        };
+        if code == 0 {
+            '\u{FFFD}'
+        } else {
+            char::from_u32(code).unwrap_or('\u{FFFD}')
+        }
+    } else {
+        match name {
+            "amp" => '&',
+            "lt" => '<',
+            "gt" => '>',
+            "quot" => '"',
+            "apos" => '\'',
+            "nbsp" => '\u{A0}',
+            _ => return None,
+        }
+    };
+    Some((decoded, end + 1))
+}
+
+/// Percent-encode only what would make a bare CommonMark destination invalid: whitespace,
+/// control characters, `<`, `>` and unbalanced parentheses. Ordinary paths are unchanged.
+pub(super) fn encode_destination(dest: &str) -> String {
+    let mut depth = 0i32;
+    let mut balanced = true;
+    for c in dest.chars() {
+        match c {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                balanced &= depth >= 0;
+            }
+            _ => {}
+        }
+    }
+    balanced &= depth == 0;
+    let mut out = String::with_capacity(dest.len());
+    for c in dest.chars() {
+        let escape = c.is_whitespace()
+            || c.is_control()
+            || matches!(c, '<' | '>')
+            || (!balanced && matches!(c, '(' | ')'));
+        if escape {
+            let mut buf = [0; 4];
+            for byte in c.encode_utf8(&mut buf).bytes() {
+                let _ = write!(out, "%{byte:02X}");
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// Decode `%XX` escapes; results that are not valid UTF-8 leave the input untouched.
+pub(super) fn percent_decode(raw: &str) -> Cow<'_, str> {
+    if !raw.contains('%') {
+        return raw.into();
+    }
+    let bytes = raw.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            let hex = |b: u8| (b as char).to_digit(16);
+            if let (Some(hi), Some(lo)) = (hex(bytes[i + 1]), hex(bytes[i + 2])) {
+                out.push((hi * 16 + lo) as u8);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    match String::from_utf8(out) {
+        Ok(decoded) => decoded.into(),
+        Err(_) => raw.into(),
+    }
 }
 
 /// Return the raw destination range, excluding optional angle brackets.
@@ -258,4 +394,20 @@ fn valid_inline_tail(tail: &str) -> bool {
         index += 1;
     }
     false
+}
+
+#[cfg(test)]
+mod entity_tests {
+    use super::*;
+
+    #[test]
+    fn destinations_decode_entities_and_leave_unknown_literal() {
+        assert_eq!(unescape_backslashes("a&amp;b.md"), "a&b.md");
+        assert_eq!(unescape_backslashes("a&#38;b&#x26;c"), "a&b&c");
+        assert_eq!(unescape_backslashes("&lt;&gt;&quot;&apos;"), "<>\"'");
+        assert_eq!(unescape_backslashes("a&nbsp;b"), "a\u{A0}b");
+        assert_eq!(unescape_backslashes("a&bogus;b&amp"), "a&bogus;b&amp");
+        assert_eq!(unescape_backslashes("\\&amp;"), "&amp;");
+        assert_eq!(unescape_backslashes("x\\_y"), "x_y");
+    }
 }
