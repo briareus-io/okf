@@ -17,8 +17,8 @@ last_modified: 2026-10-04T20:39:29Z
 
 Moves or renames a concept and rewrites body links, ontology references, and standard internal `sources[].resource` paths. It also rebases the moved concept's relative standard paths. Repository-relative `git-path` and `git-commit` source resources remain unchanged.
 
-Moves rewrite declared nested-reference occurrences and curated navigation within the selected bundle.
-Publication is journaled per file. Cross-bundle move orchestration remains unsupported.
+Moves rewrite declared nested-reference occurrences and curated navigation within the selected
+bundle. Publication is journaled per file. Cross-bundle move orchestration remains unsupported.
 Inspect explicit-scope consumers and coordinate reviewed changes across bundles manually; a
 single-bundle move cannot establish that every external consumer was repaired.
 
@@ -35,6 +35,10 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `change`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--scope-bundle`.
+Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--scope-bundle`, `--selection`.
 
-Moves rewrite inline/reference-style Markdown, self-links, declared simple/nested references, and curated index/log links within the selected bundle. File/text fingerprint sources retain bundle-root semantics; Git sources retain worktree-root semantics. Destinations must be absent. The complete write set is prevalidated and journaled for rollback. Use changeset plan/apply for coordinated moves, replacement, splits, or cleanup. Cross-bundle referrers are not rewritten.
+Moves rewrite inline/reference-style Markdown, self-links, declared simple/nested references, and
+curated index/log links within the selected bundle. File/text fingerprint sources retain bundle-root
+semantics; Git sources retain worktree-root semantics. Destinations must be absent. The complete
+write set is prevalidated and journaled for rollback. Use changeset plan/apply for coordinated
+moves, replacement, splits, or cleanup. Cross-bundle referrers are not rewritten.

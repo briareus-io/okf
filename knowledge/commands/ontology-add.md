@@ -3,7 +3,9 @@ type: Command
 group: mutate
 mutates: true
 title: okf ontology add
-description: Defines a new concept type with its typed fields and reference rules, written to ontology.yaml through the lossless ontology editor.
+description: >-
+  Defines a new concept type with its typed fields and reference rules, written to
+  ontology.yaml through the lossless ontology editor.
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
@@ -17,7 +19,8 @@ last_modified: 2026-10-05T10:16:06Z
 ---
 # okf ontology add
 
-Defines a new concept type with its typed fields and reference rules, written to ontology.yaml through the lossless ontology editor.
+Defines a new concept type with its typed fields and reference rules, written to ontology.yaml
+through the lossless ontology editor.
 
 Structured declaration flags `--field-yaml`, `--ref-yaml`, and `--relationship-yaml` accept
 `name=value` with inline YAML/JSON, `@file`, or stdin `-`. Each supplied declaration replaces its
@@ -51,6 +54,6 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `change`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`, `--selection`.
 
 Built-in field types: `string`, `text`, `int`, `bool`, `date`, `datetime`, `uri`, `enum`, `list`, `object`; custom type names must resolve in the existing sidecar's `field_types`. Reference cardinalities are `0..1` (optional one), `1..1` (exactly one), `0..n` (optional many), and `1..n` (at least one). For example, `--field "stage:enum:draft|active"` declares choices and `--ref "depends_on:Service:0..n"` permits zero or more Service links. Observed presence alone does not justify a required rule. Structured `--field-yaml`, `--ref-yaml`, and `--relationship-yaml` inputs replace complete named declarations. `--from` merges supplied declarations, retaining omitted ones; overlaps with flags fail. `--remove-relationship` deletes a named rule. YAML inputs accept inline values, `@file`, or `-`; JSON syntax works. Preview with `--dry-run`. These are advisory local rules, not conformance requirements.

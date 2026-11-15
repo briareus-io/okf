@@ -15,15 +15,19 @@ Independent command lists and argument tables drift as flags and output contract
 
 ## Choice
 
-Derive the command surface from the clap definition through okf schema. Generate command Arguments sections, shared contract reference and focused skill references from that output. Keep curated behavior notes alongside the generator.
+Derive the command surface from the clap definition through okf schema. Generate command Arguments
+sections, shared contract reference and focused skill references from that output. Keep curated
+behavior notes alongside the generator.
 
 ## Alternatives
 
-Hand-maintained tables offer editorial freedom but create duplicate contract maintenance. Generating all prose would lose task context and judgment.
+Hand-maintained tables offer editorial freedom but create duplicate contract maintenance. Generating
+all prose would lose task context and judgment.
 
 ## Consequences
 
-Argument facts have one source; human task guidance remains authored. Generation checks must fail on missing command pages as well as stale output.
+Argument facts have one source; human task guidance remains authored. Generation checks must fail on
+missing command pages as well as stale output.
 
 ## Reconsider when
 

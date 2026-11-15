@@ -11,19 +11,23 @@ description: Keep Git an optional runtime dependency behind an effect port.
 
 ## Context
 
-Git-backed provenance and revision reads need repository behavior without making every local operation depend on a Git library.
+Git-backed provenance and revision reads need repository behavior without making every local
+operation depend on a Git library.
 
 ## Choice
 
-Invoke Git through the Git port. Avoid gix/git2/libgit2 build dependencies. Git-based fingerprinting and revision operations require Git on PATH; other local operations remain usable without it.
+Invoke Git through the Git port. Avoid gix/git2/libgit2 build dependencies. Git-based fingerprinting
+and revision operations require Git on PATH; other local operations remain usable without it.
 
 ## Alternatives
 
-Embedding a Git library could reduce subprocess overhead but adds a separate dependency and compatibility surface.
+Embedding a Git library could reduce subprocess overhead but adds a separate dependency and
+compatibility surface.
 
 ## Consequences
 
-Git failures need explicit environment diagnostics. Reuse subprocess work within an invocation where possible, and do not fetch missing objects during local inspection.
+Git failures need explicit environment diagnostics. Reuse subprocess work within an invocation where
+possible, and do not fetch missing objects during local inspection.
 
 ## Reconsider when
 

@@ -23,8 +23,8 @@ sources:
 ---
 # Model and edit structured knowledge
 
-Use this guide when you need to add structured metadata and make its relationships queryable.
-You need the CLI on PATH and a checkout containing the example artifacts.
+Use this guide when you need to add structured metadata and make its relationships queryable. You
+need the CLI on PATH and a checkout containing the example artifacts.
 
 ## Define and edit one guide
 
@@ -57,8 +57,8 @@ See [ontology and relationships](../concepts/ontology-and-relationships.md) for 
 
 ## Add a relationship you can query
 
-Continue in the same shell. Define a small command concept and declare that guides can use
-commands. The relationship supplies readable forward and inverse labels:
+Continue in the same shell. Define a small command concept and declare that guides can use commands.
+The relationship supplies readable forward and inverse labels:
 
 ```sh
 okf ontology add Command "$demo_root/bundle" --description "A command described by a guide"
@@ -94,5 +94,5 @@ adds `worked-example` and `authoring` tags. A second application fails its initi
 because the audience has already changed; the file should remain unchanged. A wrong audience
 value is an ontology issue, not proof that the Markdown format itself is invalid.
 
-Keep the temporary directory until you have inspected the results. None of these commands
-creates a review event or modifies the checked-in manual.
+Keep the temporary directory until you have inspected the results. None of these commands creates a
+review event or modifies the checked-in manual.

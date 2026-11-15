@@ -3,7 +3,9 @@ type: Command
 group: check
 mutates: true
 title: okf lint
-description: 'Advisory checks where the opinions live: broken links, missing descriptions, orphans, and ontology violations, at error/warn/info severities with a --fail-on threshold.'
+description: >-
+  Advisory checks where the opinions live: broken links, missing descriptions, orphans,
+  and ontology violations, at error/warn/info severities with a --fail-on threshold.
 sources:
 - resource: crates/okf-cli/src/commands/check.rs
   kind: git-path
@@ -17,7 +19,8 @@ last_modified: 2026-10-04T20:39:29Z
 ---
 # okf lint
 
-Advisory checks where the opinions live: broken links, missing descriptions, orphans, and ontology violations, at error/warn/info severities with a --fail-on threshold.
+Advisory checks where the opinions live: broken links, missing descriptions, orphans, and ontology
+violations, at error/warn/info severities with a --fail-on threshold.
 
 Recursive ontology diagnostics retain the `ontology-violation` rule with concrete field paths
 and detailed metadata codes. Invalid schema configuration is separate from advisory findings;
@@ -43,6 +46,6 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `finding,scope,fix`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--scope-bundle`.
+Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--scope-bundle`, `--selection`.
 
 For sources with a fingerprint kind, `source-unrecorded` warns when no baseline exists. `source-missing` errors when file, line-range, or markdown-heading sources cannot be fingerprinted, even without a baseline. Lint does not fetch URLs or inspect Git sources. Configure `source_unrecorded: off` (or `info`, `warn`, `error`; default `warn`) under `settings.lint` in `okf-bundle.yaml`. Legacy TOML bundle settings remain compatibility input. Disabling this rule leaves `source-missing` and `stale` checks active. All lint settings accept `off`, `info`, `warn`, or `error`. Defaults: `broken_link` and `source_missing` are `error`; `missing_title`, `spec_v02` (finding rule `okf-v02`), `ontology_violation`, `source_unrecorded`, `invalid_reference`, and `index_coverage` are `warn`; `missing_description` and `orphan` are `info`. Omitted settings keep these defaults. `off` suppresses the selected lint rule only; validation and stale checks remain independent. `index_exclude` controls index coverage exclusions and `finding_budget` limits ontology findings (positive, default 1,000 per concept). Use `--fail-on warn` to fail on warnings as well as errors.

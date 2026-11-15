@@ -3,7 +3,9 @@ type: Command
 group: check
 mutates: true
 title: okf doctor
-description: Diagnoses conformance and compatibility changes before upgrading an existing bundle, with conservative safe repairs.
+description: >-
+  Diagnoses conformance and compatibility changes before upgrading an existing bundle,
+  with conservative safe repairs.
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
@@ -11,7 +13,8 @@ last_modified: 2026-10-04T20:39:29Z
 ---
 # okf doctor
 
-Inventories an existing bundle with a tolerant raw-byte walker, reports hard conformance blockers and behavior changes, and can apply only allow-listed safe repairs when explicitly confirmed.
+Inventories an existing bundle with a tolerant raw-byte walker, reports hard conformance blockers
+and behavior changes, and can apply only allow-listed safe repairs when explicitly confirmed.
 
 ## Configuration migration
 
@@ -41,8 +44,8 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `doctor-finding,doctor-summary,doctor-normalization,migration-plan,migration-applied`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--scope-bundle`.
+Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--scope-bundle`, `--selection`.
 
-Inspect migration findings without changing files by default. Catalog-aware source checks require explicit `--scope-bundle` or `--catalog-scope` for other registered bundles. File, line-range, and markdown-heading source paths use the bundle root, consistently with fingerprinting and graph resolution; kind-less provenance and body links use document-relative paths. A leading slash in a typed file source retains filesystem-absolute semantics, unlike a leading slash in a Markdown link. Correct typed sources that previously relied on graph resolution treating them as document-relative.
+Inspect migration findings without changing files by default. --selection is incompatible with --migrate-config and --migration-apply because configuration migration has its own targets and guards. Catalog-aware source checks require explicit `--scope-bundle` or `--catalog-scope` for other registered bundles. File, line-range, and markdown-heading source paths use the bundle root, consistently with fingerprinting and graph resolution; kind-less provenance and body links use document-relative paths. A leading slash in a typed file source retains filesystem-absolute semantics, unlike a leading slash in a Markdown link. Correct typed sources that previously relied on graph resolution treating them as document-relative.
 
 `--normalize-relative-links` explicitly chooses current document-relative semantics for bare body links and previews exact mappings and diffs; add `--yes` to publish, while `--dry-run` always previews. It does not infer original author intent and is separate from `--fix-safe`. Only checked existing local targets are normalized; missing, blocked, and unrecognized or ambiguous destination syntax remain for review. Destination-only rewrites preserve frontmatter, source entries, labels, titles, and query/fragment suffixes. Normalization is published before any requested safe repairs, in a separate transaction; the two are not one atomic operation. Review completion evidence if later checks or repairs fail.

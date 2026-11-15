@@ -3,7 +3,9 @@ type: Command
 group: check
 mutates: false
 title: okf scan
-description: Walks the physical bundle tree and reports every Markdown file without parsing concepts.
+description: >-
+  Walks the physical bundle tree and reports every Markdown file without parsing
+  concepts.
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
@@ -26,4 +28,4 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `scan`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`, `--selection`.

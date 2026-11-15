@@ -16,7 +16,9 @@ uses:
 - /commands/validate
 - /commands/artifact-resolve
 title: okf:ontology skill
-description: Manages an optional advisory ontology while keeping portable OKF fields and exact Attested Computation semantics separate from custom rules.
+description: >-
+  Manages an optional advisory ontology while keeping portable OKF fields and exact
+  Attested Computation semantics separate from custom rules.
 sources:
 - resource: plugins/okf/skills/ontology/references/cli.md
   kind: git-path

@@ -60,10 +60,10 @@ relative to the TOML file, not the bundle. Configuration migration must rebase t
 preserving their targets. Use doctor diagnosis and its explicit migration plan/apply mode; ordinary
 diagnosis and safe fixes do not silently migrate workspace configuration.
 
-When old and new configuration coexist, equal effective values are redundant; conflicting values
-are errors with both origins reported. Legacy-only values remain visible during compatibility.
-A broken manifest does not trigger a silent fallback to TOML. Migration preserves unrelated legacy
-content and reports values or identity choices it cannot safely convert.
+When old and new configuration coexist, equal effective values are redundant; conflicting values are
+errors with both origins reported. Legacy-only values remain visible during compatibility. A broken
+manifest does not trigger a silent fallback to TOML. Migration preserves unrelated legacy content
+and reports values or identity choices it cannot safely convert.
 
 ## Local overrides and remote dependencies
 

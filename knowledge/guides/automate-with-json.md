@@ -67,16 +67,15 @@ for command in commands:
 PY
 ```
 
-For this release, expect `Accepted 48 commands`, followed by IDs including `/commands/add`
+For this release, expect `Accepted 49 commands`, followed by IDs including `/commands/add`
 and `/commands/refresh`. Derive the count from the result rather than hard-coding it in an
 integration. If the CLI cannot start, Python raises an OS error; if the CLI fails or the
 stream is truncated, the consumer raises instead of reporting a successful empty inventory.
 
 ## Adapt acceptance to the question
 
-This consumer is deliberately for a complete, unpaginated, single-bundle command inventory.
-It does not support a projected payload or related expansion. Adapt the checks when changing
-the invocation:
+This consumer is deliberately for a complete, unpaginated, single-bundle command inventory. It does
+not support a projected payload or related expansion. Adapt the checks when changing the invocation:
 
 | Change | Evidence to inspect |
 | --- | --- |

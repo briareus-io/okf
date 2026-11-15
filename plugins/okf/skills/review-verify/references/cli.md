@@ -1,6 +1,6 @@
 # okf CLI — review-verify command reference
 
-> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.6.5, OKF spec 0.2). Do not hand-edit; regenerate instead.
+> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.6.6, OKF spec 0.2). Do not hand-edit; regenerate instead.
 
 This focused reference contains only commands selected for the `review-verify` workflow. First pass the skill CLI compatibility preflight. Consult this reference when exact arguments or output shapes are needed. For a compatible CLI that rejects documented syntax, use that command's `--help` output as the runtime authority.
 
@@ -13,6 +13,7 @@ Exit codes: 0 means success under the selected failure threshold, not necessaril
 | Argument | Type | Required | Description |
 |----------|------|----------|-------------|
 | `--json` | bool | no | Emit NDJSON instead of human text or a bare artifact; schema is always NDJSON (default: `false`) |
+| `--selection <value>` | string | no | Bind execution to a previously issued bundle selection token (@file supported) |
 | `--bundle-id <value>` | string | no | Select an explicitly registered bundle identity (paths keep separate meanings) |
 | `--scope-bundle <value>` | list<string> | no | Add a registered bundle to the examination scope (repeatable) |
 | `--catalog-scope` | bool | no | Examine every locally available registered bundle (default: `false`) |
@@ -53,6 +54,13 @@ Authored concept metadata remains open. These computed records describe scope, i
     "path": "path",
     "sha256": "string|null",
     "truncated": "boolean"
+  },
+  "bundle-selection": {
+    "access": "read-only|read-write",
+    "id": "string|null (null for standalone selection)",
+    "root": "canonical existing directory path",
+    "source": "standalone|directory|git-override|git-snapshot",
+    "token": "opaque versioned string"
   },
   "concept": {
     "discriminator": "no kind field is added; unprojected concept metadata",
@@ -238,7 +246,7 @@ Resolve any OKF path-valued resource with document context.
 
 Output stream: `artifact-resolution`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--selection`, `--workspace-revision`.
 
 **Path namespaces:** a leading `/` means bundle-root-relative, not an operating-system absolute path. Other local paths resolve against the declaring concept's directory when `--from` is supplied, otherwise the bundle root. Keep `--from` on the subsequent read too. JSON uses `artifact_kind` (concept, artifact, reserved, support, external, scope, missing, or blocked), `path`, `exists`, `size`, and `message`. Missing/blocked resolution exits 1. A scope descriptor is provenance, not a missing file.
 
@@ -259,7 +267,7 @@ Retrieve a bounded local text artifact; binary files return metadata only.
 
 Output stream: `artifact-content`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--selection`, `--workspace-revision`.
 
 For document-relative paths, pass the same `--from` used during resolution. For bundle-root-relative file/line-range/markdown-heading source resources, omit `--from`; this generic reader does not infer the source kind. JSON includes `text`, `binary`, `truncated`, `size`, `sha256`, and `path`. Binary files provide metadata only. Inspect `truncated` before treating a read as complete; human output alone does not expose this flag. Use bounded line windows and a sufficient byte budget for the needed range; do not infer absence from a truncated result. Use `show` for concepts and this command for opaque or reserved files.
 
@@ -286,9 +294,9 @@ Return effective settings and selected agent guidance without running a workflow
 
 Output stream: `context-scope,bundle-context,guidance,workflow,effective-query,context-stats,context-token,context-check`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--selection`, `--workspace-revision`.
 
-Batch known operations in the initial request to load global and mandatory scoped instructions together. Reference-tier rules expand with --rule; --all and historical context are inspection only. --settings-detail compact explicitly projects settings; full JSON remains the default. --stats reports delivered instruction bytes. --token emits a stateless receipt after delivery; pass it with --context (or @file) on covered commands, or check with --check-token. A stale supplied token fails before execution; tokens are optional and are not authorization or concept-content guards. Context digest version 2 covers loaded instructions and selected workflow resources as well as settings, ontology and snapshot identity. Incidental guidance never replaces pre-action loading.
+Batch known operations in the initial request to load global and mandatory scoped instructions together. Reference-tier rules expand with --rule; --all and historical context are inspection only. --settings-detail compact explicitly projects settings; full JSON remains the default. --stats reports delivered instruction bytes. --token emits a stateless receipt after delivery; pass it with --context (or @file) on covered commands, or check with --check-token. A stale supplied token fails before execution; tokens are optional and are not authorization or concept-content guards. Context digest version 2 covers loaded instructions and selected workflow resources as well as settings, ontology and snapshot identity. Incidental guidance never replaces pre-action loading. Use bundle select to discover and bind a recovery root while a pending transaction prevents normal context reads.
 
 ### `okf bundle resource list`
 
@@ -300,7 +308,7 @@ Inventory support files and the manifest without loading instruction bodies.
 
 Output stream: `bundle-resource`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--selection`, `--workspace-revision`.
 
 Support files are excluded from ordinary knowledge discovery. Explicit inspection is bounded, preserves containment, and never executes scripts or treats support Markdown as concepts.
 
@@ -317,9 +325,23 @@ Read a bounded support file without executing it.
 
 Output stream: `bundle-resource`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--selection`, `--workspace-revision`.
 
 Support files are excluded from ordinary knowledge discovery. Explicit inspection is bounded, preserves containment, and never executes scripts or treats support Markdown as concepts.
+
+### `okf bundle select`
+
+Select a bundle without reading transactional bundle contents.
+
+| Argument | Type | Required | Description |
+|----------|------|----------|-------------|
+| `<bundle>` | positional | no | Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory) |
+
+Output stream: `bundle-selection`.
+
+Supported global options: `--bundle-id`, `--catalog`, `--json`.
+
+Resolve an existing bundle root and its identity/access policy without reading transactional bundle contents. Selection remains available with a pending recovery journal. Retain the returned token and pass it with --selection (or @file) to subsequent operations, including changeset recover, after acquiring any caller-owned root lock. The receipt binds the original selection context across working directories and rejects changed selection inputs. It is a freshness check, not an authorization credential, content baseline, or global filesystem lock. Load normal bundle context after recovery and retain --expect for guarded changeset publication.
 
 ### `okf list`
 
@@ -361,7 +383,7 @@ List all concepts (search with no filter).
 
 Output stream: `concept,concept-identity,scope,projection,query-summary,facet,facet-excluded,relationship,related-concept,expansion-summary,warning`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--selection`, `--workspace-revision`.
 
 JSON records contain frontmatter and computed lifecycle/trust metadata, not bodies. Aggregate field occurrence counts only after checking scan completeness and output warnings. The default scan budget is 1,000 eligible documents across scope; --limit bounds output, not scan work. For exhaustive inventory use a sufficient --scan-limit or deliberate --full-scan, and aggregate metadata locally rather than loading all records into context. Each offset invocation rescans; an incomplete scan has no authoritative continuation. Unprojected `id` is the computed path and `frontmatter_conflicts.id` preserves an authored ID; `--project '$id' --project id` selects these separately in projection records. Machine consumers can pass `--guidance off` or configure `guidance.display.json: off`; require both supported operation envelopes and successful process exit, not just a valid trailer when present.
 
@@ -381,7 +403,7 @@ Show one concept's content, heading outline, or selected line range.
 
 Output stream: `concept,projection`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--selection`, `--workspace-revision`.
 
 Without `--json`, show includes the serialized frontmatter and full Markdown body. Plain `show --json` returns metadata only: frontmatter plus `id`, `trust_tier`, `effective_status`, `effective_generated_at`, `latest_verified_at`, and `verification_current`. It does not include the body. `--outline --json` returns `headings` with `line`, `level`, and `text`; `--lines START:END --json` returns `start`, actual `end`, and `lines` containing `line` and `text`. Line numbers refer to the serialized document, including frontmatter, excluding the three-line display header. `show -n` (or `--numbered`) prints the full document with these numbers and no header; its JSON uses the same line-range record. `show --body` prints only raw Markdown; with `--json` it returns a body record containing `id` and `body`. An outline or selected slice does not establish complete document-review coverage. Unprojected `id` is the computed path; an authored frontmatter `id` is preserved in `frontmatter_conflicts.id`. `verification_current` compares a valid latest verification timestamp with the effective generation timestamp; null means the comparison is unavailable, not necessarily that the concept has never been reviewed.
 
@@ -397,7 +419,7 @@ Validate the manifest and explicitly declared local resources.
 
 Output stream: `manifest-validation`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`, `--selection`.
 
 Validate the optional manifest's structure and supported schema without treating prose instructions as executable checks. Manifest validation is distinct from core concept conformance and bundle-profile knowledge validation.
 
@@ -413,7 +435,7 @@ Check and display a computation contract; never executes code.
 
 Output stream: `computation-contract`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`, `--selection`.
 
 Inspect-only: `execution: not-run` is not a passing runtime attestation. Document verification and inspection of executable resources never establish a run verdict.
 
@@ -429,7 +451,7 @@ Advisory checks (broken links, missing fields, orphans, ontology violations).
 
 Output stream: `finding,scope,fix`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--scope-bundle`.
+Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--scope-bundle`, `--selection`.
 
 For sources with a fingerprint kind, `source-unrecorded` warns when no baseline exists. `source-missing` errors when file, line-range, or markdown-heading sources cannot be fingerprinted, even without a baseline. Lint does not fetch URLs or inspect Git sources. Configure `source_unrecorded: off` (or `info`, `warn`, `error`; default `warn`) under `settings.lint` in `okf-bundle.yaml`. Legacy TOML bundle settings remain compatibility input. Disabling this rule leaves `source-missing` and `stale` checks active. All lint settings accept `off`, `info`, `warn`, or `error`. Defaults: `broken_link` and `source_missing` are `error`; `missing_title`, `spec_v02` (finding rule `okf-v02`), `ontology_violation`, `source_unrecorded`, `invalid_reference`, and `index_coverage` are `warn`; `missing_description` and `orphan` are `info`. Omitted settings keep these defaults. `off` suppresses the selected lint rule only; validation and stale checks remain independent. `index_exclude` controls index coverage exclusions and `finding_budget` limits ontology findings (positive, default 1,000 per concept). Use `--fail-on warn` to fail on warnings as well as errors.
 
@@ -447,7 +469,7 @@ Drift detection: recorded vs. recomputed source fingerprints (+ `stale_after`).
 
 Output stream: `drift`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--scope-bundle`.
+Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--scope-bundle`, `--selection`.
 
 Sources with fingerprint kinds but no recorded fingerprint are reported as `unrecorded`; unreadable sources are reported even without a baseline. Standard sources without a fingerprint kind are provenance only. Use `--fail-on any` for a failing exit status when findings exist. `validate` checks conformance, not source health.
 
@@ -462,7 +484,7 @@ Bundle summary: counts by type, trust distribution, orphans.
 
 Output stream: `stats`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`, `--selection`.
 
 ## mutate
 
@@ -479,4 +501,4 @@ Append a `verified` entry (the write-side of trust).
 
 Output stream: `change`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`, `--selection`.

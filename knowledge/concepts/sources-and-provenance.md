@@ -40,16 +40,16 @@ accept a conflicting snapshot expectation or move the dependency lock.
 
 ## Live pointers and evidence
 
-A URL-valued field can identify a live destination, such as a current project status page,
-without copying its contents into the concept. Use field names or a modeled object to make
-that purpose explicit; not every URL is a live pointer. A pointer is ordinary metadata, not
-a special CLI concept type or a promise of freshness.
+A URL-valued field can identify a live destination, such as a current project status page, without
+copying its contents into the concept. Use field names or a modeled object to make that purpose
+explicit; not every URL is a live pointer. A pointer is ordinary metadata, not a special CLI concept
+type or a promise of freshness.
 
-Storing or reading the pointer does not fetch its target. When the user's task and bundle
-guidance call for consulting it, distinguish the live destination from the resulting
-observation. Record the observation time and available version evidence when using that
-information to support a claim. Without consultation, do not assert the destination's current
-contents. Ordinary sources can change too; a URL alone does not preserve historical evidence.
+Storing or reading the pointer does not fetch its target. When the user's task and bundle guidance
+call for consulting it, distinguish the live destination from the resulting observation. Record the
+observation time and available version evidence when using that information to support a claim.
+Without consultation, do not assert the destination's current contents. Ordinary sources can change
+too; a URL alone does not preserve historical evidence.
 
 ## Reconcile source changes
 

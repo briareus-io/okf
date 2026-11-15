@@ -8,13 +8,15 @@ uses:
 - /commands/resolve
 - /commands/links
 title: Consume remote bundles
-description: Declare Git dependencies, review candidate revisions, and read accepted snapshots without implicit fetching.
+description: >-
+  Declare Git dependencies, review candidate revisions, and read accepted snapshots
+  without implicit fetching.
 ---
 # Consume remote bundles
 
-A Git catalog registration describes an upstream bundle. A committed YAML lock records the
-accepted revision. Ordinary reads resolve available accepted content; they never fetch or follow a
-branch to newer content. The consumer catalog owns bundle IDs and access policy.
+A Git catalog registration describes an upstream bundle. A committed YAML lock records the accepted
+revision. Ordinary reads resolve available accepted content; they never fetch or follow a branch to
+newer content. The consumer catalog owns bundle IDs and access policy.
 
 ```yaml
 catalog_version: 2
@@ -35,9 +37,9 @@ bundles:
       manifest_required: false
 ```
 
-Remote candidates must pass bundle-profile conformance and manifest/ontology validation.
-An explicitly configured ontology must be contained in the remote bundle; acquisition does not
-read a consumer-machine path named by upstream metadata.
+Remote candidates must pass bundle-profile conformance and manifest/ontology validation. An
+explicitly configured ontology must be contained in the remote bundle; acquisition does not read a
+consumer-machine path named by upstream metadata.
 
 One accepted revision per repository is supported in a catalog. Registrations sharing that
 repository share the update unit; updating one reports the other affected members. Consumer
@@ -75,10 +77,10 @@ workflows. Reconcile affected local knowledge through separately selected author
 See the [product definition](okf://acme.products/products/widget.md).
 ```
 
-The authority is a registered bundle ID, and the remaining path is relative to its bundle root.
-The selected catalog and lock choose actual bytes. The URI is not globally resolvable or
-independently pinned. Ordinary relative paths and HTTPS URLs retain their meanings; no heuristic
-rewrites them into cache paths.
+The authority is a registered bundle ID, and the remaining path is relative to its bundle root. The
+selected catalog and lock choose actual bytes. The URI is not globally resolvable or independently
+pinned. Ordinary relative paths and HTTPS URLs retain their meanings; no heuristic rewrites them
+into cache paths.
 
 A source may also declare `bundle_ref.snapshot` when its claim requires a particular observation.
 A conflict with the accepted lock remains visible; available content is not automatically an
@@ -88,18 +90,18 @@ acquires a dependency. Ordinary Markdown viewers may need exported relative or w
 ## Access, worktrees, and history
 
 Managed Git dependencies are read-only to OKF mutations. Local overrides change location, not
-accepted revision or access policy, and must match the accepted bundle content. Never reset or
-clean an owner's checkout to make an override pass.
+accepted revision or access policy, and must match the accepted bundle content. Never reset or clean
+an owner's checkout to make an override pass.
 
-Immutable cache content can be shared across worktrees, while each worktree retains its own
-catalog and lock. Read-only CLI checks do not isolate arbitrary scripts or shell redirection;
-stronger protection requires filesystem permissions or a sandbox. Acquisition does not execute
-upstream hooks, content filters, workflows, or scripts.
+Immutable cache content can be shared across worktrees, while each worktree retains its own catalog
+and lock. Read-only CLI checks do not isolate arbitrary scripts or shell redirection; stronger
+protection requires filesystem permissions or a sandbox. Acquisition does not execute upstream
+hooks, content filters, workflows, or scripts.
 
 Historical inspection must identify the workspace catalog/lock revision separately from an
-explicitly inspected remote revision. Retain the reported repository, commit, and path when
-opening evidence. Historical reads do not fetch missing objects, substitute current files, or
-activate historical instructions.
+explicitly inspected remote revision. Retain the reported repository, commit, and path when opening
+evidence. Historical reads do not fetch missing objects, substitute current files, or activate
+historical instructions.
 
 See [bundle customization](customize-a-bundle.md) for guidance and
 [configuration](../reference/configuration.md) for catalog selection and overrides.

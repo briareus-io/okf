@@ -3,7 +3,9 @@ type: Command
 group: check
 mutates: false
 title: okf source-scan
-description: Inventories every regular file in a source directory without parsing it as an OKF bundle.
+description: >-
+  Inventories every regular file in a source directory without parsing it as an OKF
+  bundle.
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path

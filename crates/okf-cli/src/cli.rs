@@ -9,6 +9,10 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub json: bool,
 
+    /// Bind execution to a previously issued bundle selection token (@file supported).
+    #[arg(long, global = true)]
+    pub selection: Option<String>,
+
     /// Select an explicitly registered bundle identity (paths keep separate meanings).
     #[arg(long, global = true)]
     pub bundle_id: Option<String>,
@@ -210,6 +214,8 @@ pub struct CatalogUpdateArgs {
 }
 #[derive(Debug, Subcommand)]
 pub enum BundleCmd {
+    /// Select a bundle without reading transactional bundle contents.
+    Select(BundleArgs),
     /// Return effective settings and selected agent guidance without running a workflow.
     Context(BundleContextArgs),
     /// Validate the manifest and explicitly declared local resources.
@@ -1153,10 +1159,15 @@ pub fn supports_catalog(name: &str) -> bool {
     !matches!(name, "schema" | "version" | "source-scan")
 }
 pub fn supports_guidance(name: &str) -> bool {
-    supports_bundle(name) && !name.starts_with("catalog")
+    supports_bundle(name) && name != "bundle select" && !name.starts_with("catalog")
 }
 pub fn supports_context(name: &str) -> bool {
-    supports_guidance(name) && !matches!(name, "init" | "bundle context")
+    supports_guidance(name) && !matches!(name, "init" | "bundle context" | "changeset recover")
+}
+pub fn supports_selection(name: &str) -> bool {
+    supports_bundle(name)
+        && !name.starts_with("catalog")
+        && !matches!(name, "init" | "bundle select")
 }
 pub fn command_tree() -> clap::Command {
     let mut command = Cli::command();
@@ -1184,6 +1195,7 @@ pub fn command_tree() -> clap::Command {
             ("catalog", supports_catalog(&name)),
             ("guidance", supports_guidance(&name)),
             ("context", supports_context(&name)),
+            ("selection", supports_selection(&name)),
             ("scope_bundle", supports_scope(&name)),
             ("catalog_scope", supports_scope(&name)),
             ("bundle_id", supports_bundle(&name)),

@@ -11,7 +11,7 @@ sources:
 ---
 # CLI globals and record contracts
 
-> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.6.5, OKF spec 0.2). Do not hand-edit; regenerate instead.
+> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.6.6, OKF spec 0.2). Do not hand-edit; regenerate instead.
 
 See the [command index](../commands/index.md) for individual arguments and [command contracts](command-contracts.md) for shared behavior. Skills carry focused generated references with their workflows.
 
@@ -24,6 +24,7 @@ Exit codes: 0 means success under the selected failure threshold, not necessaril
 | Argument | Type | Required | Description |
 |----------|------|----------|-------------|
 | `--json` | bool | no | Emit NDJSON instead of human text or a bare artifact; schema is always NDJSON (default: `false`) |
+| `--selection <value>` | string | no | Bind execution to a previously issued bundle selection token (@file supported) |
 | `--bundle-id <value>` | string | no | Select an explicitly registered bundle identity (paths keep separate meanings) |
 | `--scope-bundle <value>` | list<string> | no | Add a registered bundle to the examination scope (repeatable) |
 | `--catalog-scope` | bool | no | Examine every locally available registered bundle (default: `false`) |
@@ -34,11 +35,15 @@ Exit codes: 0 means success under the selected failure threshold, not necessaril
 | `--workspace-revision <value>` | string | no | Inspect the consumer repository and its catalog/lock at this revision |
 | `--bundle-revision <value>` | list<string> | no | Inspect a registered bundle at an exact local commit, ID=COMMIT (repeatable) |
 
-Scope defaults to the selected bundle. Each command advertises its supported scope, snapshot, catalog, and guidance options below; unsupported options are errors. Catalog registration does not authorize traversal. Explicit historical inspection never acquires objects or accepts a new lock. Scope and effective settings are interpretation context, not authored concept metadata.
+Scope defaults to the selected bundle. Each command advertises its supported scope, snapshot,
+catalog, and guidance options below; unsupported options are errors. Catalog registration does not
+authorize traversal. Explicit historical inspection never acquires objects or accepts a new lock.
+Scope and effective settings are interpretation context, not authored concept metadata.
 
 ## Extension record contracts
 
-Authored concept metadata remains open. These computed records describe scope, identity, interpretation, and explicit query extensions. Missing and null remain distinct.
+Authored concept metadata remains open. These computed records describe scope, identity,
+interpretation, and explicit query extensions. Missing and null remain distinct.
 
 ```json
 {
@@ -98,6 +103,13 @@ Authored concept metadata remains open. These computed records describe scope, i
     "path": "path",
     "sha256": "string|null",
     "truncated": "boolean"
+  },
+  "bundle-selection": {
+    "access": "read-only|read-write",
+    "id": "string|null (null for standalone selection)",
+    "root": "canonical existing directory path",
+    "source": "standalone|directory|git-override|git-snapshot",
+    "token": "opaque versioned string"
   },
   "catalog-update-plan": {
     "impact": "object",

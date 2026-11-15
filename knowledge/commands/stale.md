@@ -3,7 +3,9 @@ type: Command
 group: check
 mutates: false
 title: okf stale
-description: Detects extension fingerprint drift and lifecycle expiry using offset-aware, inclusive stale_after comparison.
+description: >-
+  Detects extension fingerprint drift and lifecycle expiry using offset-aware, inclusive
+  stale_after comparison.
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
@@ -40,6 +42,6 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `drift`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--scope-bundle`.
+Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--scope-bundle`, `--selection`.
 
 Sources with fingerprint kinds but no recorded fingerprint are reported as `unrecorded`; unreadable sources are reported even without a baseline. Standard sources without a fingerprint kind are provenance only. Use `--fail-on any` for a failing exit status when findings exist. `validate` checks conformance, not source health.

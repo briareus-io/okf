@@ -2,7 +2,9 @@
 type: Reference
 audience: contributor
 title: Bundle manifest and guidance
-description: Design of portable bundle configuration, agent guidance, workflows, support resources, and explicit query presets.
+description: >-
+  Design of portable bundle configuration, agent guidance, workflows, support resources,
+  and explicit query presets.
 ---
 # Bundle manifest and guidance
 
@@ -41,8 +43,8 @@ workspace/
 | Local override file | Machine-specific registered locations | Override-file directory |
 | Explicit invocation | Selected bundle, examination scope, supported temporary options | Invocation directory for CLI paths |
 
-A manifest does not declare an intrinsic bundle ID. A standalone bundle remains usable by path;
-a catalog assigns its registered identity. Ontology remains a separate file because modeling rules
+A manifest does not declare an intrinsic bundle ID. A standalone bundle remains usable by path; a
+catalog assigns its registered identity. Ontology remains a separate file because modeling rules
 have their own structure and authoring operations. A catalog is optional, as is the manifest.
 
 YAML unifies configuration syntax without forcing all configuration into one file. Bundle behavior
@@ -127,11 +129,11 @@ working-directory fallback. A containing manifest must agree with registered bun
 Equal or nested registered roots are invalid. Selection and examination scope are separate:
 registration does not authorize catalog-wide traversal.
 
-Structured settings resolve from built-in defaults, compatible legacy values, manifest settings,
-and supported explicit command options. During TOML compatibility, equal old/new values may
-coexist; conflicting values fail with their origins identified. Paths retain their original bases
-until migration explicitly rebases them. Local overrides change registered locations, not guidance,
-write gates, accepted snapshots, or ontology meaning. Explicit options retain their own documented
+Structured settings resolve from built-in defaults, compatible legacy values, manifest settings, and
+supported explicit command options. During TOML compatibility, equal old/new values may coexist;
+conflicting values fail with their origins identified. Paths retain their original bases until
+migration explicitly rebases them. Local overrides change registered locations, not guidance, write
+gates, accepted snapshots, or ontology meaning. Explicit options retain their own documented
 semantics; an output option is not permission to waive a write gate.
 
 ## Guidance model
@@ -176,10 +178,20 @@ Ordinary links inside them do not recursively include instructions, and remote i
 includes are outside this design.
 
 Guidance is local to its declaring bundle. Ordinary concepts are evidence, not instructions merely
-because they contain imperative text. Cross-bundle tasks retain the origin of every applicable
-rule. Conflicts are surfaced rather than resolved by incidental load order. User instructions and
+because they contain imperative text. Cross-bundle tasks retain the origin of every applicable rule.
+Conflicts are surfaced rather than resolved by incidental load order. User instructions and
 governing agent constraints retain authority; guidance neither grants additional permissions nor
 silently overrides structured CLI settings.
+
+## Selection before context
+
+Selection metadata can be resolved with `bundle select` without loading the manifest,
+ontology, guidance, or bundle contents. This is the recovery bootstrap route when a pending
+publication journal prevents ordinary context reads. The selection receipt retains root,
+identity, origin, and effective access, with dependency freshness checks. It neither grants
+write access nor certifies guidance delivery. `--selection` and `--context` serve separate
+checks; ordinary context inspection does not certify that a later command may mutate a
+managed dependency. Recovery bypasses guidance and rejects context tokens.
 
 ## Context delivery and identity
 
@@ -205,9 +217,9 @@ script, template, or registered bundle. Ontology location and interpretation ide
 model definitions remain available through ontology inspection commands.
 
 Scope flags request additional bundle contexts explicitly. Records identify their bundle and root;
-unavailable requested members produce incomplete-scope evidence. Primary workflow, input, and
-query selections do not automatically activate similarly named workflows in secondary bundles.
-Secondary context supplies the selected command guidance and inventory.
+unavailable requested members produce incomplete-scope evidence. Primary workflow, input, and query
+selections do not automatically activate similarly named workflows in secondary bundles. Secondary
+context supplies the selected command guidance and inventory.
 
 Context records distinguish `matches_selection` from `instruction_role`. Current task guidance is
 labeled `task-guidance`; full inspection and historical context are labeled `inspected`. Matching
@@ -245,22 +257,22 @@ schema` rather than duplicated here.
 
 ## Skill integration
 
-Skills perform compatibility preflight, establish the selected bundle, then load global task
-context before source access or substantive work. They request full guidance for planned commands
-before executing them, batching known operations where useful. New operations, changed scope,
-changed effective context, or lost instruction context require a new read. A complete cached match
-may be reused only for the same effective context identity.
+Skills perform compatibility preflight, establish the selected bundle, then load global task context
+before source access or substantive work. They request full guidance for planned commands before
+executing them, batching known operations where useful. New operations, changed scope, changed
+effective context, or lost instruction context require a new read. A complete cached match may be
+reused only for the same effective context identity.
 
 Command output arrives too late to guarantee pre-action compliance, even if guidance was emitted
 before the command's mutation. Incidental guidance supports discovery and interpretation; it does
 not replace the separate context step. Higher-level skills that perform work directly follow the
 same protocol rather than assuming another skill loaded instructions.
 
-Fresh initialization and repair need deliberate bootstrap paths. There is no manifest to read
-before creating an empty bundle; load context once the target exists and before subsequent work.
-Malformed configuration is diagnosed and repaired through available inspection paths rather than
-silently ignored. Shared skill protocol owns these common rules, while each skill owns its task
-routing and specialized decisions.
+Fresh initialization and repair need deliberate bootstrap paths. There is no manifest to read before
+creating an empty bundle; load context once the target exists and before subsequent work. Malformed
+configuration is diagnosed and repaired through available inspection paths rather than silently
+ignored. Shared skill protocol owns these common rules, while each skill owns its task routing and
+specialized decisions.
 
 ## Named workflows and support resources
 
@@ -367,9 +379,9 @@ silently making external resources portable. Existing conflicting manifests/cata
 author choices block application.
 
 Apply checks plan inputs before writing, validates destinations, preserves originals and recovery
-information, and rolls back failed publication. Multi-file migration is recoverable, not a claim
-of filesystem-wide atomicity. The legacy file is removed only when no remaining content requires
-it. Ordinary doctor and safe-fix modes do not implicitly migrate workspace configuration.
+information, and rolls back failed publication. Multi-file migration is recoverable, not a claim of
+filesystem-wide atomicity. The legacy file is removed only when no remaining content requires it.
+Ordinary doctor and safe-fix modes do not implicitly migrate workspace configuration.
 
 CLI 0.6 retains TOML compatibility and historical readers. A future removal boundary requires a
 separate documented migration policy; this design does not assign an arbitrary removal release.

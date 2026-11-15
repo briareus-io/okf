@@ -14,12 +14,11 @@ sources:
 ---
 # okf changeset digest
 
-Returns the opaque baseline token used by guarded changeset application. It
-does not publish authored content. Acquiring a guarded baseline may create
-coordination state and requires the corresponding filesystem permissions.
-The token covers the inputs declared by the changeset baseline contract; a
-later apply must recapture and compare the covered state. It is not a snapshot
-for arbitrary follow-up reads.
+Returns the opaque baseline token used by guarded changeset application. It does not publish
+authored content. Acquiring a guarded baseline may create coordination state and requires the
+corresponding filesystem permissions. The token covers the inputs declared by the changeset baseline
+contract; a later apply must recapture and compare the covered state. It is not a snapshot for
+arbitrary follow-up reads.
 
 With `--scope-bundle` or `--catalog-scope`, the token also covers examined target bundles
 and the catalog/configuration inputs that identify and interpret them. Use the same
@@ -38,6 +37,6 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `baseline`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--scope-bundle`.
+Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--scope-bundle`, `--selection`.
 
 Returns the baseline token without an operation document. Use the same `--scope-bundle` or `--catalog-scope` as the later scoped plan/apply to cover its examined target inputs. The token does not establish ontology correctness or approve an operation document; apply validates the proposed changes and rechecks its covered baseline.

@@ -17,29 +17,29 @@ TOML examples below remain compatibility examples, not the preferred configurati
 
 ## Motivation
 
-Knowledge often spans several domains with different owners and update cycles. A product
-bundle may depend on finance policies, engineering standards, and shared definitions.
-Keeping these as separate bundles allows each collection to be maintained independently,
-while references preserve the relationships between them without copying their content.
+Knowledge often spans several domains with different owners and update cycles. A product bundle may
+depend on finance policies, engineering standards, and shared definitions. Keeping these as separate
+bundles allows each collection to be maintained independently, while references preserve the
+relationships between them without copying their content.
 
-The current single-bundle configuration does not express which bundles belong to a working
-context or how to identify targets across their boundaries. Directory names alone are poor
-identifiers: different repositories can use the same names, and local checkout locations
-can differ between users. A catalog makes bundle identity, location, and selection explicit
-and gives the CLI enough context to check references and trace dependencies across bundles.
+The current single-bundle configuration does not express which bundles belong to a working context
+or how to identify targets across their boundaries. Directory names alone are poor identifiers:
+different repositories can use the same names, and local checkout locations can differ between
+users. A catalog makes bundle identity, location, and selection explicit and gives the CLI enough
+context to check references and trace dependencies across bundles.
 
-This capability keeps OKF's lightweight authoring model. It adds coordination for tools
-without requiring a central service, Git, an ontology, or a new document format. Ordinary
-paths and Markdown remain the portable reference surface; the catalog adds local context
-for resolving and inspecting them.
+This capability keeps OKF's lightweight authoring model. It adds coordination for tools without
+requiring a central service, Git, an ontology, or a new document format. Ordinary paths and Markdown
+remain the portable reference surface; the catalog adds local context for resolving and inspecting
+them.
 
 ## 1. Capability and restrictions
 
-The CLI will work with several independent OKF bundles through one local catalog. Bundles
-may be sibling directories in the same repository, directories in separate existing
-checkouts, or directories outside Git. Users or other tools make those files available;
-directory registration itself does not acquire remote content. Git acquisition is a separate
-explicit catalog lifecycle operation defined by the remote extension.
+The CLI will work with several independent OKF bundles through one local catalog. Bundles may be
+sibling directories in the same repository, directories in separate existing checkouts, or
+directories outside Git. Users or other tools make those files available; directory registration
+itself does not acquire remote content. Git acquisition is a separate explicit catalog lifecycle
+operation defined by the remote extension.
 
 The capability adds:
 
@@ -52,9 +52,9 @@ The capability adds:
 - Optional snapshot expectations resolved against available local material, with clearly
   labeled candidates when the requested content cannot be established.
 
-A bundle remains an ordinary OKF directory. It needs no catalog to be read independently,
-no ontology to establish its boundary, and no new identity manifest. The catalog supplies
-identity and location for this CLI's multi-bundle operations.
+A bundle remains an ordinary OKF directory. It needs no catalog to be read independently, no
+ontology to establish its boundary, and no new identity manifest. The catalog supplies identity and
+location for this CLI's multi-bundle operations.
 
 ### Restrictions introduced by the CLI
 
@@ -69,10 +69,10 @@ These rules apply to the catalog feature, not to OKF conformance:
 | Keep reference extensions consistent with ordinary resources | Catalog metadata cannot silently redirect a reference to known different material |
 | Make graph/check scope explicit | Results describe selected, available bundles rather than claiming global coverage |
 
-Root overlap is checked after path canonicalization for available directories. Unavailable
-roots are reported as unavailable, not treated as verified non-overlapping locations.
-Independently maintained forks receive new IDs; mirrors retain the original ID. These are
-identity conventions, not proof of publisher authenticity or a global registration system.
+Root overlap is checked after path canonicalization for available directories. Unavailable roots are
+reported as unavailable, not treated as verified non-overlapping locations. Independently maintained
+forks receive new IDs; mirrors retain the original ID. These are identity conventions, not proof of
+publisher authenticity or a global registration system.
 
 ### Relationship to OKF
 
@@ -91,9 +91,9 @@ See §§2–6 and §8.
 | Optional snapshot expectations | Extra resolution metadata; no new mandatory provenance or verification fields |
 
 The design does not intentionally override an OKF normative requirement or impose additional
-conformance requirements. It preserves optional metadata, unknown fields, and ordinary
-single-bundle use. Rejecting a catalog configuration must not be reported as invalid OKF
-content; the underlying bundle can still be addressed directly.
+conformance requirements. It preserves optional metadata, unknown fields, and ordinary single-bundle
+use. Rejecting a catalog configuration must not be reported as invalid OKF content; the underlying
+bundle can still be addressed directly.
 
 There is a portability limitation: OKF describes a bundle as a self-contained distribution
 unit. Relative references to sibling bundles depend on the surrounding layout. They retain
@@ -136,11 +136,11 @@ bundles:
       path: ../standards-checkout/knowledge
 ```
 
-The catalog path is resolved relative to its configuration file. Bundle paths are relative
-to the catalog file, not the command's working directory. The catalog may live outside Git.
-The version-1 catalog foundation supports local directories, including existing checkouts.
-Version-2 Git locations and acquisition are defined by the remote dependency design; web/archive
-acquisition remains outside these capabilities.
+The catalog path is resolved relative to its configuration file. Bundle paths are relative to the
+catalog file, not the command's working directory. The catalog may live outside Git. The version-1
+catalog foundation supports local directories, including existing checkouts. Version-2 Git locations
+and acquisition are defined by the remote dependency design; web/archive acquisition remains outside
+these capabilities.
 
 In legacy TOML configuration, the default selector is explicitly typed: `default_bundle = { id = "acme.product" }`
 selects a catalog ID, while `default_bundle = { path = "knowledge" }` selects a directory.
@@ -172,10 +172,10 @@ For catalog-aware operations, selection follows this order:
 5. The sole catalog entry, if unambiguous.
 6. Otherwise require selection and show the available choices.
 
-Without a catalog, existing single-bundle selection remains available. IDs and paths use
-distinct selectors so a directory name cannot accidentally become a bundle ID. Discovery
-can suggest candidate directories, but does not register them or infer authoritative roots
-from an ontology, index, or repository boundary.
+Without a catalog, existing single-bundle selection remains available. IDs and paths use distinct
+selectors so a directory name cannot accidentally become a bundle ID. Discovery can suggest
+candidate directories, but does not register them or infer authoritative roots from an ontology,
+index, or repository boundary.
 
 ### Cross-bundle references
 
@@ -217,19 +217,19 @@ the surrounding layout is available. Separate checkouts can use the same approac
 relative layout is reproduced. Moving a bundle may therefore require updating ordinary
 links as well as its catalog location: stable identity alone does not make paths relocatable.
 
-The CLI resolves an ordinary local path, identifies the registered root containing its
-target, and assigns the qualified target. It must not collapse an above-root traversal into
-an unrelated concept inside the source bundle. This extends current single-bundle graph
-resolution specifically for registered cross-bundle concept targets; it does not grant
-general unrestricted artifact reads outside a bundle.
+The CLI resolves an ordinary local path, identifies the registered root containing its target, and
+assigns the qualified target. It must not collapse an above-root traversal into an unrelated concept
+inside the source bundle. This extends current single-bundle graph resolution specifically for
+registered cross-bundle concept targets; it does not grant general unrestricted artifact reads
+outside a bundle.
 
-The extension is optional. Ordinary links can become cross-bundle edges through their
-resolved target location without additional metadata. Existing internal links retain their
-meaning. An unresolved path is never matched to another bundle by filename or title alone.
+The extension is optional. Ordinary links can become cross-bundle edges through their resolved
+target location without additional metadata. Existing internal links retain their meaning. An
+unresolved path is never matched to another bundle by filename or title alone.
 
-Standard URLs remain usable references. An explicit declared mapping can associate one
-with local material, but this feature does not fetch or verify the remote resource. It must
-report that equivalence is unchecked when no local evidence establishes it.
+Standard URLs remain usable references. An explicit declared mapping can associate one with local
+material, but this feature does not fetch or verify the remote resource. It must report that
+equivalence is unchecked when no local evidence establishes it.
 
 ### Resolution evidence and diagnostics
 
@@ -242,27 +242,27 @@ The resolver prefers the strongest readily available evidence:
 | Matching optional digest | The checked file's bytes match the recorded digest |
 | Explicit declared mapping | A correspondence is configured, with equivalence unchecked |
 
-A declared mapping is allowed without independent proof, but it cannot override a known
-mismatch. Resource semantics take priority over contradictory catalog metadata. Resolution
-evidence does not establish the factual correctness of a concept or create a verification event.
+A declared mapping is allowed without independent proof, but it cannot override a known mismatch.
+Resource semantics take priority over contradictory catalog metadata. Resolution evidence does not
+establish the factual correctness of a concept or create a verification event.
 
-Resource resolution and snapshot satisfaction are separate results. A live ordinary path
-remains the ordinary target. Finding different historical bytes does not silently replace
-that target: historical content counts as a successful reference match only when the
-resource identifies that content or an explicit mapping establishes correspondence without
-overriding a known mismatch. Otherwise retain the ordinary target and historical result
-separately, with their evidence and status.
+Resource resolution and snapshot satisfaction are separate results. A live ordinary path remains the
+ordinary target. Finding different historical bytes does not silently replace that target:
+historical content counts as a successful reference match only when the resource identifies that
+content or an explicit mapping establishes correspondence without overriding a known mismatch.
+Otherwise retain the ordinary target and historical result separately, with their evidence and
+status.
 
-Diagnostics distinguish unknown bundle IDs, unavailable local roots or revisions, missing
-targets, registration conflicts, reference mismatches, unchecked equivalence, and changed
-source fingerprints. These are separate dimensions: a target can exist while its source
-has changed. Missing targets warn by default; CI may configure a stricter lint policy.
+Diagnostics distinguish unknown bundle IDs, unavailable local roots or revisions, missing targets,
+registration conflicts, reference mismatches, unchecked equivalence, and changed source
+fingerprints. These are separate dimensions: a target can exist while its source has changed.
+Missing targets warn by default; CI may configure a stricter lint policy.
 
 ### Optional snapshots
 
-References may describe a requested snapshot using a Git commit, ref, human label, optional
-digest, or a combination. The whole snapshot object and each identifier are optional. An
-illustrative shape is:
+References may describe a requested snapshot using a Git commit, ref, human label, optional digest,
+or a combination. The whole snapshot object and each identifier are optional. An illustrative shape
+is:
 
 ```yaml
 bundle_ref:
@@ -273,10 +273,10 @@ bundle_ref:
     label: FY2026 approved standard
 ```
 
-An exact commit or digest may be added without requiring both. A digest, when supplied,
-describes the referenced file's raw bytes; it is not an unspecified whole-bundle hash.
-Exact identifiers constrain the evidence, while labels and mutable refs are lookup hints.
-Field names remain provisional.
+An exact commit or digest may be added without requiring both. A digest, when supplied, describes
+the referenced file's raw bytes; it is not an unspecified whole-bundle hash. Exact identifiers
+constrain the evidence, while labels and mutable refs are lookup hints. Field names remain
+provisional.
 
 Initial authored snapshot support is limited to provenance source entries carrying
 `bundle_ref`. Body links and custom nested concept-reference strings use ordinary path
@@ -291,35 +291,35 @@ The policy is **prefer requested, allow labeled candidate**:
 4. Keep the candidate distinct from the resolved request in human output, machine output,
    and graph results. A known mismatch never counts as a successful snapshot match.
 
-A user or skill may inspect and reconcile a candidate. Merely returning it neither accepts
-it as a substitute nor changes authored metadata, fingerprints, or verification history.
-Local Git operations must not implicitly fetch missing objects, including in partial clones.
+A user or skill may inspect and reconcile a candidate. Merely returning it neither accepts it as a
+substitute nor changes authored metadata, fingerprints, or verification history. Local Git
+operations must not implicitly fetch missing objects, including in partial clones.
 
-An extension-only snapshot expectation does not pin an ordinary reader to historical
-content. A portable exact pin also needs a standard resource identifying that same content.
-A live relative path plus a historical expectation remains a live path for other readers.
+An extension-only snapshot expectation does not pin an ordinary reader to historical content. A
+portable exact pin also needs a standard resource identifying that same content. A live relative
+path plus a historical expectation remains a live path for other readers.
 
 ### Graphs and scope
 
-Primary bundle selection and examination scope are separate. The default scope contains
-only the selected bundle. Examining additional bundles requires an explicit bundle set or
-an explicit catalog-wide scope; catalog registration alone does not authorize traversal.
-Cross-bundle references outside that scope remain visible with an out-of-scope status.
-Results report requested scope, actual examined bundle/version scope, and unavailable
-members. Exact scope-option syntax remains provisional.
+Primary bundle selection and examination scope are separate. The default scope contains only the
+selected bundle. Examining additional bundles requires an explicit bundle set or an explicit
+catalog-wide scope; catalog registration alone does not authorize traversal. Cross-bundle references
+outside that scope remain visible with an out-of-scope status. Results report requested scope,
+actual examined bundle/version scope, and unavailable members. Exact scope-option syntax remains
+provisional.
 
 Graph nodes are qualified by bundle identity, concept identity, and resolved version where
-available. Multiple revisions can coexist. Working-tree content is identified as such,
-not mislabeled as an immutable commit when local changes are present.
+available. Multiple revisions can coexist. Working-tree content is identified as such, not
+mislabeled as an immutable commit when local changes are present.
 
 Edges retain the original reference, its source location, target, and resolution evidence.
-Unresolved edges remain visible. Traversal supports cycles through visited-node tracking
-and bounded scope. Backlinks and affected analysis report which bundles and versions were
-examined; consumers outside that scope remain unknown.
+Unresolved edges remain visible. Traversal supports cycles through visited-node tracking and bounded
+scope. Backlinks and affected analysis report which bundles and versions were examined; consumers
+outside that scope remain unknown.
 
-Bundles in the same repository may be updated and committed together. When inspecting a
-specific local commit, they use that commit unless a reference explicitly requests another
-version. Ordinary working-tree reads do not promise an atomic snapshot across files.
+Bundles in the same repository may be updated and committed together. When inspecting a specific
+local commit, they use that commit unless a reference explicitly requests another version. Ordinary
+working-tree reads do not promise an atomic snapshot across files.
 
 ## 3. Out of scope and guarantees not provided
 
@@ -335,6 +335,10 @@ version. Ordinary working-tree reads do not promise an atomic snapshot across fi
 - Automatic cross-bundle rename/update orchestration. Skills may coordinate multiple CLI
   calls and review a combined repository diff.
 - Self-contained export, dependency mirroring, and managed catalog/publication adapters.
+
+Further accepted follow-up work remains deferred: separately guarded caller-managed allocation
+state, value unions, and bounded binary retrieval. These are design directions, not implemented
+capabilities or release commitments. Selection receipts do not add them.
 
 ### Deliberate limits
 

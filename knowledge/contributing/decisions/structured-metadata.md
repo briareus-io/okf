@@ -5,7 +5,9 @@ audience: contributor
 explains:
 - /concepts/ontology-and-relationships
 title: Declared structured metadata interpretation
-description: Nested constraints and semantic references remain optional local interpretation rather than OKF conformance.
+description: >-
+  Nested constraints and semantic references remain optional local interpretation rather
+  than OKF conformance.
 sources:
 - resource: knowledge/contributing/design/structured-metadata-capability.md
   kind: git-path
@@ -34,10 +36,10 @@ root metadata remains open and only explicitly closed custom objects reject unkn
 Configuration errors, unsupported constraints and incomplete checks remain distinguishable.
 
 Declared selectors alone make custom metadata references. Semantic relationships carry authored
-conditions; inverse backlinks do not express consent or compliance. Typed query filters combine
-with AND, facets concern examined matches before paging, and bounded expansion reports gaps.
-Computed display and projection records preserve authored metadata. Index coverage is a read-only
-local navigation check; optional indexes do not become a conformance requirement.
+conditions; inverse backlinks do not express consent or compliance. Typed query filters combine with
+AND, facets concern examined matches before paging, and bounded expansion reports gaps. Computed
+display and projection records preserve authored metadata. Index coverage is a read-only local
+navigation check; optional indexes do not become a conformance requirement.
 
 [Explicit structured mutation inputs](structured-authoring.md) now author these values and
 declarations through CLI YAML inputs, object paths, concrete patches and atomic ontology changes.
@@ -46,11 +48,13 @@ verification, target consent, or policy compliance.
 
 ## Alternatives
 
-Inferring references from path-looking strings is ambiguous. A general executable query language adds complexity beyond the bounded selector model.
+Inferring references from path-looking strings is ambiguous. A general executable query language
+adds complexity beyond the bounded selector model.
 
 ## Consequences
 
-The explicit limits are part of the contract. Inspect incomplete or unavailable evidence rather than treating it as a successful empty result.
+The explicit limits are part of the contract. Inspect incomplete or unavailable evidence rather than
+treating it as a successful empty result.
 
 ## Reconsider when
 

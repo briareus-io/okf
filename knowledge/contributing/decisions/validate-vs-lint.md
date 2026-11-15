@@ -12,11 +12,14 @@ description: Keep valid OKF portable across different local modeling choices.
 
 ## Context
 
-Users need to distinguish an invalid document format from a valid document that violates a local convention.
+Users need to distinguish an invalid document format from a valid document that violates a local
+convention.
 
 ## Choice
 
-Keep validate limited to format conformance. Use lint for advisory links, descriptions, ontology and other local rules; configure severity separately. Optional mutation gates enforce local policy without redefining the format.
+Keep validate limited to format conformance. Use lint for advisory links, descriptions, ontology and
+other local rules; configure severity separately. Optional mutation gates enforce local policy
+without redefining the format.
 
 ## Alternatives
 
@@ -24,7 +27,8 @@ A single strict validator would make local conventions look like universal OKF r
 
 ## Consequences
 
-Conformance alone says nothing about source truth, freshness or local quality. Callers choose checks and failure thresholds explicitly.
+Conformance alone says nothing about source truth, freshness or local quality. Callers choose checks
+and failure thresholds explicitly.
 
 ## Reconsider when
 

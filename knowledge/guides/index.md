@@ -1,7 +1,7 @@
 # Task guides
 
-Choose the task you need to complete. Start with a worked guide, then use the linked concepts
-for meaning and command references for exact arguments.
+Choose the task you need to complete. Start with a worked guide, then use the linked concepts for
+meaning and command references for exact arguments.
 
 ## Learn and find knowledge
 

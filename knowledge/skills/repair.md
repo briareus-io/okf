@@ -26,8 +26,8 @@ last_modified: 2026-10-05T10:16:06Z
 ---
 # okf:repair skill
 
-Runs a read-only compatibility preflight, previews allow-listed repairs, preserves unknown data,
-and leaves ambiguous identity, lifecycle, link, and computation decisions to explicit review.
+Runs a read-only compatibility preflight, previews allow-listed repairs, preserves unknown data, and
+leaves ambiguous identity, lifecycle, link, and computation decisions to explicit review.
 
 The workflow connects [doctor](../commands/doctor.md), [validate](../commands/validate.md),
 [lint](../commands/lint.md), [artifact list](../commands/artifact-list.md), and

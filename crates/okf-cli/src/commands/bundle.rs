@@ -11,6 +11,42 @@ use okf_core::{
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, io::Read, path::Path};
 
+pub fn read_selection(raw: &str) -> Result<okf_core::bundle::selection::SelectionReceipt> {
+    let text = if let Some(path) = raw.strip_prefix('@') {
+        let mut text = String::new();
+        std::fs::File::open(path)?
+            .take(1024 * 1024 + 1)
+            .read_to_string(&mut text)?;
+        if text.len() > 1024 * 1024 {
+            return Err(OkfError::classified(
+                okf_core::error::FailureReason::ContextInvalid,
+                "selection token exceeds 1 MiB",
+            ));
+        }
+        text
+    } else {
+        raw.to_owned()
+    };
+    okf_core::bundle::selection::SelectionReceipt::parse(text.trim())
+}
+
+pub fn select(args: &crate::cli::BundleArgs, id: Option<&str>, json_output: bool) -> Result<i32> {
+    let receipt = okf_core::bundle::selection::SelectionReceipt::issue(args.bundle.as_deref(), id)?;
+    let token = receipt.encode()?;
+    if json_output {
+        output::print_line(
+            &json!({"kind":"bundle-selection", "root":receipt.root, "id":receipt.id, "source":receipt.source, "access":receipt.access, "token":token}),
+        )?;
+    } else {
+        output::print_text_line(format_args!(
+            "Bundle root: {}\nSelection token: {}",
+            receipt.root.display(),
+            token
+        ))?;
+    }
+    Ok(0)
+}
+
 fn read_token(raw: &str) -> Result<ContextReceipt> {
     let text = if let Some(path) = raw.strip_prefix('@') {
         let mut text = String::new();
@@ -121,6 +157,7 @@ pub fn json_input(raw: &str) -> Result<Value> {
 }
 pub fn run(command: &BundleCmd, json_output: bool) -> Result<i32> {
     match command {
+        BundleCmd::Select(_) => unreachable!("selection is dispatched before bundle reads"),
         BundleCmd::Context(args) => context(args, json_output),
         BundleCmd::Validate(args) => {
             let root = resolve_bundle(args.bundle.as_deref())?;

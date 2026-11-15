@@ -6,9 +6,9 @@ description: Source-to-destination mapping for the unified manual and rationaliz
 ---
 # Documentation consolidation
 
-The documentation now lives in one bundle, with reader and contributor entry points.
-This mapping records the current destinations of intentional moves and merges, and identifies removals.
-No review event or source baseline was fabricated during migration.
+The documentation now lives in one bundle, with reader and contributor entry points. This mapping
+records the current destinations of intentional moves and merges, and identifies removals. No review
+event or source baseline was fabricated during migration.
 
 ## Document moves
 

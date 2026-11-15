@@ -1,6 +1,8 @@
 # Design decisions
 
-Nine choices record context, alternatives, consequences and reconsideration criteria. Boundary decisions were consolidated; preservation now explains both frontmatter and ontology guarantees. The pages describe current choices; source references point to current repository files.
+Nine choices record context, alternatives, consequences and reconsideration criteria. Boundary
+decisions were consolidated; preservation now explains both frontmatter and ontology guarantees. The
+pages describe current choices; source references point to current repository files.
 
 - [Separate core, CLI and judgment](architectural-boundaries.md) — Keep deterministic logic reusable and effects testable.
 - [Derive CLI documentation from the command contract](derived-schema.md) — Keep discovery and generated reference tied to the implementation.

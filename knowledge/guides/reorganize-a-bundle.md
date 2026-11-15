@@ -17,8 +17,8 @@ sources:
 ---
 # Reorganize a bundle
 
-Use this guide when related records must move or disappear together. You need the CLI on
-PATH and the checked-in changeset artifact. The example has three starting records:
+Use this guide when related records must move or disappear together. You need the CLI on PATH and
+the checked-in changeset artifact. The example has three starting records:
 
 | Record | Starting role | Final state |
 | --- | --- | --- |
@@ -43,8 +43,8 @@ okf changeset plan "$demo_root/bundle" --from @knowledge/references/changesets/r
 
 ## Review and apply the exact plan
 
-Expect the preview to include the moved plan, removal of the obsolete plan, and a rewritten
-consumer link. The fixture must still be unchanged after the preview.
+Expect the preview to include the moved plan, removal of the obsolete plan, and a rewritten consumer
+link. The fixture must still be unchanged after the preview.
 
 Inspect the file diffs and returned `base_digest`. Copy that exact value into `base_digest`
 below, then apply the unchanged document against the same fixture:
@@ -76,6 +76,6 @@ attention: [docs](../commands/docs.md) index generation replaces their prose.
 | Dangling-reference check fails | Add the missing retarget or retain the referenced record until its consumers are handled. |
 | Publication was interrupted | Inspect the journal and use [changeset recover](../commands/changeset-recover.md); do not delete coordination files to force a retry. |
 
-For your own bundle, start with an explicit old-to-new mapping and inspect incoming links.
-The tool can apply that mapping; it cannot infer which destination each consumer of a split
-record should use. Review curated navigation after a move, as well as concept-to-concept links.
+For your own bundle, start with an explicit old-to-new mapping and inspect incoming links. The tool
+can apply that mapping; it cannot infer which destination each consumer of a split record should
+use. Review curated navigation after a move, as well as concept-to-concept links.

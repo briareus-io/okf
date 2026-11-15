@@ -22,6 +22,41 @@ pub fn resolve_context(
     env: Option<&str>,
     cwd: &Path,
 ) -> Result<Context> {
+    let catalog = std::env::var("OKF_CATALOG").ok();
+    let overrides = std::env::var("OKF_CATALOG_OVERRIDES").ok();
+    resolve_context_with(path, id, env, cwd, catalog.as_deref(), overrides.as_deref())
+}
+
+/// Resolve using captured invocation inputs, without changing process environment.
+pub fn resolve_context_with(
+    path: Option<&str>,
+    id: Option<&str>,
+    env: Option<&str>,
+    cwd: &Path,
+    catalog_env: Option<&str>,
+    overrides_env: Option<&str>,
+) -> Result<Context> {
+    resolve_context_impl(path, id, env, cwd, catalog_env, overrides_env, false)
+}
+pub fn resolve_selection_context_with(
+    path: Option<&str>,
+    id: Option<&str>,
+    env: Option<&str>,
+    cwd: &Path,
+    catalog_env: Option<&str>,
+    overrides_env: Option<&str>,
+) -> Result<Context> {
+    resolve_context_impl(path, id, env, cwd, catalog_env, overrides_env, true)
+}
+fn resolve_context_impl(
+    path: Option<&str>,
+    id: Option<&str>,
+    env: Option<&str>,
+    cwd: &Path,
+    catalog_env: Option<&str>,
+    overrides_env: Option<&str>,
+    selection_only: bool,
+) -> Result<Context> {
     if path.is_some() && id.is_some() {
         return Err(OkfError::Usage(
             "bundle path and --bundle-id are conflicting selectors".into(),
@@ -39,15 +74,11 @@ pub fn resolve_context(
         .as_ref()
         .and_then(|path| path.parent())
         .unwrap_or(cwd);
-    let overrides = std::env::var("OKF_CATALOG_OVERRIDES")
-        .ok()
+    let overrides = overrides_env
         .filter(|s| !s.is_empty())
-        .map(PathBuf::from)
+        .map(|s| cwd.join(s))
         .or_else(|| config.catalog_overrides.as_ref().map(|s| base.join(s)));
-    let explicit_catalog = std::env::var("OKF_CATALOG")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .map(|s| cwd.join(s));
+    let explicit_catalog = catalog_env.filter(|s| !s.is_empty()).map(|s| cwd.join(s));
     let selected_catalog = explicit_catalog
         .clone()
         .or_else(|| super::catalog::discover(cwd))
@@ -64,7 +95,13 @@ pub fn resolve_context(
     }
     let catalog = match selected_catalog
         .as_ref()
-        .map(|p| load_catalog(p, overrides.as_deref()))
+        .map(|p| {
+            if selection_only {
+                super::catalog::load_catalog_for_selection(p, overrides.as_deref())
+            } else {
+                load_catalog(p, overrides.as_deref())
+            }
+        })
         .transpose()
     {
         Ok(catalog) => catalog,
@@ -177,6 +214,9 @@ pub fn resolve_context(
     })
 }
 pub fn current_context(path: Option<&str>, id: Option<&str>) -> Result<Context> {
+    if let Some(context) = super::selection::active_context(path, id)? {
+        return Ok(context);
+    }
     if let Some(context) = super::snapshot_context::active_context(path, id)? {
         return Ok(context);
     }

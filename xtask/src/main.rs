@@ -61,7 +61,7 @@ fn main() {
         }
         Some("install") => {
             eprintln!(
-                "OKF CLI/plugin 0.6.5 adds scoped ontology-gated changesets and guarded cross-bundle validation. The plugin requires CLI >=0.6.5, <0.7.0. Review releases/0.6.5.md and knowledge/reference/migrations/0.6.0.md before installing."
+                "OKF CLI/plugin 0.6.6 adds recovery-safe selection receipts and logical-reference changeset validation. The plugin requires CLI >=0.6.6, <0.7.0. Review releases/0.6.6.md and knowledge/reference/migrations/0.6.0.md before installing."
             );
             if local_signing::enabled() {
                 let install_root = local_signing::install_root(&root);
@@ -221,6 +221,19 @@ fn run_docs(check: bool) {
         artifacts.push((path, replace_section(&body, "Arguments", &block)));
     }
 
+    // Generated bundle pages follow the same presentation policy as authored pages.
+    // Normalize before comparing as well as writing, so regeneration and format agree.
+    let knowledge = root.join("knowledge");
+    let (effective, _) = okf_core::bundle::settings::load_for(&knowledge)
+        .expect("load documentation bundle formatting settings");
+    for (path, content) in &mut artifacts {
+        if path.starts_with(&knowledge) {
+            *content =
+                okf_core::mutate::format::format_document(content, &effective.settings.formatting)
+                    .unwrap_or_else(|error| panic!("format {}: {error}", path.display()));
+        }
+    }
+
     if check {
         let stale: Vec<&PathBuf> = artifacts
             .iter()
@@ -329,7 +342,12 @@ fn schema_records(root: &Path) -> Vec<Value> {
     String::from_utf8_lossy(&out.stdout)
         .lines()
         .filter(|l| !l.trim().is_empty())
-        .map(|l| serde_json::from_str(l).expect("valid NDJSON from okf schema"))
+        .map(|l| {
+            let mut record: Value = serde_json::from_str(l).expect("valid NDJSON from okf schema");
+            // Keep generated ordering stable across serde_json feature unification.
+            record.sort_all_objects();
+            record
+        })
         .collect()
 }
 
@@ -554,6 +572,14 @@ fn cli_reference(header: &Value, commands: &[&Value], skill: Option<&str>) -> St
 /// observable behavior that cannot be inferred from the argument table.
 fn command_guidance(name: &str) -> &'static str {
     match name {
+        "bundle select" => {
+            "Resolve an existing bundle root and its identity/access policy without reading transactional bundle contents. \
+            Selection remains available with a pending recovery journal. Retain the returned token and pass it with \
+            --selection (or @file) to subsequent operations, including changeset recover, after acquiring any caller-owned root lock. \
+            The receipt binds the original selection context across working directories and rejects changed selection inputs. \
+            It is a freshness check, not an authorization credential, content baseline, or global filesystem lock. \
+            Load normal bundle context after recovery and retain --expect for guarded changeset publication."
+        }
         "bundle context" => {
             "Batch known operations in the initial request to load global and mandatory scoped instructions together. \
             Reference-tier rules expand with --rule; --all and historical context are inspection only. \
@@ -561,7 +587,8 @@ fn command_guidance(name: &str) -> &'static str {
             --token emits a stateless receipt after delivery; pass it with --context (or @file) on covered commands, or check with --check-token. \
             A stale supplied token fails before execution; tokens are optional and are not authorization or concept-content guards. \
             Context digest version 2 covers loaded instructions and selected workflow resources as well as settings, ontology and snapshot identity. \
-            Incidental guidance never replaces pre-action loading."
+            Incidental guidance never replaces pre-action loading. Use bundle select to discover and bind a recovery root \
+            while a pending transaction prevents normal context reads."
         }
         "bundle validate" => {
             "Validate the optional manifest's structure and supported schema without treating prose instructions as executable checks. \
@@ -594,7 +621,7 @@ fn command_guidance(name: &str) -> &'static str {
             Existing unrelated broken references may remain. Concept replacement/edit invalidates verification; content cannot supply verification. \
             Plan and `apply --dry-run` print all file diffs plus a base digest without publishing authored bundle content; coordination state may be created. \
             Use `apply --expect <base-digest>` to guard a reviewed baseline, with the same reviewed change document. \
-            Explicit `--scope-bundle` or `--catalog-scope` permits ontology-gated examination of registered target bundles; \
+            Explicit `--scope-bundle` or `--catalog-scope` permits logical-reference validation and ontology-gated examination of registered target bundles; \
             use the same scope for plan, digest, and apply. Read scope never authorizes writes outside the selected bundle. \
             Scoped target rules such as `product.main:Specification` require that registered bundle identity and the actual target type, \
             with inheritance evaluated in the target bundle's ontology. Unexamined or unavailable targets fail with `write-gate-incomplete`. \
@@ -619,7 +646,10 @@ fn command_guidance(name: &str) -> &'static str {
         "changeset recover" => {
             "Roll back an interrupted uncommitted publication, or finish cleanup of a committed one. \
             Recovery refuses an active publisher and refuses to overwrite intervening edits. \
-            Preserve the journal if recovery reports a conflict; reconcile those files before retrying."
+            Preserve the journal if recovery reports a conflict; reconcile those files before retrying. \
+            Use bundle select and --selection to bind the recovery root before acquiring a caller-owned mutex. \
+            Recovery skips guidance; --guidance off is accepted, while full/summary and --context are rejected. \
+            Reload normal context after recovery."
         }
         "mv" => {
             "Moves rewrite inline/reference-style Markdown, self-links, declared simple/nested references, and curated index/log links within the selected bundle. \
@@ -711,7 +741,9 @@ fn command_guidance(name: &str) -> &'static str {
             Use `--fail-on warn` to fail on warnings as well as errors."
         }
         "doctor" => {
-            "Inspect migration findings without changing files by default. Catalog-aware source checks require \
+            "Inspect migration findings without changing files by default. \
+            --selection is incompatible with --migrate-config and --migration-apply because configuration migration \
+            has its own targets and guards. Catalog-aware source checks require \
             explicit `--scope-bundle` or `--catalog-scope` for other registered bundles. File, line-range, and \
             markdown-heading source paths use the bundle root, consistently with fingerprinting and graph resolution; \
             kind-less provenance and body links use document-relative paths. A leading slash in a typed file source \

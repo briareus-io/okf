@@ -25,4 +25,6 @@ Output stream: `catalog-sync`.
 
 Supported global options: `--bundle-id`, `--catalog`, `--json`.
 
-Materialize exact accepted revisions only; a missing lock does not authorize resolving a moving branch. --check is offline and cannot prove upstream reachability. Sync does not refresh fingerprints or execute upstream procedures.
+Materialize exact accepted revisions only; a missing lock does not authorize resolving a moving
+branch. --check is offline and cannot prove upstream reachability. Sync does not refresh
+fingerprints or execute upstream procedures.

@@ -1026,6 +1026,42 @@ pub fn resolve_registration(catalog: &Path, id: &str) -> Result<RemoteResolution
         origin,
     })
 }
+/// Resolve only declaration and lock metadata. This never verifies or observes snapshot contents.
+pub fn resolve_registration_metadata(catalog: &Path, id: &str) -> Result<RemoteResolution> {
+    let declarations = registrations(catalog)?;
+    let decl = declarations
+        .get(id)
+        .ok_or_else(|| usage(format!("unknown Git registration {id}")))?;
+    let lock = checked_lock(catalog, &declarations, false)?;
+    let mut origin = RemoteOrigin {
+        url: decl.url.clone(),
+        commit: None,
+        bundle_path: decl.path.clone(),
+        access: "read-only".into(),
+        state: "unlocked".into(),
+    };
+    let Some(lock) = lock else {
+        return Ok(RemoteResolution {
+            root: cache_root()?
+                .join("unlocked")
+                .join(repo_key(&decl.url))
+                .join(&decl.path),
+            available: false,
+            origin,
+        });
+    };
+    let bundle = &lock.bundles[id];
+    let repo = &lock.repositories[&bundle.repository];
+    origin.commit = Some(repo.commit.clone());
+    let root = snapshot_dir(repo)?.join("tree").join(&decl.path);
+    let available = root.is_dir();
+    origin.state = if available { "matched" } else { "not-synced" }.into();
+    Ok(RemoteResolution {
+        root,
+        available,
+        origin,
+    })
+}
 pub fn sync(catalog: &Path, id: Option<&str>, check: bool) -> Result<SyncReport> {
     let declarations = registrations(catalog)?;
     let lock = checked_lock(catalog, &declarations, true)?.unwrap();
@@ -1463,6 +1499,9 @@ pub fn ensure_writable(path: &Path) -> Result<()> {
                 snap.url, snap.commit
             )));
         }
+    }
+    if let Some(result) = super::selection::bound_catalog_access(&abs) {
+        return result;
     }
     let cwd = std::env::current_dir()?;
     let catalog = std::env::var_os("OKF_CATALOG")

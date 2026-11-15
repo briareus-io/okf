@@ -15,7 +15,9 @@ uses:
 - /commands/docs
 - /commands/diff
 title: okf:reorganize skill
-description: Moves concepts while rebasing body links and standard source resources, preserving opaque artifacts and validating regenerated indexes.
+description: >-
+  Moves concepts while rebasing body links and standard source resources, preserving
+  opaque artifacts and validating regenerated indexes.
 sources:
 - resource: plugins/okf/skills/reorganize/references/cli.md
   kind: git-path

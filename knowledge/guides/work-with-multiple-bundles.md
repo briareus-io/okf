@@ -23,8 +23,8 @@ and scope independently. You need `okf` on PATH and a POSIX shell.
 
 ## Create two bundles and a local catalog
 
-Run the entire block in one shell. It changes into a temporary directory and does not
-modify this repository's configuration. Create the bundles before adding the catalog:
+Run the entire block in one shell. It changes into a temporary directory and does not modify this
+repository's configuration. Create the bundles before adding the catalog:
 
 ```sh
 demo_root=$(mktemp -d)
@@ -67,8 +67,8 @@ alternative to `--bundle-id`, not something to combine with it.
 
 ## Add a cross-bundle link and inspect it
 
-Use a logical authored reference when the link should follow catalog identity even if a
-checkout moves:
+Use a logical authored reference when the link should follow catalog identity even if a checkout
+moves:
 
 ```sh
 okf edit notes/overview --bundle-id demo.product --set-body 'Product teams follow the [retention rule](okf://demo.policy/policies/retention.md).'
@@ -85,8 +85,9 @@ and works in repository Markdown viewers when the sibling layout is preserved. L
 remove that layout dependency for OKF-aware readers, but still require the catalog registration
 and available target. See [remote dependencies](remote-dependencies.md) for locked Git registrations.
 
-Copying product alone cannot make its policy target available. Registering a missing directory preserves diagnostic evidence; the CLI does not
-clone or fetch it, and an unavailable member cannot support a claim of complete coverage.
+Copying product alone cannot make its policy target available. Registering a missing directory
+preserves diagnostic evidence; the CLI does not clone or fetch it, and an unavailable member cannot
+support a claim of complete coverage.
 
 ## Apply this to a real workspace
 

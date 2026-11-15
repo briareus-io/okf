@@ -3,7 +3,9 @@ type: Command
 group: check
 mutates: false
 title: okf diff
-description: 'Concept-level diff of the working tree against a git ref: which concepts were added, removed, or changed.'
+description: >-
+  Concept-level diff of the working tree against a git ref: which concepts were added,
+  removed, or changed.
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
@@ -13,7 +15,8 @@ last_modified: 2026-10-04T20:39:29Z
 ---
 # okf diff
 
-Concept-level diff of the working tree against a git ref: which concepts were added, removed, or changed.
+Concept-level diff of the working tree against a git ref: which concepts were added, removed, or
+changed.
 
 ## Arguments
 
@@ -27,4 +30,4 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `diff`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`, `--selection`.

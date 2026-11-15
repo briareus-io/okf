@@ -23,7 +23,9 @@ uses:
 - /commands/artifact-resolve
 - /commands/artifact-show
 title: okf:init skill
-description: Creates a valid OKF v0.2 bundle and scaffolds portable concepts or exact Attested Computations, with ontology treated as an optional tool sidecar.
+description: >-
+  Creates a valid OKF v0.2 bundle and scaffolds portable concepts or exact Attested
+  Computations, with ontology treated as an optional tool sidecar.
 sources:
 - resource: plugins/okf/skills/init/references/cli.md
   kind: git-path

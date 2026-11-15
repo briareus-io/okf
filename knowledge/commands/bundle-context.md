@@ -3,7 +3,9 @@ type: Command
 group: query
 mutates: false
 title: okf bundle context
-description: Inspects effective settings, global guidance, scoped rules, and selected workflow instructions.
+description: >-
+  Inspects effective settings, global guidance, scoped rules, and selected workflow
+  instructions.
 ---
 # okf bundle context
 
@@ -33,6 +35,15 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `context-scope,bundle-context,guidance,workflow,effective-query,context-stats,context-token,context-check`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--selection`, `--workspace-revision`.
 
-Batch known operations in the initial request to load global and mandatory scoped instructions together. Reference-tier rules expand with --rule; --all and historical context are inspection only. --settings-detail compact explicitly projects settings; full JSON remains the default. --stats reports delivered instruction bytes. --token emits a stateless receipt after delivery; pass it with --context (or @file) on covered commands, or check with --check-token. A stale supplied token fails before execution; tokens are optional and are not authorization or concept-content guards. Context digest version 2 covers loaded instructions and selected workflow resources as well as settings, ontology and snapshot identity. Incidental guidance never replaces pre-action loading.
+Batch known operations in the initial request to load global and mandatory scoped instructions
+together. Reference-tier rules expand with --rule; --all and historical context are inspection only.
+--settings-detail compact explicitly projects settings; full JSON remains the default. --stats
+reports delivered instruction bytes. --token emits a stateless receipt after delivery; pass it with
+--context (or @file) on covered commands, or check with --check-token. A stale supplied token fails
+before execution; tokens are optional and are not authorization or concept-content guards. Context
+digest version 2 covers loaded instructions and selected workflow resources as well as settings,
+ontology and snapshot identity. Incidental guidance never replaces pre-action loading. Use bundle
+select to discover and bind a recovery root while a pending transaction prevents normal context
+reads.

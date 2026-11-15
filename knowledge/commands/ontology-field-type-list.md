@@ -26,6 +26,7 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `ontology_field_type`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--selection`, `--workspace-revision`.
 
-Inspect authored reusable definitions and resolved inherited constraints. JSON includes both definition and effective fields.
+Inspect authored reusable definitions and resolved inherited constraints. JSON includes both
+definition and effective fields.

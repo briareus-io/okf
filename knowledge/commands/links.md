@@ -3,7 +3,9 @@ type: Command
 group: query
 mutates: false
 title: okf links
-description: Lists the normalized direct concept links defined by one concept and reports whether each target exists.
+description: >-
+  Lists the normalized direct concept links defined by one concept and reports whether
+  each target exists.
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
@@ -83,4 +85,4 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `link,relationship,scope,bundle-edge`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--selection`, `--workspace-revision`.

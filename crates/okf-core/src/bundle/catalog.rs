@@ -132,6 +132,17 @@ pub fn declared_directory_entries(path: &Path) -> Result<BTreeMap<String, Catalo
 /// Machine-local override file: `bundles: {acme.finance: /local/checkout}`.
 /// Paths are relative to the override file. Only registered IDs can be overridden.
 pub fn load_catalog(path: &Path, overrides: Option<&Path>) -> Result<Catalog> {
+    load_catalog_impl(path, overrides, false)
+}
+/// Resolve selection identities without inspecting transactional bundle contents.
+pub fn load_catalog_for_selection(path: &Path, overrides: Option<&Path>) -> Result<Catalog> {
+    load_catalog_impl(path, overrides, true)
+}
+fn load_catalog_impl(
+    path: &Path,
+    overrides: Option<&Path>,
+    selection_only: bool,
+) -> Result<Catalog> {
     let text = std::fs::read_to_string(path)?;
     let value: serde_yaml::Value = serde_yaml::from_str(&text)
         .map_err(|e| OkfError::Usage(format!("invalid catalog {}: {e}", path.display())))?;
@@ -168,7 +179,11 @@ pub fn load_catalog(path: &Path, overrides: Option<&Path>) -> Result<Catalog> {
                     .join(&registration.location.path),
             )?,
             "git" => {
-                let resolved = super::remote::resolve_registration(path, &id)?;
+                let resolved = if selection_only {
+                    super::remote::resolve_registration_metadata(path, &id)?
+                } else {
+                    super::remote::resolve_registration(path, &id)?
+                };
                 settings.insert(
                     "remote".into(),
                     serde_yaml::to_value(&resolved.origin)
@@ -209,7 +224,7 @@ pub fn load_catalog(path: &Path, overrides: Option<&Path>) -> Result<Catalog> {
                 OkfError::Usage(format!("override names unknown bundle ID: {id}"))
             })?;
             entry.root = absolute(&overrides.parent().unwrap_or(Path::new(".")).join(root))?;
-            if entry.settings.contains_key("remote") {
+            if !selection_only && entry.settings.contains_key("remote") {
                 super::remote::validate_override(path, &id, &entry.root)?;
             }
             entry.overridden = true;

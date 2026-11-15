@@ -122,7 +122,9 @@ define these boundaries.
 See the [multi-bundle decision](../decisions/multi-bundle-scope.md). Location:
 `crates/okf-core/src/bundle`.
 
-File parse errors retain the document path. Full bundle loads report every malformed YAML concept in deterministic file order, while direct reads report only the requested file. No partial bundle is returned after parse failures.
+File parse errors retain the document path. Full bundle loads report every malformed YAML concept in
+deterministic file order, while direct reads report only the requested file. No partial bundle is
+returned after parse failures.
 
 ## check module
 
@@ -130,18 +132,15 @@ Diagnostics. Validate enforces all three conformance rules including index/log s
 
 Location: `crates/okf-core/src/check`.
 
-Recursive metadata lint adds concrete paths and codes while retaining advisory ontology rules.
-A depth or finding budget stop reports an incomplete check. Index coverage checks immediate
-concept and concept-containing-directory links, honors configured exclusions, and remains
-read-only. Neither local navigation policy nor optional ontology constraints tighten portable
-OKF conformance.
+Recursive metadata lint adds concrete paths and codes while retaining advisory ontology rules. A
+depth or finding budget stop reports an incomplete check. Index coverage checks immediate concept
+and concept-containing-directory links, honors configured exclusions, and remains read-only. Neither
+local navigation policy nor optional ontology constraints tighten portable OKF conformance.
 
-The 0.5.0 source-health contract keeps drift, absent baseline, established
-missing resource, unavailable computation, unsupported fingerprint kind, and
-expiry distinct. A kindless source remains provenance without a fingerprint
-health assertion. Diagnostic display filters do not change examination or
-failure policy; configured lint severities are independent of an optional
-write gate.
+The 0.5.0 source-health contract keeps drift, absent baseline, established missing resource,
+unavailable computation, unsupported fingerprint kind, and expiry distinct. A kindless source
+remains provenance without a fingerprint health assertion. Diagnostic display filters do not change
+examination or failure policy; configured lint severities are independent of an optional write gate.
 
 ## fingerprint module
 
@@ -160,10 +159,10 @@ collapsing repeated targets; `backlinks --details` presents their incoming view 
 labels. Both preserve record attributes. Inverse backlinks display incoming assertions rather
 than target acceptance, and inverse labels do not synthesize additional outgoing edges.
 
-Cross-bundle results retain qualified identity, original reference, resolution evidence and
-examined scope. Broken and out-of-scope targets remain visible; a catalog is not a global backlink
-inventory. Requested source snapshots and current candidates remain distinct. Resolution does
-not create verification events or accept changed source fingerprints.
+Cross-bundle results retain qualified identity, original reference, resolution evidence and examined
+scope. Broken and out-of-scope targets remain visible; a catalog is not a global backlink inventory.
+Requested source snapshots and current candidates remain distinct. Resolution does not create
+verification events or accept changed source fingerprints.
 
 Powers [links](../../commands/links.md), [backlinks](../../commands/backlinks.md),
 [affected](../../commands/affected.md), and bounded [graph](../../commands/graph.md) rendering.
@@ -184,11 +183,11 @@ Atomic, self-validating concept writes preserve unknown YAML meaning and body te
 Location: `crates/okf-core/src/mutate`.
 
 Structured frontmatter mutations operate on YAML values before persistence. Object paths create
-missing maps and reject list traversal; RFC 6902 patches use concrete JSON Pointer addresses.
-All patch operations and concept conformance checks complete before writing. Dry-run applies the
-same preflight without publishing authored content or lifecycle changes; coordination locks
-and temporary staging may be created. Meaningful writes preserve
-existing verification invalidation and generated timestamp semantics.
+missing maps and reject list traversal; RFC 6902 patches use concrete JSON Pointer addresses. All
+patch operations and concept conformance checks complete before writing. Dry-run applies the same
+preflight without publishing authored content or lifecycle changes; coordination locks and temporary
+staging may be created. Meaningful writes preserve existing verification invalidation and generated
+timestamp semantics.
 
 In 0.5.0, CLI direct and changeset writers prepare a final state and publish
 through the journaled single-bundle protocol. An enabled ontology gate
@@ -219,22 +218,21 @@ The thin binary named okf. Responsible only for clap argument parsing, rendering
 
 Location: `crates/okf-cli`.
 
-Global identity, scope and revision flags remain distinct. Schema-derived references document
-the supported command combinations, computed record contracts, and optional interpretation
-settings. Query projections and semantic relationship payloads preserve legacy authored metadata.
+Global identity, scope and revision flags remain distinct. Schema-derived references document the
+supported command combinations, computed record contracts, and optional interpretation settings.
+Query projections and semantic relationship payloads preserve legacy authored metadata.
 
-Structured input loading accepts one YAML/JSON document, inline, from a file or from stdin.
-It rejects ambiguous keys, unsupported YAML constructs and multiple stdin consumers before
-calling core mutation logic. This is input interpretation; object-path and patch semantics remain
-in the core mutation module.
+Structured input loading accepts one YAML/JSON document, inline, from a file or from stdin. It
+rejects ambiguous keys, unsupported YAML constructs and multiple stdin consumers before calling core
+mutation logic. This is input interpretation; object-path and patch semantics remain in the core
+mutation module.
 
-CLI JSON operations declare a stream version and frame payload records
-with one start record and, when normal completion is possible, one terminal
-record. The terminal record carries outcome, publication and applicable
-completeness dimensions; the process exit remains authoritative. Argument
-parsing may fail before a stream begins. The CLI also resolves explicit
-changed-resource input before deciding whether stdin is requested, and gives
-filesystem, bundle and repository path namespaces explicit context.
+CLI JSON operations declare a stream version and frame payload records with one start record and,
+when normal completion is possible, one terminal record. The terminal record carries outcome,
+publication and applicable completeness dimensions; the process exit remains authoritative. Argument
+parsing may fail before a stream begins. The CLI also resolves explicit changed-resource input
+before deciding whether stdin is requested, and gives filesystem, bundle and repository path
+namespaces explicit context.
 
 ## okf-core crate
 
@@ -261,7 +259,8 @@ Concept-type ancestry supports relationship target restrictions. A dynamic kind 
 reference rule's allowed target union; this local ancestry does not grant standard computation
 semantics to arbitrary types. Each bundle owns those definitions.
 
-Ontology parse and schema errors identify the effective ontology file, including configured sidecars and historical interpretation files.
+Ontology parse and schema errors identify the effective ontology file, including configured sidecars
+and historical interpretation files.
 
 Structured declaration edits preserve unrelated ontology extensions. Concept updates merge by
 named declaration; reusable field-type updates replace complete definitions. Bulk change documents
@@ -276,7 +275,9 @@ Location: `crates/okf-core/src/output`.
 
 ## parse module
 
-Semantic markdown and YAML handling: split frontmatter from body, build the heading tree, extract sections, retain unknown keys/values and top-level order, and serialize back. Body text is preserved; YAML comments and presentation may normalize.
+Semantic markdown and YAML handling: split frontmatter from body, build the heading tree, extract
+sections, retain unknown keys/values and top-level order, and serialize back. Body text is
+preserved; YAML comments and presentation may normalize.
 
 Location: `crates/okf-core/src/parse`.
 
@@ -284,7 +285,9 @@ Location: `crates/okf-core/src/parse`.
 
 ## ports module
 
-Effect boundaries expressed as traits: fs, git, clock, and net. Real implementations in production, fakes in tests, so fingerprint/stale/diff stay hermetically testable. The git port is a thin wrapper over the git CLI, not a git library.
+Effect boundaries expressed as traits: fs, git, clock, and net. Real implementations in production,
+fakes in tests, so fingerprint/stale/diff stay hermetically testable. The git port is a thin wrapper
+over the git CLI, not a git library.
 
 Location: `crates/okf-core/src/ports`.
 
@@ -303,7 +306,9 @@ views, projections, JSON facets, pagination and bounded related expansion comput
 without changing authored frontmatter. Results retain scan completeness and examination scope;
 facets concern examined matches before the displayed page.
 
-Parse failures identify the actual files examined by the query. Bounded scans collect failures within the scan budget; historical reads include revision context and distinguish malformed content from unavailable Git material.
+Parse failures identify the actual files examined by the query. Bounded scans collect failures
+within the scan budget; historical reads include revision context and distinguish malformed content
+from unavailable Git material.
 
 ## render module
 

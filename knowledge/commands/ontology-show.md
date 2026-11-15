@@ -18,8 +18,8 @@ last_modified: 2026-10-04T20:39:29Z
 Shows one concept type's fields and typed reference rules with cardinality.
 
 Effective definition inspection resolves reusable field types recursively, including inherited
-constraints and nested object/list definitions. Explicit fields, values or item definitions
-replace inherited counterparts. Each selected bundle uses its own effective ontology context.
+constraints and nested object/list definitions. Explicit fields, values or item definitions replace
+inherited counterparts. Each selected bundle uses its own effective ontology context.
 
 ## Arguments
 
@@ -32,4 +32,4 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `ontology_type`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--selection`, `--workspace-revision`.

@@ -13,7 +13,8 @@ last_modified: 2026-10-04T20:39:29Z
 ---
 # okf init
 
-Creates a new empty OKF bundle: base structure plus a starter ontology.yaml. Does not invent concepts.
+Creates a new empty OKF bundle: base structure plus a starter ontology.yaml. Does not invent
+concepts.
 
 ## Arguments
 

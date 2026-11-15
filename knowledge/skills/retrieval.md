@@ -15,7 +15,9 @@ uses:
 - /commands/artifact-resolve
 - /commands/artifact-show
 title: okf:retrieval skill
-description: Answers from a bundle through progressive disclosure, source lineage, bounded artifact retrieval, and explicit lifecycle, verification, and runtime caveats.
+description: >-
+  Answers from a bundle through progressive disclosure, source lineage, bounded artifact
+  retrieval, and explicit lifecycle, verification, and runtime caveats.
 sources:
 - resource: plugins/okf/skills/retrieval/references/cli.md
   kind: git-path

@@ -26,4 +26,7 @@ Output stream: `catalog-update-plan,catalog-update-applied,plan-file`.
 
 Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--json`, `--scope-bundle`.
 
-Planning obtains and reports an exact candidate without accepting it. Apply rechecks plan inputs and accepts that reviewed commit without re-resolving the upstream ref. Dependency update scope and consumer impact scope are distinct. Incomplete-impact acceptance never overrides compatibility, integrity, or stale-input failures.
+Planning obtains and reports an exact candidate without accepting it. Apply rechecks plan inputs and
+accepts that reviewed commit without re-resolving the upstream ref. Dependency update scope and
+consumer impact scope are distinct. Incomplete-impact acceptance never overrides compatibility,
+integrity, or stale-input failures.

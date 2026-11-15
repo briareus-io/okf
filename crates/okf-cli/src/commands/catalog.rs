@@ -24,6 +24,7 @@ pub fn examination_scope() -> Vec<String> {
 pub fn bundle_slot(command: &mut Command) -> Option<&mut Option<String>> {
     Some(match command {
         Command::Bundle(sub) => match sub {
+            crate::cli::BundleCmd::Select(a) => &mut a.bundle,
             crate::cli::BundleCmd::Context(a) => &mut a.bundle,
             crate::cli::BundleCmd::Validate(a) => &mut a.bundle,
             crate::cli::BundleCmd::Resource(crate::cli::BundleResourceCmd::List(a)) => {
@@ -456,7 +457,12 @@ pub fn prepare(cli: &mut Cli) -> Result<Option<i32>> {
             "explicit bundle scope requires a valid catalog".into(),
         ));
     }
-    if !diagnostic && command_name != "bundle context" {
+    if !diagnostic
+        && !matches!(
+            command_name.as_str(),
+            "bundle context" | "changeset recover"
+        )
+    {
         let guidance_scope = resolve_scope(&context, &cli.scope_bundle, cli.catalog_scope)?;
         if !guidance_scope.unavailable.is_empty() {
             output::mark_partial("examination", "guidance-scope-unavailable");

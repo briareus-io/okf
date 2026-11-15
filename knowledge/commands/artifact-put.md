@@ -3,7 +3,9 @@ type: Command
 group: mutate
 mutates: true
 title: okf artifact put
-description: Creates or deliberately replaces an opaque local artifact without refreshing citing concepts.
+description: >-
+  Creates or deliberately replaces an opaque local artifact without refreshing citing
+  concepts.
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
@@ -18,8 +20,8 @@ last_modified: 2026-10-04T20:39:29Z
 # okf artifact put
 
 Creates a local opaque artifact from authorized bytes. The destination is bundle-relative;
-replacement requires the explicit replacement option. Markdown concepts and reserved files
-remain protected, and canonical containment prevents writing outside the selected bundle.
+replacement requires the explicit replacement option. Markdown concepts and reserved files remain
+protected, and canonical containment prevents writing outside the selected bundle.
 
 Writing bytes does not execute them or refresh their citing concepts. Inspect affected provenance,
 reconcile meaning, then deliberately refresh reviewed source baselines through the update workflow.
@@ -38,6 +40,6 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `artifact-write`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`, `--selection`.
 
 Write bytes from `@file` to a bundle-relative opaque or reserved artifact. The default (and `--create-only`) refuses an existing destination; `--replace` permits replacement. Parent directories are created as needed. Concept and configuration files are protected, and paths must remain inside the bundle. Recorded source fingerprints are preserved so `stale` detects changes; review citing concepts before `refresh`.

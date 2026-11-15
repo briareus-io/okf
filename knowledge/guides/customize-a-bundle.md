@@ -12,7 +12,9 @@ uses:
 - /commands/docs
 - /commands/ontology-add
 title: Customize a bundle
-description: Keep portable settings, task guidance, workflows, and supporting resources with a bundle.
+description: >-
+  Keep portable settings, task guidance, workflows, and supporting resources with a
+  bundle.
 ---
 # Customize a bundle
 
@@ -194,10 +196,10 @@ knowledge queries hide these files; [bundle resource](../commands/bundle-resourc
 explicit inspection. Physical snapshots preserve them. Reports intended for ordinary knowledge
 search belong outside the support tree as concepts.
 
-A workflow can request a script, but reading its definition does not execute or authorize it.
-An agent uses the declared working directory, treats inputs as data, checks unfamiliar actions
-against the task, and reports missing tools or failed steps. Managed remote write protection still
-applies to its support files.
+A workflow can request a script, but reading its definition does not execute or authorize it. An
+agent uses the declared working directory, treats inputs as data, checks unfamiliar actions against
+the task, and reports missing tools or failed steps. Managed remote write protection still applies
+to its support files.
 
 See [configuration](../reference/configuration.md) for setting ownership and precedence,
 [find and read knowledge](find-and-read-knowledge.md#find-defects-blocking-a-feature) for a query-preset

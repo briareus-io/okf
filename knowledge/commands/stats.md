@@ -3,7 +3,9 @@ type: Command
 group: check
 mutates: false
 title: okf stats
-description: 'Bundle summary: counts by type, trust-tier distribution, corrected stale count, and orphan count.'
+description: >-
+  Bundle summary: counts by type, trust-tier distribution, corrected stale count, and
+  orphan count.
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
@@ -26,4 +28,4 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `stats`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`, `--selection`.

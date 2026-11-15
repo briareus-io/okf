@@ -245,6 +245,7 @@ fn ensure_read_idle(root: &Path) -> Result<()> {
 
 #[must_use = "the lock is released when the guard is dropped"]
 fn acquire_lock(root: &Path) -> Result<WriterGuard> {
+    crate::bundle::selection::check_active(root)?;
     crate::bundle::remote::ensure_writable(root)?;
     let path = root.join(LOCK);
     let file = match std::fs::OpenOptions::new()
@@ -271,6 +272,7 @@ fn acquire_lock(root: &Path) -> Result<WriterGuard> {
             "transaction is still active; operation refused: {e}"
         ))
     })?;
+    crate::bundle::selection::check_active(root)?;
     Ok(WriterGuard {
         file,
         root: root.canonicalize()?,
@@ -438,6 +440,7 @@ pub fn commit(root: &Path, changes: Vec<FileChange>) -> Result<()> {
 
 /// Publish using a guard acquired before preparation. The guard must belong to `root`.
 pub fn commit_locked(root: &Path, guard: &WriterGuard, changes: Vec<FileChange>) -> Result<()> {
+    crate::bundle::selection::check_active(root)?;
     if guard.root != root.canonicalize()? {
         return Err(usage("writer guard belongs to a different bundle"));
     }
@@ -498,6 +501,7 @@ fn commit_under_lock(
     after_publish: &mut dyn FnMut(usize) -> Result<()>,
 ) -> Result<()> {
     set_evidence(PublicationEvidence::NotPublished);
+    crate::bundle::selection::check_active(root)?;
     crate::bundle::remote::ensure_writable(root)?;
     if let Some(target) = &external_target {
         crate::bundle::remote::ensure_writable(target)?;
@@ -546,6 +550,7 @@ fn commit_under_lock(
         permissions,
         created_dirs: created_dirs.into_iter().collect(),
     };
+    crate::bundle::selection::check_active(root)?;
     let journal = root.join(JOURNAL);
     std::fs::create_dir(&journal)
         .map_err(|e| usage(format!("cannot acquire transaction journal: {e}")))?;
@@ -648,6 +653,7 @@ pub fn recover(root: &Path) -> Result<Vec<PathBuf>> {
 }
 
 fn recover_pending_locked(root: &Path) -> Result<Vec<PathBuf>> {
+    crate::bundle::selection::check_active(root)?;
     let journal = root.join(JOURNAL);
     let meta = std::fs::symlink_metadata(&journal)?;
     if !meta.is_dir() || meta.file_type().is_symlink() {

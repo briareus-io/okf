@@ -31,9 +31,9 @@ okf browse knowledge --directory guides
 okf search knowledge --text "source" --in title,description --limit 10
 ```
 
-Expect the source-maintenance guide and provenance topic among the results. The root index
-separates reader and contributor entry points; the guide index groups tasks. Search results
-help select a document, but snippets are not enough to establish its meaning.
+Expect the source-maintenance guide and provenance topic among the results. The root index separates
+reader and contributor entry points; the guide index groups tasks. Search results help select a
+document, but snippets are not enough to establish its meaning.
 
 Read the selected explanation and workflow:
 
@@ -128,9 +128,9 @@ for scan versus output limits.
 
 ## Know when the answer is complete
 
-For a question such as “which documents matched this phrase?”, check the reported scan
-scope and completeness. A limit of ten bounds results, not examination work. Do not infer
-absence from an incomplete scan, an unavailable bundle, or a truncated related view.
+For a question such as “which documents matched this phrase?”, check the reported scan scope and
+completeness. A limit of ten bounds results, not examination work. Do not infer absence from an
+incomplete scan, an unavailable bundle, or a truncated related view.
 
 Use [bounded reads](bounded-reads.md) to control those costs,
 [selectors](../reference/selectors.md) for structured filtering, and

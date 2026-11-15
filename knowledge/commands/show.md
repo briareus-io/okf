@@ -3,7 +3,9 @@ type: Command
 group: query
 mutates: false
 title: okf show
-description: Shows a concept in full, as a heading outline with line numbers, or as a selected line range.
+description: >-
+  Shows a concept in full, as a heading outline with line numbers, or as a selected line
+  range.
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
@@ -34,6 +36,6 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `concept,projection`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--selection`, `--workspace-revision`.
 
 Without `--json`, show includes the serialized frontmatter and full Markdown body. Plain `show --json` returns metadata only: frontmatter plus `id`, `trust_tier`, `effective_status`, `effective_generated_at`, `latest_verified_at`, and `verification_current`. It does not include the body. `--outline --json` returns `headings` with `line`, `level`, and `text`; `--lines START:END --json` returns `start`, actual `end`, and `lines` containing `line` and `text`. Line numbers refer to the serialized document, including frontmatter, excluding the three-line display header. `show -n` (or `--numbered`) prints the full document with these numbers and no header; its JSON uses the same line-range record. `show --body` prints only raw Markdown; with `--json` it returns a body record containing `id` and `body`. An outline or selected slice does not establish complete document-review coverage. Unprojected `id` is the computed path; an authored frontmatter `id` is preserved in `frontmatter_conflicts.id`. `verification_current` compares a valid latest verification timestamp with the effective generation timestamp; null means the comparison is unavailable, not necessarily that the concept has never been reviewed.

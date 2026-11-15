@@ -20,31 +20,30 @@ its bundle selection, identity, ordinary path, snapshot, and scope semantics.
 
 ## Motivation
 
-Custom metadata often carries the most useful parts of a knowledge base: dependencies,
-ownership, relationships, and policy obligations. Accepting that metadata as YAML is only
-the first step. Authors need to describe its structure, check nested values, identify which
-fields reference concepts, and retrieve related information without reading every document.
+Custom metadata often carries the most useful parts of a knowledge base: dependencies, ownership,
+relationships, and policy obligations. Accepting that metadata as YAML is only the first step.
+Authors need to describe its structure, check nested values, identify which fields reference
+concepts, and retrieve related information without reading every document.
 
-For example, onboarding may implement an access policy and assign the Platform team an
-access-review obligation. Readers will be able to find the responsible team, action,
-trigger, completion condition, and deadline. They will also be able to see the procedures
-implementing a policy through backlinks and narrow large result sets using facets and pages.
+For example, onboarding may implement an access policy and assign the Platform team an access-review
+obligation. Readers will be able to find the responsible team, action, trigger, completion
+condition, and deadline. They will also be able to see the procedures implementing a policy through
+backlinks and narrow large result sets using facets and pages.
 
-The ontology already represents reusable types, inheritance, nested objects, and lists;
-the main gaps are recursive enforcement, nested reference extraction, semantic graph edges,
-and configurable retrieval. Existing index generation also does not detect omissions in
-manually maintained indexes.
+The ontology already represents reusable types, inheritance, nested objects, and lists; the main
+gaps are recursive enforcement, nested reference extraction, semantic graph edges, and configurable
+retrieval. Existing index generation also does not detect omissions in manually maintained indexes.
 
-The capability retains ordinary Markdown and frontmatter. Optional local configuration
-adds meaning and checks without introducing a new document format, mandatory ontology,
-central service, or policy execution engine.
+The capability retains ordinary Markdown and frontmatter. Optional local configuration adds meaning
+and checks without introducing a new document format, mandatory ontology, central service, or policy
+execution engine.
 
 ## 1. Capability and restrictions
 
-The CLI will support structured metadata within one bundle and within the explicitly
-selected scope of a multi-bundle catalog. Each bundle owns its ontology and retrieval
-settings. Registered bundles retain the identity, path resolution, version evidence, and
-snapshot-candidate behavior defined by the multi-bundle capability.
+The CLI will support structured metadata within one bundle and within the explicitly selected scope
+of a multi-bundle catalog. Each bundle owns its ontology and retrieval settings. Registered bundles
+retain the identity, path resolution, version evidence, and snapshot-candidate behavior defined by
+the multi-bundle capability.
 
 The capability adds:
 
@@ -74,9 +73,9 @@ These rules apply to local tooling, not to OKF conformance:
 | Bounded expansion with visible completeness | Retrieval costs and missing context remain visible |
 | Reported bundle/version scope | Results do not claim coverage of unavailable or unexamined bundles |
 
-Ontology and index findings warn by default under the new rules; CI can configure stricter
-lint severity. Existing rules retain their compatibility behavior. Reading, linting, and
-querying do not rewrite metadata, indexes, fingerprints, or verification events.
+Ontology and index findings warn by default under the new rules; CI can configure stricter lint
+severity. Existing rules retain their compatibility behavior. Reading, linting, and querying do not
+rewrite metadata, indexes, fingerprints, or verification events.
 
 ### Relationship to OKF
 
@@ -92,10 +91,10 @@ or change standard concept IDs, source resources, or exact `Attested Computation
 | Index completeness | Local navigation policy; optional indexes do not become mandatory OKF content |
 | Views, facets, and pages | Computed query output, kept separate from authored frontmatter |
 
-Unknown metadata and ontology extensions remain preserved. Missing or broken references
-remain consumable and diagnosable. Unsupported constraints will be identified as unenforced,
-never silently reported as checked. Rejecting local configuration does not declare the
-underlying content nonconformant.
+Unknown metadata and ontology extensions remain preserved. Missing or broken references remain
+consumable and diagnosable. Unsupported constraints will be identified as unenforced, never silently
+reported as checked. Rejecting local configuration does not declare the underlying content
+nonconformant.
 
 ## 2. Files, references, and behavior changes
 
@@ -146,17 +145,17 @@ does not establish a bundle boundary. The local catalog design's distinct ID/pat
 `OKF_BUNDLE` path meaning, typed default selector, and legacy path-only `bundle`
 configuration alias remain supported.
 
-Effective settings are inspectable, including the matched bundle identity and ontology
-path. Each target bundle uses its own ontology; source definitions are not applied to its
-metadata. The explicit sidecar setting and root fallback make both currently documented
-tool-local placement and existing loader placement available without relocating files.
+Effective settings are inspectable, including the matched bundle identity and ontology path. Each
+target bundle uses its own ontology; source definitions are not applied to its metadata. The
+explicit sidecar setting and root fallback make both currently documented tool-local placement and
+existing loader placement available without relocating files.
 
-Historical reads resolve in-repository ontologies at the examined revision, including a
-configured sidecar within that repository. External ontology sidecars use their available
-local content and report the effective path and content digest as interpretation context.
-Unavailable historical configuration is diagnosed rather than silently replaced by current
-configuration. Query output identifies the effective interpretation settings so immutable
-concept content is not mistaken for immutable query behavior.
+Historical reads resolve in-repository ontologies at the examined revision, including a configured
+sidecar within that repository. External ontology sidecars use their available local content and
+report the effective path and content digest as interpretation context. Unavailable historical
+configuration is diagnosed rather than silently replaced by current configuration. Query output
+identifies the effective interpretation settings so immutable concept content is not mistaken for
+immutable query behavior.
 
 ### Shared selector syntax and implementation
 
@@ -165,8 +164,8 @@ existing `serde_yaml::Value` metadata. No JSONPath, JMESPath, or jq/yq engine de
 JSON query copy is introduced. JSON scalar and array filter operands use the existing
 `serde_json` parser; filter evaluation and occurrence pairing remain tool-owned logic.
 
-The same shortened selector syntax applies to declared references, relationship kind and
-attribute selectors, display columns, projections, facets, and new selector-aware filters:
+The same shortened selector syntax applies to declared references, relationship kind and attribute
+selectors, display columns, projections, facets, and new selector-aware filters:
 
 | Selector | Meaning |
 | --- | --- |
@@ -291,8 +290,8 @@ types. Updating a shared definition changes the effective validation of all its 
 that ontology without rewriting their values. `ontology show` will expose resolved nested
 structure, inherited constraints, and the named definitions they came from. Structured YAML CLI inputs support these definitions; see the implemented authoring interface below.
 
-Recursive lint validates primitives without coercion, exact enum values, object children,
-list items, patterns, bounds, and uniqueness:
+Recursive lint validates primitives without coercion, exact enum values, object children, list
+items, patterns, bounds, and uniqueness:
 
 | Declaration | Supported check |
 | --- | --- |
@@ -412,10 +411,10 @@ extensionless concept references remain supported. Cardinality counts authored t
 occurrences, including unresolved targets, rather than deduplicated neighbors. Missing
 branches contribute no occurrences; nested mandatory values are checked by field declarations.
 
-Missing target warnings under the new reference checks remain configurable for CI; body-link
-rules retain their existing severity. One occurrence will not produce duplicate broken-link
-and nested-reference findings. Out-of-scope resolution remains distinct from a proven missing
-file, and candidate content does not satisfy requested-version target-type checks.
+Missing target warnings under the new reference checks remain configurable for CI; body-link rules
+retain their existing severity. One occurrence will not produce duplicate broken-link and
+nested-reference findings. Out-of-scope resolution remains distinct from a proven missing file, and
+candidate content does not satisfy requested-version target-type checks.
 
 ### Semantic edges and backlinks
 
@@ -471,9 +470,9 @@ Illustrative human output:
 
 Detailed machine output also retains declaring bundle/rule, source version, attributes, and
 resolution evidence and distinct incoming occurrences. Legacy concept-only backlinks remain
-compatible. Ordinary body/source backlinks and references without inverse names remain
-available, labeled with their forward kind when known, without invented reverse kinds.
-Inverse labels are derived views, not reverse links authored into target documents.
+compatible. Ordinary body/source backlinks and references without inverse names remain available,
+labeled with their forward kind when known, without invented reverse kinds. Inverse labels are
+derived views, not reverse links authored into target documents.
 
 Use `okf links /procedures/onboarding knowledge/product --details` to inspect authored outgoing
 occurrences. Each occurrence exposes its authored kind, configured inverse label, concrete source
@@ -485,13 +484,13 @@ retain `scope` and `bundle-edge` records with optional nested `relationship` met
 text also shows that metadata. Inverse labels do not create additional outgoing edges.
 
 
-Cross-bundle backlinks report examined bundles and versions. Unexamined consumers remain
-unknown. Matching kind labels from different bundle ontologies do not establish equivalent
-vocabularies. Machine output identifies the declaring bundle/rule so cross-bundle queries can
-select the intended declaration. Affected analysis includes declared nested targets.
-Relationship-rule selectors, including expansion options, are likewise qualified by declaring
-bundle. Short forms select rules in the primary source bundle; multi-bundle queries require
-explicit qualification where declarations differ. Exact selector syntax remains provisional.
+Cross-bundle backlinks report examined bundles and versions. Unexamined consumers remain unknown.
+Matching kind labels from different bundle ontologies do not establish equivalent vocabularies.
+Machine output identifies the declaring bundle/rule so cross-bundle queries can select the intended
+declaration. Affected analysis includes declared nested targets. Relationship-rule selectors,
+including expansion options, are likewise qualified by declaring bundle. Short forms select rules in
+the primary source bundle; multi-bundle queries require explicit qualification where declarations
+differ. Exact selector syntax remains provisional.
 
 Supported single-bundle moves rewrite declared structured-reference occurrences. Mutation must
 preflight exact occurrences, preserve surrounding values and attributes, and reject unsupported
@@ -506,10 +505,10 @@ reserved `index.md`/`log.md`, opaque artifacts, `.git`, artifact-only directorie
 index exclusions. Hidden and Git-ignored concepts follow the physical-tree walker. Exclusions
 affect this check only, not bundle boundaries, search, graphs, or validation.
 
-Index exclusions use bundle-relative POSIX globs. Excluding a directory excludes its subtree
-from coverage; eligible ancestors are recomputed afterward so excluded-only subtrees do not
-produce parent omissions. Symlinks are not followed. Coverage uses the generator's concept
-and ancestor inventory rather than comparing generated and authored text byte for byte.
+Index exclusions use bundle-relative POSIX globs. Excluding a directory excludes its subtree from
+coverage; eligible ancestors are recomputed afterward so excluded-only subtrees do not produce
+parent omissions. Symlinks are not followed. Coverage uses the generator's concept and ancestor
+inventory rather than comparing generated and authored text byte for byte.
 
 ```text
 policies/
@@ -569,8 +568,8 @@ missing fields. Computed-name collisions remain separate from authored metadata.
 columns or projection does not change filtering, ranking, or graph semantics; displaying a
 reference value as a column does not fetch its target.
 
-Proposed expansion follows selected outbound relationship rules and returns selected target
-metadata alongside the primary match:
+Proposed expansion follows selected outbound relationship rules and returns selected target metadata
+alongside the primary match:
 
 ```sh
 okf search knowledge/product --type Procedure --expand policy-relations --expand obligations
@@ -587,12 +586,12 @@ obliges → /teams/platform
   deadline: within 24 hours from account-created
 ```
 
-Targets need not match the search and do not consume primary page slots. Expansion is
-explicit, one hop, outbound only. Default target fields are title, type, and description;
-target bodies are not returned by default. Provisional bounds are 10 edge occurrences per
-hit, 100 distinct targets and 256 KiB of expansion payload per query. Distinct edge occurrences
-are preserved while target payloads are deduplicated by qualified bundle/concept/version identity.
-Missing targets retain status entries; truncated output identifies bounds and reasons.
+Targets need not match the search and do not consume primary page slots. Expansion is explicit, one
+hop, outbound only. Default target fields are title, type, and description; target bodies are not
+returned by default. Provisional bounds are 10 edge occurrences per hit, 100 distinct targets and
+256 KiB of expansion payload per query. Distinct edge occurrences are preserved while target
+payloads are deduplicated by qualified bundle/concept/version identity. Missing targets retain
+status entries; truncated output identifies bounds and reasons.
 
 Per-bundle named views will also support explicit human expansion defaults, overridden by
 `--no-expand`. Machine expansion remains opt-in through explicit expansion options or an
@@ -602,11 +601,11 @@ all count toward the byte budget. Ordering follows primary hits, relationship de
 authored occurrences, then qualified identity. Output reports emitted counts, applied bounds,
 `truncated`, and reasons; totals are exact only when completely measured, otherwise unknown.
 
-Expansion stays within selected bundle/version scope and never fetches remote material.
-Unavailable and out-of-scope targets retain their raw reference and status. Initial
-relationship expansion follows ordinary string references and does not emit implied snapshot
-requests or candidates. Working-tree content is identified as mutable. Visited-node tracking
-bounds graph traversal in the presence of cycles.
+Expansion stays within selected bundle/version scope and never fetches remote material. Unavailable
+and out-of-scope targets retain their raw reference and status. Initial relationship expansion
+follows ordinary string references and does not emit implied snapshot requests or candidates.
+Working-tree content is identified as mutable. Visited-node tracking bounds graph traversal in the
+presence of cycles.
 
 Legacy JSON concept output remains unchanged without new options. Explicit machine projection
 and expansion use separate versioned `projection`, `relationship`, `related-concept`, and
@@ -636,26 +635,26 @@ okf search knowledge/product --scan-limit 10000 --limit 10 --json
 okf search knowledge/product --full-scan --limit 10 --json
 ```
 
-A complete primary scan permits exact totals and globally ordered limited results. If
-eligible documents remain when the scan budget is exhausted, emit an explicit incomplete-query
-result: totals are unknown, observed counts are labeled as observed rather than final, and
-any returned hits are partial rather than an authoritative globally sorted page. Do not emit
-authoritative pagination continuation for an incomplete scan. Exactly reaching the budget
-does not imply incompleteness if there are no remaining eligible documents.
+A complete primary scan permits exact totals and globally ordered limited results. If eligible
+documents remain when the scan budget is exhausted, emit an explicit incomplete-query result: totals
+are unknown, observed counts are labeled as observed rather than final, and any returned hits are
+partial rather than an authoritative globally sorted page. Do not emit authoritative pagination
+continuation for an incomplete scan. Exactly reaching the budget does not imply incompleteness if
+there are no remaining eligible documents.
 
-JSON output must include an explicit structured warning whenever known results or requested
-payloads are omitted by a result limit or an output bound, and whenever scan exhaustion may
-leave matches unexamined. Warnings identify the reason and applicable limit; omitted counts
-are exact only when established, otherwise unknown. Scan exhaustion produces a warning even
-when no matches have yet been found. Human output also makes omissions and incomplete scans
-visible. These warnings cannot be suppressed merely to preserve ordinary concept-only output.
+JSON output must include an explicit structured warning whenever known results or requested payloads
+are omitted by a result limit or an output bound, and whenever scan exhaustion may leave matches
+unexamined. Warnings identify the reason and applicable limit; omitted counts are exact only when
+established, otherwise unknown. Scan exhaustion produces a warning even when no matches have yet
+been found. Human output also makes omissions and incomplete scans visible. These warnings cannot be
+suppressed merely to preserve ordinary concept-only output.
 
 Scan completeness, facet aggregation completeness, and output truncation are separate states.
 Complete computation with truncated presentation retains exact computed counts; incomplete
-aggregation does not advertise all-match facet counts. Expansion exhaustion does not invalidate
-an otherwise complete primary scan. The scan budget is a guard, not an early-stop optimization
-after finding enough matches. Early-stop query mode is deferred; the initial capability does
-not stop scanning merely because enough matches have been found for the requested page.
+aggregation does not advertise all-match facet counts. Expansion exhaustion does not invalidate an
+otherwise complete primary scan. The scan budget is a guard, not an early-stop optimization after
+finding enough matches. Early-stop query mode is deferred; the initial capability does not stop
+scanning merely because enough matches have been found for the requested page.
 
 ### Facets, nested filtering, and pagination
 
@@ -664,11 +663,11 @@ pagination**. Counts are documents per value, deduplicating repeated list values
 Missing branches, nulls, and empty lists do not count; no missing bucket is manufactured.
 Scalar types remain distinct. Related concepts returned by expansion do not contribute.
 
-Empty strings remain authored facet values unless local policy excludes them. Scalar leaf
-selectors are supported; object-valued results produce diagnostics instead of fabricated
-buckets. Repeated values from nested list traversal count once per document. The provisional
-100-value threshold excludes only values above 100, not exactly 100; explicit inclusion of a
-field remains filterable even when its facet summary is excluded.
+Empty strings remain authored facet values unless local policy excludes them. Scalar leaf selectors
+are supported; object-valued results produce diagnostics instead of fabricated buckets. Repeated
+values from nested list traversal count once per document. The provisional 100-value threshold
+excludes only values above 100, not exactly 100; explicit inclusion of a field remains filterable
+even when its facet summary is excluded.
 
 Candidate fields are configured or explicitly requested; built-in candidates are `type` and
 `tags[]`. High-cardinality fields are excluded by default, with an exclusion reason. The
@@ -700,10 +699,10 @@ Nested equality is existential over selected leaves; separate conditions can mat
 records. Same-record correlated query predicates are deferred. Bracket quoting preserves
 access to literal dotted keys; existing `--field` literal-key semantics remain compatible.
 
-Paths are case-sensitive. A missing branch in one list item contributes no leaf; a selector
-with no non-null leaves does not satisfy a filter unless it establishes an explicitly empty
-list under the membership rules above. Relationship extraction preserves same-record
-pairing independently of document-level query matching.
+Paths are case-sensitive. A missing branch in one list item contributes no leaf; a selector with no
+non-null leaves does not satisfy a filter unless it establishes an explicitly empty list under the
+membership rules above. Relationship extraction preserves same-record pairing independently of
+document-level query matching.
 
 Selector-aware filtering and pagination use the following command form:
 
@@ -720,11 +719,11 @@ If 120 documents match, illustrative first-page metadata is:
 {"kind":"facet","schema_version":1,"field":"norms[].deadline.from","basis":"all-matches","complete":true,"values":[{"value":"account-created","count":120}]}
 ```
 
-Facet metadata accompanies the page's primary records. The full summary contract also
-includes applied filters and examined bundle/version scope; these lines abbreviate it.
-Counts may overlap for list fields and are not counts of only the displayed page. Facets
-describe the final filtered set, including selected facet filters. Unfiltered search with
-facets provides bundle-wide orientation using the same semantics.
+Facet metadata accompanies the page's primary records. The full summary contract also includes
+applied filters and examined bundle/version scope; these lines abbreviate it. Counts may overlap for
+list fields and are not counts of only the displayed page. Facets describe the final filtered set,
+including selected facet filters. Unfiltered search with facets provides bundle-wide orientation
+using the same semantics.
 
 Facet fields follow configured order; buckets sort by descending document count with typed
 value order as the tie-breaker. Exclusion records identify field, reason, and threshold.
@@ -752,11 +751,11 @@ Stable pages require immutable available content and unchanged interpretation se
 query, scope, and sorting; changing working trees or settings
 can change totals and cause repeated or skipped entries between requests.
 
-Offset requests are independent invocations. There are no pagination sessions, saved result
-sets, or tool-managed metadata/query caches shared between requests. Each invocation examines
-its selected scope again within its effective scan budget; page size does not reduce that
-budget or promise fewer document reads. Repeating a query is supported, but reusing work or
-preserving a snapshot between page requests is not part of this capability.
+Offset requests are independent invocations. There are no pagination sessions, saved result sets, or
+tool-managed metadata/query caches shared between requests. Each invocation examines its selected
+scope again within its effective scan budget; page size does not reduce that budget or promise fewer
+document reads. Repeating a query is supported, but reusing work or preserving a snapshot between
+page requests is not part of this capability.
 
 ## 3. Out of scope and guarantees not provided
 
@@ -806,8 +805,8 @@ preserving a snapshot between page requests is not part of this capability.
 - No automatic content/index rewriting during queries or lint, trust propagation, source
   verification, or verification events produced by relationship resolution.
 
-These limits constrain the CLI capability. They do not prohibit ordinary documents from
-containing additional metadata, opaque paths, optional indexes, or broken references.
+These limits constrain the CLI capability. They do not prohibit ordinary documents from containing
+additional metadata, opaque paths, optional indexes, or broken references.
 
 ## Implemented CLI interface
 

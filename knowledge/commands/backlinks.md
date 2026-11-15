@@ -3,7 +3,9 @@ type: Command
 group: query
 mutates: false
 title: okf backlinks
-description: Lists the concepts that link to a given concept, using the reverse adjacency from the graph.
+description: >-
+  Lists the concepts that link to a given concept, using the reverse adjacency from the
+  graph.
 sources:
 - resource: crates/okf-cli/src/commands/query.rs
   kind: git-path
@@ -18,10 +20,10 @@ last_modified: 2026-10-04T20:39:29Z
 Lists the concepts that link to a given concept, using the reverse adjacency from the graph. Use
 [links](links.md) for the direct outbound targets defined by a concept.
 
-Semantic incoming occurrences expose configured inverse kinds and authored conditions. Those
-views do not author acceptance by the target or prove fulfillment. Qualified catalog identities
-and explicit examination scope prevent global completeness claims; missing or out-of-scope
-consumers remain unknown.
+Semantic incoming occurrences expose configured inverse kinds and authored conditions. Those views
+do not author acceptance by the target or prove fulfillment. Qualified catalog identities and
+explicit examination scope prevent global completeness claims; missing or out-of-scope consumers
+remain unknown.
 
 ## Filter relationship occurrences
 
@@ -67,4 +69,4 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `concept,relationship,scope,bundle-backlink,bundle-edge`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--selection`, `--workspace-revision`.

@@ -20,9 +20,9 @@ Guides declare `uses` references to commands and `explains` references to topics
 link to the topics they constrain. These relationships answer real navigation questions:
 which guides use a command, and which decisions explain a behavior?
 
-Relationship rules add a kind and inverse label to a declared reference. Backlinks are an
-incoming view of the authored assertion; they do not invent another assertion or imply consent.
-Nested selectors retain occurrence pairing when attributes and targets share a list item.
+Relationship rules add a kind and inverse label to a declared reference. Backlinks are an incoming
+view of the authored assertion; they do not invent another assertion or imply consent. Nested
+selectors retain occurrence pairing when attributes and targets share a list item.
 
 Scoped ontology-gated changesets can check typed references into explicitly examined
 registered bundles. A rule target of `product.main:Specification` constrains the bundle

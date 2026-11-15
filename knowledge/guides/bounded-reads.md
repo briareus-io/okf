@@ -13,9 +13,9 @@ description: Choose scan, output and expansion limits without mistaking partial 
 ---
 # Performance and bounded reads
 
-Use this guide when a query returns too much material or an automation needs to distinguish
-a small response from a complete answer. Run the examples from the repository root. All
-examples below inspect the live manual without modifying it.
+Use this guide when a query returns too much material or an automation needs to distinguish a small
+response from a complete answer. Run the examples from the repository root. All examples below
+inspect the live manual without modifying it.
 
 ## Choose which cost to bound
 
@@ -46,9 +46,8 @@ okf show reference/command-contracts knowledge --outline
 okf show reference/command-contracts knowledge --lines 1:20
 ```
 
-The line window is inclusive and includes serialized frontmatter. Use the heading numbers
-from the outline to choose a relevant window rather than assuming the first lines contain
-the answer.
+The line window is inclusive and includes serialized frontmatter. Use the heading numbers from the
+outline to choose a relevant window rather than assuming the first lines contain the answer.
 
 ## Deliberately trigger and repair an incomplete scan
 
@@ -57,10 +56,10 @@ okf search knowledge --type Command --scan-limit 1 --limit 1 --json
 okf search knowledge --type Command --full-scan --limit 1 --json
 ```
 
-The first invocation examines at most one eligible document. In this manual it reports a
-scan-limit warning and partial examination even though the process exits zero. Its match
-count cannot establish the total number of commands. The second invocation removes the scan
-budget and reports complete examination while still displaying only one result.
+The first invocation examines at most one eligible document. In this manual it reports a scan-limit
+warning and partial examination even though the process exits zero. Its match count cannot establish
+the total number of commands. The second invocation removes the scan budget and reports complete
+examination while still displaying only one result.
 
 For a complete unpaginated inventory:
 
@@ -78,10 +77,10 @@ okf search knowledge --type Command --full-scan --sort id --limit 5 --offset 0 -
 okf search knowledge --type Command --full-scan --sort id --limit 5 --offset 5 --json
 ```
 
-The pages should contain different IDs while the working tree is unchanged. Each invocation
-rescans its scope; offset is not a cached continuation token. Do not use offset to repair an
-incomplete scan, and do not assume separate working-tree pages form an immutable snapshot.
-A one-shot inventory is often simpler for an automation that needs all records.
+The pages should contain different IDs while the working tree is unchanged. Each invocation rescans
+its scope; offset is not a cached continuation token. Do not use offset to repair an incomplete
+scan, and do not assume separate working-tree pages form an immutable snapshot. A one-shot inventory
+is often simpler for an automation that needs all records.
 
 ## Inspect expansion and artifact bounds separately
 
@@ -94,8 +93,8 @@ The guide's primary match is complete, but the expansion summary reports truncat
 it uses more than one command. The artifact result similarly sets `truncated: true`; 32 bytes
 cannot contain the whole changeset. Neither omission means the missing material does not exist.
 
-Retrieve the needed command directly, increase the relevant expansion bound, or read the
-small artifact in full:
+Retrieve the needed command directly, increase the relevant expansion bound, or read the small
+artifact in full:
 
 ```sh
 okf show commands/affected knowledge

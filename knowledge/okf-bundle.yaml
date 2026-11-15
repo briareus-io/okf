@@ -1,6 +1,9 @@
 manifest_version: 1
 description: OKF product documentation and executable showcase of CLI and plugin workflows.
 settings:
+  formatting:
+    yaml: {style: readable, line_width: 100}
+    markdown: {wrap_prose: true, line_width: 100}
   lint:
     source_unrecorded: off
   views:

@@ -5,7 +5,9 @@ audience: contributor
 explains:
 - /concepts/selection-and-scope
 title: Catalog identity and explicit scope
-description: Catalog coordination preserves ordinary paths and separates selection, examination and snapshot evidence.
+description: >-
+  Catalog coordination preserves ordinary paths and separates selection, examination and
+  snapshot evidence.
 sources:
 - resource: knowledge/contributing/design/multi-bundle-capability.md
   kind: git-path
@@ -30,8 +32,8 @@ Conflicting or overlapping registrations are configuration errors, not content c
 
 Primary selection and examination scope are separate. Catalog registration alone does not imply
 traversal. Report requested scope, actual examined material and unavailable members. Ordinary
-relative links retain layout semantics across registered roots, so distributing one bundle alone
-may break links. Never infer equivalence from matching names.
+relative links retain layout semantics across registered roots, so distributing one bundle alone may
+break links. Never infer equivalence from matching names.
 
 Optional `bundle_ref` source metadata must agree with ordinary `resource` meaning. Snapshot
 expectations and ordinary live targets are separate evidence. A current candidate never fulfills
@@ -40,11 +42,13 @@ resolution does not verify claims, refresh fingerprints, or execute computation 
 
 ## Alternatives
 
-Implicit catalog-wide traversal is convenient but hides examination scope. Replacing ordinary paths with catalog IDs would change stored resource semantics.
+Implicit catalog-wide traversal is convenient but hides examination scope. Replacing ordinary paths
+with catalog IDs would change stored resource semantics.
 
 ## Consequences
 
-The explicit limits are part of the contract. Inspect incomplete or unavailable evidence rather than treating it as a successful empty result.
+The explicit limits are part of the contract. Inspect incomplete or unavailable evidence rather than
+treating it as a successful empty result.
 
 ## Reconsider when
 

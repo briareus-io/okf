@@ -6,10 +6,10 @@ description: Shared CLI input, output, scope, source-health and publication beha
 ---
 # Consistent command behavior
 
-OKF CLI 0.6 provides predictable input handling, structured results, guarded writes,
-and source-health checks for people, agents, and programs. These capabilities operate
-on OKF v0.2 knowledge with optional manifest, catalog, and support-resource extensions.
-Core conformance and the bundle tooling profile have distinct file boundaries.
+OKF CLI 0.6 provides predictable input handling, structured results, guarded writes, and
+source-health checks for people, agents, and programs. These capabilities operate on OKF v0.2
+knowledge with optional manifest, catalog, and support-resource extensions. Core conformance and the
+bundle tooling profile have distinct file boundaries.
 
 Use this guide to choose commands and understand their shared behavior. The
 [CLI reference](../commands/index.md) and `okf schema` describe the exact arguments
@@ -20,8 +20,8 @@ for larger bundles. Integrations upgrading to 0.6 should read the
 
 ## Find and inspect knowledge
 
-Start with a directory overview, search for relevant concepts, then read only the
-metadata or content you need:
+Start with a directory overview, search for relevant concepts, then read only the metadata or
+content you need:
 
 ```sh
 okf browse knowledge
@@ -57,6 +57,12 @@ remove fields from JSON output.
 A trailing bundle argument selects a directory. `--bundle-id` selects a registered
 catalog identity; do not supply both. Without an explicit selector, configuration and
 working-directory rules select the primary bundle.
+
+`bundle select --json` captures current selection metadata without reading bundle contents.
+Reuse its token through `--selection TOKEN` or `--selection @file`; explicit selectors must
+agree and historical selectors are rejected. Selection receipts retain access policy and
+are distinct from guidance tokens passed through `--context`. See
+[selection and scope](../concepts/selection-and-scope.md#retain-a-selection-across-commands).
 
 Catalog registration does not automatically broaden a query. Commands supporting
 additional scope accept `--scope-bundle` or deliberate `--catalog-scope`:
@@ -208,8 +214,8 @@ expiry. Document verification is a separate `verify` operation following an actu
 
 ## Preview and apply coordinated changes
 
-Use a changeset for related edits, moves, creates, or removals. Creation accepts either a
-complete Markdown document or a frontmatter object plus body:
+Use a changeset for related edits, moves, creates, or removals. Creation accepts either a complete
+Markdown document or a frontmatter object plus body:
 
 ```yaml
 version: 1
@@ -247,10 +253,10 @@ For read-then-write integrations, obtain a token without preparing a dummy mutat
 okf changeset digest knowledge --json
 ```
 
-A token guards the covered bundle and interpretation inputs. It is not a persistent read
-snapshot, proof of review, or approval of a different operation document. Plans, digests,
-and previews do not publish authored content, but can create coordination state and need
-permission to acquire the writer lock.
+A token guards the covered bundle and interpretation inputs. It is not a persistent read snapshot,
+proof of review, or approval of a different operation document. Plans, digests, and previews do not
+publish authored content, but can create coordination state and need permission to acquire the
+writer lock.
 
 ### Deliberate deletion
 
@@ -261,8 +267,8 @@ gate. Review the affected referrers before using either override.
 
 ## Apply a local ontology write policy
 
-An optional write gate prevents new or worsened ontology violations. It is disabled by
-default and does not change format conformance. Configure it inside the bundle's manifest:
+An optional write gate prevents new or worsened ontology violations. It is disabled by default and
+does not change format conformance. Configure it inside the bundle's manifest:
 
 ```yaml
 manifest_version: 1
@@ -325,11 +331,11 @@ changed or unavailable scoped inputs when applying a retained plan are a
 `baseline-conflict`. A fresh command that cannot examine its requested scope can instead
 fail with `write-gate-incomplete` before it obtains a comparable baseline.
 
-Shared guards on examined working-tree target bundles remain held through publication
-of the selected bundle, excluding cooperating target writers. Catalog mappings are
-recaptured and checked before publication, but catalog edits and arbitrary filesystem
-editors are outside those bundle guards. This is not an atomic snapshot of all catalog
-and filesystem activity, nor a transaction that writes multiple bundles.
+Shared guards on examined working-tree target bundles remain held through publication of the
+selected bundle, excluding cooperating target writers. Catalog mappings are recaptured and checked
+before publication, but catalog edits and arbitrary filesystem editors are outside those bundle
+guards. This is not an atomic snapshot of all catalog and filesystem activity, nor a transaction
+that writes multiple bundles.
 
 Shared ontology changes can affect several bundles. A refusal identifies dependent bundles;
 use `--check-dependent-bundles` on the ontology command to examine them explicitly:
@@ -346,10 +352,10 @@ not to ontology sidecar updates. An incomplete check is not an invalid-OKF verdi
 
 ## Understand write guarantees
 
-CLI authored writes use guarded, journaled publication. Multi-file fixes and generated
-indexes prepare their write set before publication. Cooperating CLI writers share exclusion;
-other filesystem editors are outside that protocol. Publication is atomic per file, not an
-atomic multi-document view for readers.
+CLI authored writes use guarded, journaled publication. Multi-file fixes and generated indexes
+prepare their write set before publication. Cooperating CLI writers share exclusion; other
+filesystem editors are outside that protocol. Publication is atomic per file, not an atomic
+multi-document view for readers.
 
 `lint --fix` operates on one selected bundle. Run separate invocations for separate bundles;
 there is no rollback across those invocations. Index generation replaces generated navigation

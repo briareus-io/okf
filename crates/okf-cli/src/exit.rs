@@ -140,6 +140,7 @@ pub(crate) fn command_name(command: &crate::cli::Command) -> String {
         }
         .into(),
         Command::Bundle(sub) => match sub {
+            crate::cli::BundleCmd::Select(_) => "bundle select",
             crate::cli::BundleCmd::Context(_) => "bundle context",
             crate::cli::BundleCmd::Validate(_) => "bundle validate",
             crate::cli::BundleCmd::Resource(crate::cli::BundleResourceCmd::List(_)) => {

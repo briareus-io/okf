@@ -3,7 +3,9 @@ type: Command
 group: query
 mutates: false
 title: okf artifact list
-description: Inventories concepts, reserved files, and opaque artifacts under a bundle directory such as references/.
+description: >-
+  Inventories concepts, reserved files, and opaque artifacts under a bundle directory
+  such as references/.
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
@@ -28,6 +30,6 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `artifact`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--selection`, `--workspace-revision`.
 
 The positional path selects a bundle root relative to the current directory. To filter within the selected bundle, use `--directory contracts/x`; printed paths remain relative to the bundle root. Use `--directory .` for the entire bundle and `--exclude-concepts` to retain only opaque artifacts and reserved files.

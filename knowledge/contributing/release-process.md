@@ -74,13 +74,13 @@ compromised release account. Users must trust the repository and downloaded inst
 
 ## Installer and plugin boundaries
 
-The optional shell installer requires curl, tar, and sha256sum or shasum, not OKF or Rust.
-It accepts an explicit stable version and optional destination. Updating uses the same
-command with a newer compatible version. It never edits shell startup files, uses sudo,
-or replaces a destination symlink. An explicit older version permits deliberate rollback.
-It verifies the checksum and runs the downloaded binary before replacing the destination.
+The optional shell installer requires curl, tar, and sha256sum or shasum, not OKF or Rust. It
+accepts an explicit stable version and optional destination. Updating uses the same command with a
+newer compatible version. It never edits shell startup files, uses sudo, or replaces a destination
+symlink. An explicit older version permits deliberate rollback. It verifies the checksum and runs
+the downloaded binary before replacing the destination.
 
-The read-only plugin preflight requires sh and awk. It rejects missing, unparseable,
-prerelease, too-old, and unsupported newer versions. It prints the resolved executable path.
-Skills show installation instructions and stop CLI-dependent work on failure. They never
-invoke the installer. Agent instructions are not a sandbox enforcement mechanism.
+The read-only plugin preflight requires sh and awk. It rejects missing, unparseable, prerelease,
+too-old, and unsupported newer versions. It prints the resolved executable path. Skills show
+installation instructions and stop CLI-dependent work on failure. They never invoke the installer.
+Agent instructions are not a sandbox enforcement mechanism.

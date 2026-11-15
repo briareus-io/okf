@@ -3,7 +3,9 @@ type: Command
 group: mutate
 mutates: true
 title: okf refresh
-description: Re-records source fingerprints after a change has been acknowledged, clearing the drift that stale would report.
+description: >-
+  Re-records source fingerprints after a change has been acknowledged, clearing the drift
+  that stale would report.
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
@@ -19,10 +21,9 @@ last_modified: 2026-10-04T20:39:29Z
 
 Re-records extension source fingerprints after a change has been acknowledged. It does not overwrite standard source modification time or clear an expired `stale_after`.
 
-CLI 0.5 prepares every required fingerprint before publication. Missing,
-unavailable or unsupported required sources block the whole single-concept
-update; successfully computed fingerprints are not published in that case.
-Kindless sources are provenance only and do not request fingerprinting. A
+CLI 0.5 prepares every required fingerprint before publication. Missing, unavailable or unsupported
+required sources block the whole single-concept update; successfully computed fingerprints are not
+published in that case. Kindless sources are provenance only and do not request fingerprinting. A
 refresh remains separate from document verification.
 
 ## Arguments
@@ -38,6 +39,6 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `change`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--scope-bundle`.
+Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--scope-bundle`, `--selection`.
 
 Refresh updates supported source fingerprints across the concept, not content or standard source modification dates. Review those sources against the final content first, whether or not the content needed rewriting. JSON reports `updated`/`unchanged` counts and `skipped` entries with reasons. Missing, unavailable, unsupported, or malformed required sources block the entire refresh before publication. `--fail-on skipped` rejects provenance-only skips before publication as well. Report unresolved sources instead of treating refresh as proof of complete synchronization.

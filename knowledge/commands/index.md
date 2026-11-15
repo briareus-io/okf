@@ -4,6 +4,7 @@ Start with a task below. Each page owns its exact arguments and supported global
 
 ## Find, inspect and preview
 
+- [okf bundle select](bundle-select.md) — Retain current bundle selection, including before transaction recovery.
 - [okf bundle context](bundle-context.md) — Read effective settings and applicable guidance before work.
 - [okf bundle resource list](bundle-resource-list.md) — Inventory support resources explicitly.
 - [okf bundle resource show](bundle-resource-show.md) — Inspect bounded support content without execution.

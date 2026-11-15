@@ -3,7 +3,9 @@ type: Command
 group: mutate
 mutates: true
 title: okf add
-description: Adds a new concept document, scaffolded from the ontology so required fields and reference keys start present.
+description: >-
+  Adds a new concept document, scaffolded from the ontology so required fields and
+  reference keys start present.
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
@@ -56,6 +58,6 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `change`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`, `--selection`.
 
 Creation scaffolds a concept; `--body @file` supplies Markdown in the same write (literal text and `-` for stdin also work). `--set-yaml key=value` sets structured YAML/JSON values, with `@file` or `-` input; `--set-path path=value` sets an object property and creates missing maps. Existing `--set` remains literal/scalar. `--dry-run` previews without writes. Input failures leave no skeleton concept. `--generated-by` records the supplied actor and the CLI's current timestamp. Do not invent a historical generation time or actor. For a requested computation only, `--attested --runtime <runtime>` selects exact `Attested Computation`; declare actual parameters with repeatable `--parameter name:type:required` (omit `:required` when optional). Choose `--computation <resource>` or `--inline-computation @file`, then add reviewed executor/receipt/attester fields as needed. These describe a contract and authorize no execution.

@@ -31,8 +31,8 @@ last_modified: 2026-10-19T03:58:59Z
 ---
 # okf:update skill
 
-Refresh updates supported fingerprint extensions only; meaningful rewrites update generation
-state and require a new document review.
+Refresh updates supported fingerprint extensions only; meaningful rewrites update generation state
+and require a new document review.
 
 The workflow connects [stale](../commands/stale.md), [affected](../commands/affected.md),
 [diff](../commands/diff.md), [refresh](../commands/refresh.md), [edit](../commands/edit.md),

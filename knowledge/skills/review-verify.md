@@ -12,7 +12,9 @@ uses:
 - /commands/artifact-show
 - /commands/computation-check
 title: okf:review-verify skill
-description: Reviews concepts against declared evidence and appends document-level verified events with the real reviewer actor, never as a substitute for runtime attestation.
+description: >-
+  Reviews concepts against declared evidence and appends document-level verified events
+  with the real reviewer actor, never as a substitute for runtime attestation.
 sources:
 - resource: plugins/okf/skills/review-verify/references/cli.md
   kind: git-path

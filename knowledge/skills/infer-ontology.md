@@ -20,7 +20,9 @@ uses:
 - /commands/lint
 - /commands/artifact-resolve
 title: okf:infer-ontology skill
-description: Infers advisory custom fields and references from support counts while excluding standard OKF families and preserving exact unknown types.
+description: >-
+  Infers advisory custom fields and references from support counts while excluding
+  standard OKF families and preserving exact unknown types.
 sources:
 - resource: plugins/okf/skills/infer-ontology/references/cli.md
   kind: git-path

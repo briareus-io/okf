@@ -7,8 +7,8 @@ description: Choose checks, interpret incomplete results, and recover interrupte
 # Checking results and recovering writes
 
 OKF distinguishes format conformance, advisory quality checks, source health, and publication
-outcomes. Choose the check that answers your question instead of treating every successful
-command as proof that the bundle is complete, current, or verified.
+outcomes. Choose the check that answers your question instead of treating every successful command
+as proof that the bundle is complete, current, or verified.
 
 This guide covers the 0.6 CLI contracts. See [consistent command behavior](command-contracts.md)
 for capability examples and the [CLI reference](../commands/index.md) for exact options.
@@ -37,9 +37,9 @@ okf lint knowledge --fail-on error --json
 okf stale knowledge --fail-on-state drifted,missing,unavailable,unsupported,expired --json
 ```
 
-Validation does not require optional metadata or a local ontology. It does not prove source
-truth, claim verification, or absence of broken links. Lint rules and source-health policies
-can fail independently of format conformance.
+Validation does not require optional metadata or a local ontology. It does not prove source truth,
+claim verification, or absence of broken links. Lint rules and source-health policies can fail
+independently of format conformance.
 
 ## Interpret a JSON operation
 
@@ -64,9 +64,9 @@ For an automation that needs exhaustive results:
 - Check delivery, content, and related-record expansion separately when those dimensions
   matter to the task. Preserve omission and unavailable-target evidence.
 
-A caller requesting a brief excerpt may accept partial content. A caller deciding whether
-something exists may not accept an incomplete scan. Choose acceptance criteria for the
-actual task rather than rejecting every bounded response or accepting every exit zero.
+A caller requesting a brief excerpt may accept partial content. A caller deciding whether something
+exists may not accept an incomplete scan. Choose acceptance criteria for the actual task rather than
+rejecting every bounded response or accepting every exit zero.
 
 | Exit code | Interpretation |
 | --- | --- |
@@ -81,9 +81,8 @@ A source-state diagnostic likewise describes a check, not a new concept status.
 
 ## Distinguish limits from empty results
 
-A page can be fully delivered even when more matches exist. Conversely, a scan may finish
-its output while examining only part of the requested scope. These cases have different
-consequences:
+A page can be fully delivered even when more matches exist. Conversely, a scan may finish its output
+while examining only part of the requested scope. These cases have different consequences:
 
 | Observation | Appropriate response |
 | --- | --- |
@@ -128,34 +127,42 @@ Use terminal publication evidence when it is available:
 | `recovery-required` | A pending journal needs guarded recovery; committed cleanup may also need recovery. | Inspect `commit_reached` if present, then recover. |
 | No terminal record | Publication outcome is unknown. | Inspect/recover pending state and reconcile actual content before retrying. |
 
-Run recovery against the affected bundle:
+Run recovery against the affected bundle. Selection is available even when ordinary reads and
+context loading refuse a pending transaction journal:
 
 ```sh
-okf changeset recover knowledge --json
+okf bundle select knowledge --json
+# Save the bundle-selection record's token string verbatim to selection.json.
+okf changeset recover --selection @selection.json --json
 ```
 
-Recovery can report rollback, committed cleanup, or no pending transaction. It refuses
-unsafe recovery when files no longer match the recorded expectations. Preserve the journal
-and investigate intervening edits; do not delete it to force a retry. A shared-sidecar journal
-refers to the recorded target rather than permission to redirect recovery to another file.
+Recovery skips bundle guidance and rejects `--context`, `--guidance full`, and
+`--guidance summary`; `--guidance off` is accepted. A context token requires ordinary
+bundle reads and cannot bootstrap recovery. After recovery, reload applicable context
+before dependent content work. Direct recovery with a bundle path remains supported.
 
-No pending transaction does not prove that an earlier attempt never committed: it may have
-committed and completed cleanup before output was lost. Inspect the expected post-state.
-The CLI does not provide a persistent exactly-once receipt store. Appends and verification
-events must not be blindly retried after an ambiguous outcome.
+Recovery can report rollback, committed cleanup, or no pending transaction. It refuses unsafe
+recovery when files no longer match the recorded expectations. Preserve the journal and investigate
+intervening edits; do not delete it to force a retry. A shared-sidecar journal refers to the
+recorded target rather than permission to redirect recovery to another file.
+
+No pending transaction does not prove that an earlier attempt never committed: it may have committed
+and completed cleanup before output was lost. Inspect the expected post-state. The CLI does not
+provide a persistent exactly-once receipt store. Appends and verification events must not be blindly
+retried after an ambiguous outcome.
 
 ## Handle coordination and permission failures
 
-Plans, digests, and mutation previews do not publish authored content, but they acquire
-writer exclusion and may create coordination or temporary staging files. They can therefore
-fail on storage that ordinary queries can read. Use a writable checkout when you need a
-guarded baseline; do not treat an unguarded read as a substitute token.
+Plans, digests, and mutation previews do not publish authored content, but they acquire writer
+exclusion and may create coordination or temporary staging files. They can therefore fail on storage
+that ordinary queries can read. Use a writable checkout when you need a guarded baseline; do not
+treat an unguarded read as a substitute token.
 
 Another cooperating writer can make the bundle temporarily busy. Wait for it to finish,
 then re-read and replan as necessary. A stale baseline is a conflict to resolve, not a reason
 to omit `--expect` from an already reviewed read-then-write workflow.
 
-Ordinary queries do not hold these writer locks. Neither journaled publication nor a baseline
-token makes multi-document working-tree reads atomic. External editors do not participate in
-CLI writer exclusion. Use supported immutable revision reads where appropriate, and avoid
-concurrent external edits when the workflow requires a stable working tree.
+Ordinary queries do not hold these writer locks. Neither journaled publication nor a baseline token
+makes multi-document working-tree reads atomic. External editors do not participate in CLI writer
+exclusion. Use supported immutable revision reads where appropriate, and avoid concurrent external
+edits when the workflow requires a stable working tree.

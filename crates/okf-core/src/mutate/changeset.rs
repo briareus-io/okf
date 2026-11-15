@@ -189,6 +189,7 @@ impl Plan {
 }
 struct ScopeCapture {
     gate: super::gate::Scope,
+    files: BTreeMap<String, BTreeSet<PathBuf>>,
     signature: String,
     roots: Vec<PathBuf>,
 }
@@ -260,6 +261,7 @@ fn capture_scope(root: &Path, request: &ScopeRequest) -> Result<ScopeCapture> {
         .map_err(|e| OkfError::Internal(e.to_string()))?,
     ];
     let mut targets = BTreeMap::new();
+    let mut target_files = BTreeMap::new();
     let mut roots = Vec::new();
     for id in ids {
         if Some(id.as_str()) == context.primary.id.as_deref() {
@@ -279,6 +281,7 @@ fn capture_scope(root: &Path, request: &ScopeRequest) -> Result<ScopeCapture> {
         let bundle = snapshot_bundle(target, &files, None)
             .map_err(|e| incomplete(format!("cannot examine {id}: {e}")))?;
         roots.push(target.clone());
+        target_files.insert(id.clone(), files.into_keys().collect());
         targets.insert(id, (bundle, ontology));
     }
     Ok(ScopeCapture {
@@ -286,6 +289,7 @@ fn capture_scope(root: &Path, request: &ScopeRequest) -> Result<ScopeCapture> {
             primary_id: context.primary.id.unwrap(),
             targets,
         },
+        files: target_files,
         signature: serde_json::to_string(&evidence)
             .map_err(|e| OkfError::Internal(e.to_string()))?,
         roots,
@@ -553,6 +557,42 @@ fn registered_reference(
     resolved.exists && resolved.kind != crate::query::artifact::ArtifactKind::Blocked
 }
 
+// Explain only newly introduced findings; the comparison keys stay stable so an
+// unchanged pre-existing finding does not become a new violation.
+fn explain_missing(
+    finding: &str,
+    context: &crate::bundle::context::Context,
+    scope: Option<&ScopeCapture>,
+) -> String {
+    let Some((_, raw)) = finding.split_once(": ") else {
+        return finding.into();
+    };
+    if !crate::model::link::is_logical_reference(raw) {
+        return finding.into();
+    }
+    let reason = match crate::model::link::LogicalReference::parse(raw) {
+        Err(_) => "invalid logical reference",
+        Ok(Some(reference)) => {
+            let entry = context
+                .catalog
+                .as_ref()
+                .and_then(|catalog| catalog.entries.get(&reference.bundle));
+            if entry.is_some_and(|entry| !entry.available) {
+                "unavailable bundle"
+            } else if !scope.is_some_and(|scope| {
+                reference.bundle == scope.gate.primary_id
+                    || scope.gate.targets.contains_key(&reference.bundle)
+            }) {
+                "out-of-scope bundle"
+            } else {
+                "missing or blocked target"
+            }
+        }
+        Ok(None) => return finding.into(),
+    };
+    format!("{finding} ({reason})")
+}
+
 /// Missing local references include authored concept links and structural navigation.
 fn missing(
     root: &Path,
@@ -560,10 +600,48 @@ fn missing(
     bundle: &crate::bundle::loader::Bundle,
     ontology: Option<&crate::ontology::schema::Ontology>,
     context: &crate::bundle::context::Context,
+    scope: Option<&ScopeCapture>,
 ) -> Result<BTreeSet<String>> {
     let resolver = crate::query::artifact::ArtifactResolver::new(root);
     let mut out = BTreeSet::new();
     let mut check = |id: &str, raw: &str, bundle_relative: bool| {
+        if crate::model::link::is_logical_reference(raw) {
+            let found = crate::model::link::LogicalReference::parse(raw)
+                .ok()
+                .flatten()
+                .and_then(|reference| {
+                    let scope = scope?;
+                    let (target_bundle, target_files) = if reference.bundle == scope.gate.primary_id
+                    {
+                        (bundle, None)
+                    } else {
+                        (
+                            &scope.gate.targets.get(&reference.bundle)?.0,
+                            Some(scope.files.get(&reference.bundle)?),
+                        )
+                    };
+                    let exists = |path: &Path| match target_files {
+                        Some(target_files) => target_files.contains(path),
+                        None => files.contains_key(path),
+                    };
+                    let path = Path::new(&reference.path);
+                    if exists(path) {
+                        return Some(true);
+                    }
+                    // Concept links may omit .md, while artifact references are literal.
+                    if !bundle_relative && path.extension().is_none() {
+                        let id = ConceptId::from_relative(&reference.path);
+                        let document = PathBuf::from(format!("{}.md", reference.path));
+                        return Some(target_bundle.get(&id.0).is_some() && exists(&document));
+                    }
+                    Some(false)
+                })
+                .unwrap_or(false);
+            if !found {
+                out.insert(format!("{id}: {raw}"));
+            }
+            return;
+        }
         let from = if bundle_relative {
             "/_bundle_sources"
         } else {
@@ -793,6 +871,7 @@ pub fn prepare_scoped(
     );
     let workspace = Workspace::new()?;
     let _staging_evidence = transaction::suppress_publication_evidence();
+    let _selection_staging = crate::bundle::selection::suppress_for_staging();
     let stage = &workspace.0;
     let mut directories = BTreeSet::new();
     for (path, content) in &before {
@@ -804,7 +883,14 @@ pub fn prepare_scoped(
     }
     let context = crate::bundle::context::current_context(Some(&root.to_string_lossy()), None)?;
     let before_bundle = snapshot_bundle(stage, &before, None)?;
-    let previous_missing = missing(stage, &before, &before_bundle, ontology.as_ref(), &context)?;
+    let previous_missing = missing(
+        stage,
+        &before,
+        &before_bundle,
+        ontology.as_ref(),
+        &context,
+        scope.as_ref(),
+    )?;
     let mut allowed_removed = BTreeSet::new();
     let stage_gate = transaction::suppress_ontology_gate();
     for op in &set.operations {
@@ -877,6 +963,7 @@ pub fn prepare_scoped(
         }
     }
     drop(stage_gate);
+    drop(_selection_staging);
     let after = snapshot(stage)?;
     // Coordinated writes use the bundle tooling profile, like concept discovery.
     // Root support Markdown is not a concept. Keep it in the captured snapshot
@@ -904,7 +991,14 @@ pub fn prepare_scoped(
         )));
     }
     let after_bundle = snapshot_bundle(stage, &after, Some((&before, before_bundle)))?;
-    let after_missing = missing(stage, &after, &after_bundle, ontology.as_ref(), &context)?;
+    let after_missing = missing(
+        stage,
+        &after,
+        &after_bundle,
+        ontology.as_ref(),
+        &context,
+        scope.as_ref(),
+    )?;
     let mut allowed_dangling = Vec::new();
     let introduced = after_missing
         .difference(&previous_missing)
@@ -925,7 +1019,11 @@ pub fn prepare_scoped(
     if !introduced.is_empty() {
         return Err(usage(format!(
             "change set introduces dangling/blocked references: {}",
-            introduced.join("; ")
+            introduced
+                .iter()
+                .map(|finding| explain_missing(finding, &context, scope.as_ref()))
+                .collect::<Vec<_>>()
+                .join("; ")
         )));
     }
     for path in controls {

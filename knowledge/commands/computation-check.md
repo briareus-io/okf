@@ -3,7 +3,9 @@ type: Command
 group: check
 mutates: false
 title: okf computation check
-description: Inspects an Attested Computation contract and its artifacts without executing the computation.
+description: >-
+  Inspects an Attested Computation contract and its artifacts without executing the
+  computation.
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
@@ -25,6 +27,6 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `computation-contract`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`, `--selection`.
 
 Inspect-only: `execution: not-run` is not a passing runtime attestation. Document verification and inspection of executable resources never establish a run verdict.

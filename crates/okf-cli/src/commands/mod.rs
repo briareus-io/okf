@@ -39,10 +39,106 @@ pub fn run(mut cli: Cli) -> Result<i32> {
             "{command_name} does not accept --guidance"
         )));
     }
+    if command_name == "changeset recover" && cli.guidance.as_deref().is_some_and(|v| v != "off") {
+        return Err(okf_core::error::OkfError::Usage(
+            "changeset recover accepts only --guidance off".into(),
+        ));
+    }
+    if cli.selection.is_some() && !crate::cli::supports_selection(&command_name) {
+        return Err(okf_core::error::OkfError::Usage(format!(
+            "{command_name} does not accept --selection"
+        )));
+    }
+    if cli.selection.is_some()
+        && matches!(&cli.command, Command::Doctor(a) if a.migrate_config.is_some() || a.migration_apply.is_some())
+    {
+        return Err(okf_core::error::OkfError::Usage(
+            "--selection cannot be used with doctor configuration migration".into(),
+        ));
+    }
+    if cli.selection.is_some()
+        && (cli.revision.is_some()
+            || cli.workspace_revision.is_some()
+            || !cli.bundle_revision.is_empty())
+    {
+        return Err(okf_core::error::OkfError::Usage(
+            "--selection cannot be used for historical inspection".into(),
+        ));
+    }
+    if command_name == "bundle select"
+        && (!cli.scope_bundle.is_empty()
+            || cli.catalog_scope
+            || cli.revision.is_some()
+            || cli.workspace_revision.is_some()
+            || !cli.bundle_revision.is_empty())
+    {
+        return Err(okf_core::error::OkfError::Usage(
+            "bundle select does not accept scope or historical revision flags".into(),
+        ));
+    }
     if let Some(path) = &cli.catalog {
         // SAFETY: runs on the main thread during dispatch, before any threads are spawned.
         unsafe { std::env::set_var("OKF_CATALOG", std::env::current_dir()?.join(path)) };
     }
+    if let Command::Bundle(crate::cli::BundleCmd::Select(args)) = &cli.command {
+        return bundle::select(args, cli.bundle_id.as_deref(), cli.json);
+    }
+    let _selection_guard = if let Some(raw) = &cli.selection {
+        let receipt = bundle::read_selection(raw)?;
+        receipt.check_explicit_environment()?;
+        let selected = receipt.check()?;
+        if let Some(catalog) = &cli.catalog {
+            let supplied = std::fs::canonicalize(catalog)?;
+            let matches = selected
+                .catalog
+                .as_ref()
+                .and_then(|c| std::fs::canonicalize(&c.path).ok())
+                .is_some_and(|path| path == supplied);
+            if !matches {
+                return Err(okf_core::error::OkfError::Usage(
+                    "--catalog conflicts with --selection".into(),
+                ));
+            }
+        }
+        let explicit = catalog::bundle_slot(&mut cli.command).and_then(|slot| slot.clone());
+        if explicit.is_some() && cli.bundle_id.is_some() {
+            return Err(okf_core::error::OkfError::Usage(
+                "bundle path and --bundle-id are conflicting selectors".into(),
+            ));
+        }
+        if let Some(path) = explicit {
+            if std::fs::canonicalize(path)? != receipt.root {
+                return Err(okf_core::error::OkfError::Usage(
+                    "bundle path conflicts with --selection".into(),
+                ));
+            }
+        }
+        if cli
+            .bundle_id
+            .as_ref()
+            .is_some_and(|id| Some(id) != selected.primary.id.as_ref())
+        {
+            return Err(okf_core::error::OkfError::Usage(
+                "--bundle-id conflicts with --selection".into(),
+            ));
+        }
+        if let Some(slot) = catalog::bundle_slot(&mut cli.command) {
+            *slot = Some(receipt.root.to_string_lossy().into_owned());
+        }
+        cli.bundle_id = None;
+        Some(
+            if matches!(
+                &cli.command,
+                Command::Changeset(crate::cli::ChangeSetCmd::Recover(_))
+            ) {
+                okf_core::bundle::selection::activate_for_recovery(receipt)?
+            } else {
+                okf_core::bundle::selection::activate(receipt)?
+            },
+        )
+    } else {
+        None
+    };
     match &cli.command {
         Command::Computation(ComputationCmd::Check(a)) if a.details => {
             return Err(okf_core::error::OkfError::Usage(

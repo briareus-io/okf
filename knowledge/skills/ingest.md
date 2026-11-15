@@ -14,7 +14,9 @@ uses:
 - /commands/artifact-resolve
 - /commands/artifact-show
 title: okf:ingest skill
-description: Researches a repository through complete source inventory and authors grounded OKF v0.2 concepts using standard provenance before drift extensions.
+description: >-
+  Researches a repository through complete source inventory and authors grounded OKF v0.2
+  concepts using standard provenance before drift extensions.
 sources:
 - resource: plugins/okf/skills/ingest/references/cli.md
   kind: git-path

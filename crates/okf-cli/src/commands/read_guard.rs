@@ -23,7 +23,11 @@ pub fn guards_command(command: &Command) -> bool {
         | Command::Affected(_)
         | Command::Diff(_)
         | Command::Stats(_)
-        | Command::Bundle(_) => true,
+        | Command::Bundle(
+            crate::cli::BundleCmd::Context(_)
+            | crate::cli::BundleCmd::Validate(_)
+            | crate::cli::BundleCmd::Resource(_),
+        ) => true,
         Command::Artifact(command) => !matches!(command, ArtifactCmd::Put(_)),
         Command::Lint(args) => !args.fix,
         Command::Doctor(args) => {

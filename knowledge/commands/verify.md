@@ -3,7 +3,9 @@ type: Command
 group: mutate
 mutates: true
 title: okf verify
-description: Appends a verified entry, the write side of trust, raising a concept's derived tier (unverified to machine-confirmed to human-reviewed).
+description: >-
+  Appends a verified entry, the write side of trust, raising a concept's derived tier
+  (unverified to machine-confirmed to human-reviewed).
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
@@ -28,4 +30,4 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `change`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`, `--selection`.

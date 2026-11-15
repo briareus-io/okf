@@ -14,7 +14,9 @@ uses:
 - /commands/artifact-resolve
 - /commands/artifact-show
 title: okf:migrate skill
-description: Faithfully migrates authored or legacy documents into OKF v0.2 with standard sources, claim footnotes, and preserved extensions.
+description: >-
+  Faithfully migrates authored or legacy documents into OKF v0.2 with standard sources,
+  claim footnotes, and preserved extensions.
 sources:
 - resource: plugins/okf/skills/migrate/references/cli.md
   kind: git-path

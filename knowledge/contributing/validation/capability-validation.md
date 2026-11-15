@@ -29,18 +29,18 @@ python3 scripts/check-docs.py
 cargo fmt --all -- --check
 ```
 
-The default and URL-source configurations must both pass for release preparation. URL-source
-support does not add remote bundle acquisition. The documentation check additionally runs the
-current guide examples, verifies navigation and command coverage, and requires clean lint under
-the repository's policy. Results apply to the environment and scope actually exercised.
+The default and URL-source configurations must both pass for release preparation. URL-source support
+does not add remote bundle acquisition. The documentation check additionally runs the current guide
+examples, verifies navigation and command coverage, and requires clean lint under the repository's
+policy. Results apply to the environment and scope actually exercised.
 
 ## Regression boundaries
 
-The suite covers computed fields during expansion, normalized link seeds during impact analysis,
-and effective configured ontologies in affected analysis, stats and rendering. It also covers
-source namespaces, snapshot evidence, explicit examination scope, nested relationship pairing,
-and bounded query completeness. A passing result establishes those tested contracts, not all
-possible runtime behavior.
+The suite covers computed fields during expansion, normalized link seeds during impact analysis, and
+effective configured ontologies in affected analysis, stats and rendering. It also covers source
+namespaces, snapshot evidence, explicit examination scope, nested relationship pairing, and bounded
+query completeness. A passing result establishes those tested contracts, not all possible runtime
+behavior.
 
 ## Test locations
 
@@ -141,10 +141,10 @@ possible runtime behavior.
 Remote acquisition/cache management, self-contained export, global consumer inventories, atomic
 cross-repository updates, inverse/transitive automatic expansion, correlated predicates, cursor
 sessions, persistent query caches, live compliance evaluation, and computation execution are
-explicitly deferred. This audit does not claim they work. Negative cases exercise the applicable
-CLI boundaries; snapshots and resolution are never treated as proof of factual correctness,
-publisher authenticity, target consent, policy fulfillment, or document verification.
+explicitly deferred. This audit does not claim they work. Negative cases exercise the applicable CLI
+boundaries; snapshots and resolution are never treated as proof of factual correctness, publisher
+authenticity, target consent, policy fulfillment, or document verification.
 
 Separate-bundle distribution requires the authored relative layout. Working-tree reads cannot
-promise an atomic snapshot or stable pages under concurrent changes. These are limitations to
-retain in answers, not test failures that an implementation can turn into guarantees.
+promise an atomic snapshot or stable pages under concurrent changes. These are limitations to retain
+in answers, not test failures that an implementation can turn into guarantees.

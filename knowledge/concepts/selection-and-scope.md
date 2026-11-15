@@ -24,6 +24,30 @@ for guarded examination of typed cross-bundle targets. Their write ownership rem
 selected bundle. Use the same scope for a reviewed baseline and its later apply; see
 the [write-gate contract](../reference/command-contracts.md#apply-a-local-ontology-write-policy).
 
+## Retain a selection across commands
+
+`okf bundle select knowledge --json` resolves the current selector without reading bundle
+contents, loading guidance, or taking a publication read guard. It therefore works while a
+transaction journal is pending. Its `bundle-selection` record contains the canonical root,
+identity, source kind (`standalone`, `directory`, `git-override`, or `git-snapshot`), effective
+access, and a versioned token.
+
+Save the `token` string verbatim to a file and supply `--selection @selection.json` on
+subsequent supported current-bundle commands. The token retains the original selection and
+access context; it does not infer selection again from a later working directory. A supplied
+explicit path, identity, or catalog must agree with the receipt. Historical selectors cannot
+be combined with a current selection token. `init` and `bundle select` do not consume tokens.
+
+The receipt detects changed catalog/configuration/override/lock dependencies, root identity, and
+access policy. Native writes revalidate selection under the writer guard. It is a freshness
+assertion, not authorization, a content snapshot, or a context token. External catalog edits and
+filesystem replacements do not participate in bundle locks, so freshness checks cannot eliminate
+every race with non-cooperating writers.
+
+A managed Git override remains read-only in its consumer catalog context. Selecting the same owner
+checkout independently uses that standalone context's access policy. Do not discard a consumer
+selection receipt to bypass its access restriction.
+
 ## References select targets, not examination scope
 
 Ordinary cross-bundle paths retain their filesystem-layout meaning. A logical authored link

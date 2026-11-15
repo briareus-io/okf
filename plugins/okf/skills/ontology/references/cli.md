@@ -1,6 +1,6 @@
 # okf CLI — ontology command reference
 
-> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.6.5, OKF spec 0.2). Do not hand-edit; regenerate instead.
+> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.6.6, OKF spec 0.2). Do not hand-edit; regenerate instead.
 
 This focused reference contains only commands selected for the `ontology` workflow. First pass the skill CLI compatibility preflight. Consult this reference when exact arguments or output shapes are needed. For a compatible CLI that rejects documented syntax, use that command's `--help` output as the runtime authority.
 
@@ -13,6 +13,7 @@ Exit codes: 0 means success under the selected failure threshold, not necessaril
 | Argument | Type | Required | Description |
 |----------|------|----------|-------------|
 | `--json` | bool | no | Emit NDJSON instead of human text or a bare artifact; schema is always NDJSON (default: `false`) |
+| `--selection <value>` | string | no | Bind execution to a previously issued bundle selection token (@file supported) |
 | `--bundle-id <value>` | string | no | Select an explicitly registered bundle identity (paths keep separate meanings) |
 | `--scope-bundle <value>` | list<string> | no | Add a registered bundle to the examination scope (repeatable) |
 | `--catalog-scope` | bool | no | Examine every locally available registered bundle (default: `false`) |
@@ -71,6 +72,13 @@ Authored concept metadata remains open. These computed records describe scope, i
     "path": "path",
     "sha256": "string|null",
     "truncated": "boolean"
+  },
+  "bundle-selection": {
+    "access": "read-only|read-write",
+    "id": "string|null (null for standalone selection)",
+    "root": "canonical existing directory path",
+    "source": "standalone|directory|git-override|git-snapshot",
+    "token": "opaque versioned string"
   },
   "concept": {
     "discriminator": "no kind field is added; unprojected concept metadata",
@@ -259,7 +267,7 @@ Resolve any OKF path-valued resource with document context.
 
 Output stream: `artifact-resolution`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--selection`, `--workspace-revision`.
 
 **Path namespaces:** a leading `/` means bundle-root-relative, not an operating-system absolute path. Other local paths resolve against the declaring concept's directory when `--from` is supplied, otherwise the bundle root. Keep `--from` on the subsequent read too. JSON uses `artifact_kind` (concept, artifact, reserved, support, external, scope, missing, or blocked), `path`, `exists`, `size`, and `message`. Missing/blocked resolution exits 1. A scope descriptor is provenance, not a missing file.
 
@@ -280,7 +288,7 @@ Retrieve a bounded local text artifact; binary files return metadata only.
 
 Output stream: `artifact-content`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--selection`, `--workspace-revision`.
 
 For document-relative paths, pass the same `--from` used during resolution. For bundle-root-relative file/line-range/markdown-heading source resources, omit `--from`; this generic reader does not infer the source kind. JSON includes `text`, `binary`, `truncated`, `size`, `sha256`, and `path`. Binary files provide metadata only. Inspect `truncated` before treating a read as complete; human output alone does not expose this flag. Use bounded line windows and a sufficient byte budget for the needed range; do not infer absence from a truncated result. Use `show` for concepts and this command for opaque or reserved files.
 
@@ -310,7 +318,7 @@ Concepts that link to a given concept.
 
 Output stream: `concept,relationship,scope,bundle-backlink,bundle-edge`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--selection`, `--workspace-revision`.
 
 ### `okf bundle context`
 
@@ -333,9 +341,9 @@ Return effective settings and selected agent guidance without running a workflow
 
 Output stream: `context-scope,bundle-context,guidance,workflow,effective-query,context-stats,context-token,context-check`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--selection`, `--workspace-revision`.
 
-Batch known operations in the initial request to load global and mandatory scoped instructions together. Reference-tier rules expand with --rule; --all and historical context are inspection only. --settings-detail compact explicitly projects settings; full JSON remains the default. --stats reports delivered instruction bytes. --token emits a stateless receipt after delivery; pass it with --context (or @file) on covered commands, or check with --check-token. A stale supplied token fails before execution; tokens are optional and are not authorization or concept-content guards. Context digest version 2 covers loaded instructions and selected workflow resources as well as settings, ontology and snapshot identity. Incidental guidance never replaces pre-action loading.
+Batch known operations in the initial request to load global and mandatory scoped instructions together. Reference-tier rules expand with --rule; --all and historical context are inspection only. --settings-detail compact explicitly projects settings; full JSON remains the default. --stats reports delivered instruction bytes. --token emits a stateless receipt after delivery; pass it with --context (or @file) on covered commands, or check with --check-token. A stale supplied token fails before execution; tokens are optional and are not authorization or concept-content guards. Context digest version 2 covers loaded instructions and selected workflow resources as well as settings, ontology and snapshot identity. Incidental guidance never replaces pre-action loading. Use bundle select to discover and bind a recovery root while a pending transaction prevents normal context reads.
 
 ### `okf bundle resource list`
 
@@ -347,7 +355,7 @@ Inventory support files and the manifest without loading instruction bodies.
 
 Output stream: `bundle-resource`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--selection`, `--workspace-revision`.
 
 Support files are excluded from ordinary knowledge discovery. Explicit inspection is bounded, preserves containment, and never executes scripts or treats support Markdown as concepts.
 
@@ -364,9 +372,23 @@ Read a bounded support file without executing it.
 
 Output stream: `bundle-resource`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--selection`, `--workspace-revision`.
 
 Support files are excluded from ordinary knowledge discovery. Explicit inspection is bounded, preserves containment, and never executes scripts or treats support Markdown as concepts.
+
+### `okf bundle select`
+
+Select a bundle without reading transactional bundle contents.
+
+| Argument | Type | Required | Description |
+|----------|------|----------|-------------|
+| `<bundle>` | positional | no | Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory) |
+
+Output stream: `bundle-selection`.
+
+Supported global options: `--bundle-id`, `--catalog`, `--json`.
+
+Resolve an existing bundle root and its identity/access policy without reading transactional bundle contents. Selection remains available with a pending recovery journal. Retain the returned token and pass it with --selection (or @file) to subsequent operations, including changeset recover, after acquiring any caller-owned root lock. The receipt binds the original selection context across working directories and rejects changed selection inputs. It is a freshness check, not an authorization credential, content baseline, or global filesystem lock. Load normal bundle context after recovery and retain --expect for guarded changeset publication.
 
 ### `okf links`
 
@@ -392,7 +414,7 @@ List the direct concept links defined by one concept.
 
 Output stream: `link,relationship,scope,bundle-edge`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--selection`, `--workspace-revision`.
 
 ### `okf ontology field-type list`
 
@@ -404,7 +426,7 @@ List reusable field-type definitions.
 
 Output stream: `ontology_field_type`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--selection`, `--workspace-revision`.
 
 Inspect authored reusable definitions and resolved inherited constraints. JSON includes both definition and effective fields.
 
@@ -419,7 +441,7 @@ Show a reusable field-type definition and its effective fields.
 
 Output stream: `ontology_field_type`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--selection`, `--workspace-revision`.
 
 Inspect authored reusable definitions and resolved inherited constraints. JSON includes both definition and effective fields.
 
@@ -433,7 +455,7 @@ List the defined concept types.
 
 Output stream: `ontology_type`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--selection`, `--workspace-revision`.
 
 ### `okf ontology show`
 
@@ -446,7 +468,7 @@ Show one concept type and its rules.
 
 Output stream: `ontology_type`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--selection`, `--workspace-revision`.
 
 ### `okf search`
 
@@ -488,7 +510,7 @@ Search concepts by type, tag, text, and/or frontmatter field.
 
 Output stream: `concept,concept-identity,scope,projection,query-summary,facet,facet-excluded,relationship,related-concept,expansion-summary,warning`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--selection`, `--workspace-revision`.
 
 The positional argument is the bundle, never query text. Text requires `--text`; structured filters work without it. No filters means inventory. Text-search JSON adds `search.score` and bounded `search.matches` to metadata records, not full bodies. Structured-only search has no text-match evidence. `--in title,description` narrows the default fields; adding `frontmatter` broadens them. Empty results exit successfully and establish only that this query found no matches. Check query-summary and warning records: incomplete scans cannot establish absence, exact totals, or globally ordered pages. --limit does not reduce scan work; offset requests rescan without shared query caches. Separate nested filters may match different list records; inspect concrete occurrences before attributing their combined conditions to one relationship. Expansion completeness and facet truncation are independent of primary scan completeness.
 
@@ -508,7 +530,7 @@ Show one concept's content, heading outline, or selected line range.
 
 Output stream: `concept,projection`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--selection`, `--workspace-revision`.
 
 Without `--json`, show includes the serialized frontmatter and full Markdown body. Plain `show --json` returns metadata only: frontmatter plus `id`, `trust_tier`, `effective_status`, `effective_generated_at`, `latest_verified_at`, and `verification_current`. It does not include the body. `--outline --json` returns `headings` with `line`, `level`, and `text`; `--lines START:END --json` returns `start`, actual `end`, and `lines` containing `line` and `text`. Line numbers refer to the serialized document, including frontmatter, excluding the three-line display header. `show -n` (or `--numbered`) prints the full document with these numbers and no header; its JSON uses the same line-range record. `show --body` prints only raw Markdown; with `--json` it returns a body record containing `id` and `body`. An outline or selected slice does not establish complete document-review coverage. Unprojected `id` is the computed path; an authored frontmatter `id` is preserved in `frontmatter_conflicts.id`. `verification_current` compares a valid latest verification timestamp with the effective generation timestamp; null means the comparison is unavailable, not necessarily that the concept has never been reviewed.
 
@@ -524,7 +546,7 @@ Validate the manifest and explicitly declared local resources.
 
 Output stream: `manifest-validation`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`, `--selection`.
 
 Validate the optional manifest's structure and supported schema without treating prose instructions as executable checks. Manifest validation is distinct from core concept conformance and bundle-profile knowledge validation.
 
@@ -540,7 +562,7 @@ Advisory checks (broken links, missing fields, orphans, ontology violations).
 
 Output stream: `finding,scope,fix`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--scope-bundle`.
+Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--scope-bundle`, `--selection`.
 
 For sources with a fingerprint kind, `source-unrecorded` warns when no baseline exists. `source-missing` errors when file, line-range, or markdown-heading sources cannot be fingerprinted, even without a baseline. Lint does not fetch URLs or inspect Git sources. Configure `source_unrecorded: off` (or `info`, `warn`, `error`; default `warn`) under `settings.lint` in `okf-bundle.yaml`. Legacy TOML bundle settings remain compatibility input. Disabling this rule leaves `source-missing` and `stale` checks active. All lint settings accept `off`, `info`, `warn`, or `error`. Defaults: `broken_link` and `source_missing` are `error`; `missing_title`, `spec_v02` (finding rule `okf-v02`), `ontology_violation`, `source_unrecorded`, `invalid_reference`, and `index_coverage` are `warn`; `missing_description` and `orphan` are `info`. Omitted settings keep these defaults. `off` suppresses the selected lint rule only; validation and stale checks remain independent. `index_exclude` controls index coverage exclusions and `finding_budget` limits ontology findings (positive, default 1,000 per concept). Use `--fail-on warn` to fail on warnings as well as errors.
 
@@ -555,7 +577,7 @@ Conformance validation — the spec's three hard rules only.
 
 Output stream: `violation,validation-profile`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`, `--selection`.
 
 ## mutate
 
@@ -584,7 +606,7 @@ Define a new concept type with structured fields, references, and relationships.
 
 Output stream: `change`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`, `--selection`.
 
 Built-in field types: `string`, `text`, `int`, `bool`, `date`, `datetime`, `uri`, `enum`, `list`, `object`; custom type names must resolve in the existing sidecar's `field_types`. Reference cardinalities are `0..1` (optional one), `1..1` (exactly one), `0..n` (optional many), and `1..n` (at least one). For example, `--field "stage:enum:draft|active"` declares choices and `--ref "depends_on:Service:0..n"` permits zero or more Service links. Observed presence alone does not justify a required rule. Structured `--field-yaml`, `--ref-yaml`, and `--relationship-yaml` inputs replace complete named declarations. `--from` merges supplied declarations, retaining omitted ones; overlaps with flags fail. `--remove-relationship` deletes a named rule. YAML inputs accept inline values, `@file`, or `-`; JSON syntax works. Preview with `--dry-run`. These are advisory local rules, not conformance requirements.
 
@@ -602,7 +624,7 @@ Apply coordinated concept and reusable field-type changes atomically.
 
 Output stream: `change`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`, `--selection`.
 
 `--from` accepts `field_types` and `concepts` maps, merging named declarations and preserving omitted ones. Top-level `remove` has `field_types` and `concepts` lists; per-concept `remove` has `fields`, `references`, and `relationships` lists. Conflicting operations fail. The complete result validates before a single write. Use `--dry-run` for a preview; null and omission do not request deletion.
 
@@ -621,7 +643,7 @@ Define a new reusable field type.
 
 Output stream: `change`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`, `--selection`.
 
 Reusable field types are ontology-wide definitions. Add/update `--from` accepts a whole definition; update replaces it completely. Inspect consumers before removal or tightening. `--dry-run` validates the proposed ontology without publishing the sidecar; coordination state may be created.
 
@@ -639,7 +661,7 @@ Remove a reusable field type if the resulting ontology remains valid.
 
 Output stream: `change`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`, `--selection`.
 
 Reusable field types are ontology-wide definitions. Add/update `--from` accepts a whole definition; update replaces it completely. Inspect consumers before removal or tightening. `--dry-run` validates the proposed ontology without publishing the sidecar; coordination state may be created.
 
@@ -658,7 +680,7 @@ Replace an existing reusable field type completely.
 
 Output stream: `change`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`, `--selection`.
 
 Reusable field types are ontology-wide definitions. Add/update `--from` accepts a whole definition; update replaces it completely. Inspect consumers before removal or tightening. `--dry-run` validates the proposed ontology without publishing the sidecar; coordination state may be created.
 
@@ -676,7 +698,7 @@ Remove a concept type.
 
 Output stream: `change`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`, `--selection`.
 
 ### `okf ontology update` · _conditionally mutates_
 
@@ -703,6 +725,6 @@ Modify an existing concept type and its named declarations.
 
 Output stream: `change`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`, `--selection`.
 
 Built-in field types: `string`, `text`, `int`, `bool`, `date`, `datetime`, `uri`, `enum`, `list`, `object`; custom type names must resolve in the existing sidecar's `field_types`. Reference cardinalities are `0..1` (optional one), `1..1` (exactly one), `0..n` (optional many), and `1..n` (at least one). For example, `--field "stage:enum:draft|active"` declares choices and `--ref "depends_on:Service:0..n"` permits zero or more Service links. Observed presence alone does not justify a required rule. Structured `--field-yaml`, `--ref-yaml`, and `--relationship-yaml` inputs replace complete named declarations. `--from` merges supplied declarations, retaining omitted ones; overlaps with flags fail. `--remove-relationship` deletes a named rule. YAML inputs accept inline values, `@file`, or `-`; JSON syntax works. Preview with `--dry-run`. These are advisory local rules, not conformance requirements.

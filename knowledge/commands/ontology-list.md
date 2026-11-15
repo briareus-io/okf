@@ -3,7 +3,9 @@ type: Command
 group: query
 mutates: false
 title: okf ontology list
-description: Lists the concept types defined in the tool-local ontology.yaml with their descriptions.
+description: >-
+  Lists the concept types defined in the tool-local ontology.yaml with their
+  descriptions.
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
@@ -25,4 +27,4 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `ontology_type`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--selection`, `--workspace-revision`.

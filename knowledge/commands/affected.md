@@ -3,7 +3,9 @@ type: Command
 group: check
 mutates: false
 title: okf affected
-description: 'Impact query: given a set of changed links, computes the blast radius of concepts that may need review via a reverse walk, direct by default or --transitive.'
+description: >-
+  Impact query: given a set of changed links, computes the blast radius of concepts that
+  may need review via a reverse walk, direct by default or --transitive.
 sources:
 - resource: crates/okf-cli/src/commands/check.rs
   kind: git-path
@@ -15,12 +17,13 @@ last_modified: 2026-10-04T20:39:29Z
 ---
 # okf affected
 
-Impact query: given a set of changed links, computes the blast radius of concepts that may need review via a reverse walk, direct by default or --transitive.
+Impact query: given a set of changed links, computes the blast radius of concepts that may need
+review via a reverse walk, direct by default or --transitive.
 
 Catalog-aware affected analysis walks qualified reverse edges within explicitly examined scope.
-Requested and available bundle/version scope accompany results; consumers outside that scope
-remain unknown. Snapshot mismatch, ordinary target resolution and fingerprint change are
-separate results. A current candidate is not an accepted substitute.
+Requested and available bundle/version scope accompany results; consumers outside that scope remain
+unknown. Snapshot mismatch, ordinary target resolution and fingerprint change are separate results.
+A current candidate is not an accepted substitute.
 
 CLI 0.5 reads piped changed resources only when `--changed -` is explicit, or
 when no changed arguments were supplied and the stdin-only fallback applies.
@@ -42,4 +45,4 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `affected,scope,bundle-affected`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--selection`, `--workspace-revision`.

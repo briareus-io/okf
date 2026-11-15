@@ -3,7 +3,9 @@ type: Command
 group: query
 mutates: false
 title: okf artifact resolve
-description: Resolves an OKF path-valued resource with declaring-concept context and containment checks.
+description: >-
+  Resolves an OKF path-valued resource with declaring-concept context and containment
+  checks.
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
@@ -11,7 +13,8 @@ last_modified: 2026-10-04T20:39:29Z
 ---
 # okf artifact resolve
 
-Classifies a resource as a concept, reserved file, opaque artifact, external URL, scope descriptor, missing path, or blocked path. Relative resources resolve from their declaring concept.
+Classifies a resource as a concept, reserved file, opaque artifact, external URL, scope descriptor,
+missing path, or blocked path. Relative resources resolve from their declaring concept.
 
 ## Arguments
 
@@ -25,7 +28,7 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `artifact-resolution`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--selection`, `--workspace-revision`.
 
 **Path namespaces:** a leading `/` means bundle-root-relative, not an operating-system absolute path. Other local paths resolve against the declaring concept's directory when `--from` is supplied, otherwise the bundle root. Keep `--from` on the subsequent read too. JSON uses `artifact_kind` (concept, artifact, reserved, support, external, scope, missing, or blocked), `path`, `exists`, `size`, and `message`. Missing/blocked resolution exits 1. A scope descriptor is provenance, not a missing file.
 

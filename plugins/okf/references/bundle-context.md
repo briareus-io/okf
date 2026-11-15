@@ -17,6 +17,22 @@ identity. Use `okf catalog --json` when registrations, overrides, or availabilit
 Catalog locations are catalog-relative, manifest paths are bundle-root-relative, and legacy TOML
 pointers retain their original base. Do not infer identity from matching filenames or titles.
 
+When retaining current selection across calls or bootstrapping recovery, use
+`okf bundle select <bundle> --json`. It reads selection metadata without bundle contents or
+guidance, so pending transactions do not block it. Check the complete operation stream and
+save the `bundle-selection.token` string verbatim; pass it as `--selection @/tmp/selection.json`
+on supported current commands. Explicit selectors must agree with it; historical selectors
+cannot be combined with it. The receipt binds selection/access dependencies and root identity,
+not concept bytes, authorization, or guidance delivery. Re-resolve and review a stale selection
+rather than silently dropping the receipt. Managed dependency overrides remain read-only in
+their consumer catalog context.
+
+For a pending transaction, run `okf changeset recover --selection @/tmp/selection.json --json`
+before loading ordinary context. Recovery skips guidance and rejects `--context` and explicit
+`--guidance full|summary`; `--guidance off` is accepted. Preserve a conflicted journal and follow
+the recovery diagnostic. After recovery, load applicable context before dependent content work.
+This is the recovery exception to pre-action guidance loading, not a general bypass.
+
 Registration is not examination scope. Use supported `--scope-bundle` or deliberate `--catalog-scope`
 when the task requires more bundles; existing user scope counts without another permission question.
 Keep out-of-scope and unavailable members explicit. Extra scope on `mv`/`rm` enables integrity guards,

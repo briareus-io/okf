@@ -478,3 +478,159 @@ fn qualified_target_requires_registered_bundle_identity_as_well_as_type() {
     .stderr(predicate::str::contains("write-gate-rejected"));
     assert!(!dir.path().join("planning/new.md").exists());
 }
+
+fn logical_reference(reference: &str) -> serde_json::Value {
+    json!([{"op":"create","path":"new","content":task(reference)}])
+}
+
+#[test]
+fn logical_sibling_reference_plans_and_applies_in_explicit_or_catalog_scope() {
+    for scope in [
+        vec!["--scope-bundle", "acme.knowledge"],
+        vec!["--catalog-scope"],
+    ] {
+        let dir = gated_fixture();
+        let original = fs::read(dir.path().join("knowledge/target.md")).unwrap();
+        let operations = logical_reference("okf://acme.knowledge/target.md#section");
+        let output = command(&dir, "plan", operations.clone())
+            .arg("--require-ontology-gate")
+            .args(&scope)
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        let digest = digest_from(&output, "changeset-summary");
+        assert!(!dir.path().join("planning/new.md").exists());
+        command(&dir, "apply", operations)
+            .args(["--require-ontology-gate", "--expect", &digest])
+            .args(&scope)
+            .assert()
+            .success();
+        assert!(
+            fs::read_to_string(dir.path().join("planning/new.md"))
+                .unwrap()
+                .contains("okf://acme.knowledge/target.md#section")
+        );
+        assert_eq!(
+            fs::read(dir.path().join("knowledge/target.md")).unwrap(),
+            original
+        );
+    }
+}
+
+#[test]
+fn logical_reference_requires_scope_and_existing_correctly_typed_target() {
+    for scenario in ["unscoped", "missing", "wrong-type", "unknown-bundle"] {
+        let dir = gated_fixture();
+        let reference = if scenario == "unknown-bundle" {
+            "okf://acme.unknown/target.md"
+        } else {
+            "okf://acme.knowledge/target.md"
+        };
+        if scenario == "missing" {
+            fs::remove_file(dir.path().join("knowledge/target.md")).unwrap();
+        }
+        if scenario == "wrong-type" {
+            fs::write(
+                dir.path().join("knowledge/target.md"),
+                "---\ntype: Other\n---\n",
+            )
+            .unwrap();
+        }
+        for verb in ["plan", "apply"] {
+            let mut cmd = command(&dir, verb, logical_reference(reference));
+            cmd.arg("--require-ontology-gate");
+            if scenario != "unscoped" {
+                cmd.args(["--scope-bundle", "acme.knowledge"]);
+            }
+            cmd.assert().failure();
+            assert!(
+                !dir.path().join("planning/new.md").exists(),
+                "{scenario} {verb}"
+            );
+        }
+    }
+}
+
+#[test]
+fn logical_reference_baseline_detects_sibling_drift() {
+    let dir = gated_fixture();
+    let operations = logical_reference("okf://acme.knowledge/target.md");
+    let output = command(&dir, "plan", operations.clone())
+        .args([
+            "--require-ontology-gate",
+            "--scope-bundle",
+            "acme.knowledge",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let digest = digest_from(&output, "changeset-summary");
+    fs::write(
+        dir.path().join("knowledge/target.md"),
+        "---\ntype: Component\n---\nChanged\n",
+    )
+    .unwrap();
+    command(&dir, "apply", operations)
+        .args([
+            "--require-ontology-gate",
+            "--scope-bundle",
+            "acme.knowledge",
+            "--expect",
+            &digest,
+        ])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("baseline-conflict"));
+    assert!(!dir.path().join("planning/new.md").exists());
+}
+
+#[test]
+fn logical_primary_reference_resolves_against_staged_creates() {
+    let dir = gated_fixture();
+    let operations = json!([
+        {"op":"create", "path":"target", "content":"---\ntype: Task\n---\n# Target\n"},
+        {"op":"create", "path":"new", "content":task("okf://acme.planning/target.md")}
+    ]);
+    command(&dir, "plan", operations.clone())
+        .args(["--require-ontology-gate", "--scope-bundle", "acme.planning"])
+        .assert()
+        .success();
+    assert!(!dir.path().join("planning/target.md").exists());
+    command(&dir, "apply", operations)
+        .args(["--require-ontology-gate", "--scope-bundle", "acme.planning"])
+        .assert()
+        .success();
+    assert!(dir.path().join("planning/target.md").exists());
+    assert!(dir.path().join("planning/new.md").exists());
+}
+
+#[test]
+fn logical_artifact_paths_are_literal_including_markdown_suffix() {
+    let dir = gated_fixture();
+    fs::write(dir.path().join("knowledge/data"), "artifact").unwrap();
+    for (path, reference, succeeds) in [
+        ("valid", "okf://acme.knowledge/data", true),
+        ("missing", "okf://acme.knowledge/data.md", false),
+    ] {
+        let content = format!("---\ntype: Task\n---\n[Data]({reference})\n");
+        let operations = json!([{"op":"create", "path":path, "content":content}]);
+        for verb in ["plan", "apply"] {
+            let assertion = command(&dir, verb, operations.clone())
+                .args(["--scope-bundle", "acme.knowledge"])
+                .assert();
+            if succeeds {
+                assertion.success();
+            } else {
+                assertion.failure();
+            }
+        }
+        assert_eq!(
+            dir.path().join(format!("planning/{path}.md")).exists(),
+            succeeds
+        );
+    }
+}

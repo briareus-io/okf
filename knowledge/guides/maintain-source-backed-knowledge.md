@@ -16,13 +16,15 @@ explains:
 - /concepts/sources-and-provenance
 - /concepts/verification-and-freshness
 title: Maintain source-backed knowledge
-description: Find impacted documentation, compare current sources, and reconcile claims without stored fingerprints.
+description: >-
+  Find impacted documentation, compare current sources, and reconcile claims without
+  stored fingerprints.
 ---
 # Maintain source-backed knowledge
 
-Use this workflow after a source changes: identify affected documents, compare their claims
-with the current source, edit what changed, and validate the result. Source relationships
-identify candidates for review; they do not decide which claims are wrong.
+Use this workflow after a source changes: identify affected documents, compare their claims with the
+current source, edit what changed, and validate the result. Source relationships identify candidates
+for review; they do not decide which claims are wrong.
 
 ## Find affected documentation in this repository
 
@@ -44,8 +46,8 @@ and `affected` provide the maintenance starting point here.
 
 ## Practice a source change without editing the manual
 
-The example starts with a service that retries twice. Its documentation cites a text artifact.
-Run from the repository root, in one shell; all writes stay under a temporary directory.
+The example starts with a service that retries twice. Its documentation cites a text artifact. Run
+from the repository root, in one shell; all writes stay under a temporary directory.
 
 ```sh
 demo_root=$(mktemp -d)
@@ -83,10 +85,10 @@ okf validate "$demo_root/bundle"
 okf lint "$demo_root/bundle" --fail-on error
 ```
 
-Review the preview before applying the same edit. The final document should keep its source
-entry and say three times. Validation checks format; lint checks local conventions. Neither
-check verifies the service's real runtime behavior. Depending on the surrounding configuration,
-lint may report an unrecorded fingerprint as an advisory warning.
+Review the preview before applying the same edit. The final document should keep its source entry
+and say three times. Validation checks format; lint checks local conventions. Neither check verifies
+the service's real runtime behavior. Depending on the surrounding configuration, lint may report an
+unrecorded fingerprint as an advisory warning.
 
 ## Choose the next action deliberately
 

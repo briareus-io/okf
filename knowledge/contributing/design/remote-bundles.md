@@ -2,7 +2,9 @@
 type: Reference
 audience: contributor
 title: Remote bundles and locked catalog dependencies
-description: Design of Git dependency acquisition, accepted revisions, logical references, scoped impact review, and managed read-only access.
+description: >-
+  Design of Git dependency acquisition, accepted revisions, logical references, scoped
+  impact review, and managed read-only access.
 ---
 # Remote bundles and locked catalog dependencies
 
@@ -29,8 +31,8 @@ in [issue 7](https://github.com/briareus-io/okf/issues/7). The operational guide
 
 A catalog accepts one commit per conservatively identified repository. Several bundle subpaths may
 share that snapshot. Updating one member updates the repository group and reports the expanded
-selection. Repository grouping does not infer equivalence between different SSH/HTTPS spellings,
-and does not authorize examination of unrelated consumers.
+selection. Repository grouping does not infer equivalence between different SSH/HTTPS spellings, and
+does not authorize examination of unrelated consumers.
 
 Bundle IDs belong to the consumer catalog, not intrinsic upstream metadata. Matching a commit or
 digest proves correspondence to selected bytes, not factual accuracy, authorship, or human review.
@@ -71,8 +73,8 @@ Git registrations are read-only. The first release does not support publishing u
 multiple revisions of the same repository in one catalog. Members of a repository group must agree
 on update intent and accepted revision.
 
-Compatibility policy uses explicit accepted-version sets. Omitted sets permit versions supported
-by the running CLI. A missing manifest is allowed unless required. An undeclared spec version is
+Compatibility policy uses explicit accepted-version sets. Omitted sets permit versions supported by
+the running CLI. A missing manifest is allowed unless required. An undeclared spec version is
 reported as undeclared, not fabricated to satisfy an explicit accepted set. Candidate bundles must
 pass bundle-profile conformance and manifest/ontology validation. An upstream-configured ontology
 must remain inside the selected bundle; acquisition does not read consumer-machine paths named by
@@ -86,8 +88,8 @@ Observed metadata is rechecked against materialized content, not trusted merely 
 in the lock.
 
 The declaration digest covers dependency identity, update intent, path, access, and compatibility,
-excluding unrelated presentation changes. Changes to that contract make the existing lock stale
-and require a registration-change plan rather than silent reinterpretation.
+excluding unrelated presentation changes. Changes to that contract make the existing lock stale and
+require a registration-change plan rather than silent reinterpretation.
 
 ## Lifecycle
 
@@ -140,10 +142,10 @@ Commit history is separate from endpoint-tree comparison. A branch rewrite need 
 comparison of available trees; unavailable required old content does. Rename evidence must not be
 invented from titles. An initial plan's absent old snapshot is not an unavailable required baseline.
 
-Apply revalidates plan structure, declaration and old-lock digests, candidate objects, compatibility,
-consumer baselines, and report evidence. The accepted commit is exactly the reviewed candidate even
-if the branch advances after planning. Changed inputs require a new plan. Unavailable staged
-content is an error, not permission to resolve a newer tip.
+Apply revalidates plan structure, declaration and old-lock digests, candidate objects,
+compatibility, consumer baselines, and report evidence. The accepted commit is exactly the reviewed
+candidate even if the branch advances after planning. Changed inputs require a new plan. Unavailable
+staged content is an error, not permission to resolve a newer tip.
 
 The following failures always block acceptance: unsupported/invalid schemas, incompatible selected
 bundles, object-integrity failures, invalid paths, access-policy violations, stale input digests, and
@@ -213,16 +215,16 @@ knowledge discovery; the explicit cache-root option supports CI and constrained 
 The consumer catalog owns access policy. Upstream guidance cannot weaken it. Protected writes are
 checked at shared mutation boundaries, including concept edits, verification/refresh, artifact and
 ontology writes, lint fixes, doctor repairs, CLI-owned output destinations, and changeset recovery
-or publication. Canonical roots preserve protection across IDs, explicit paths, symlink aliases,
-and active-catalog overrides.
+or publication. Canonical roots preserve protection across IDs, explicit paths, symlink aliases, and
+active-catalog overrides.
 
 Managed snapshots carry origin/protection metadata outside upstream content. Direct cache-path
-access remains protected even without a consumer catalog. The entire managed repository snapshot
-is read-only, not just registered subdirectories. Cache management is a narrowly scoped exception
-for acquisition/recovery, not general authoring permission.
+access remains protected even without a consumer catalog. The entire managed repository snapshot is
+read-only, not just registered subdirectories. Cache management is a narrowly scoped exception for
+acquisition/recovery, not general authoring permission.
 
-The guarantee covers OKF-controlled writes and corruption detection. Shell redirection is opened
-by the shell; arbitrary tools and the owning user require filesystem permissions or a sandbox for
+The guarantee covers OKF-controlled writes and corruption detection. Shell redirection is opened by
+the shell; arbitrary tools and the owning user require filesystem permissions or a sandbox for
 stronger isolation. Disabling Git push does not prevent local mutation. A user-owned override
 checkout outside its consumer context has no universal catalog policy. The CLI does not claim
 operating-system-wide agent isolation.
@@ -275,9 +277,9 @@ fetches nor replaces conflicting authored snapshot requirements.
 | Legacy `--revision` | Supported historical command behavior; ambiguous mixed-repository use is rejected |
 
 Selections for members of one repository must agree. Merely sharing repository objects does not
-expand examination scope. External directory registrations remain identified as working-tree
-context unless explicitly selected at a snapshot. A historical catalog alone does not make every
-external input immutable.
+expand examination scope. External directory registrations remain identified as working-tree context
+unless explicitly selected at a snapshot. A historical catalog alone does not make every external
+input immutable.
 
 A common snapshot reader addresses repository object IDs and commit/path, independent of `.git`
 inside extracted caches. Historical concept IDs remain relative to the selected bundle subpath;
@@ -293,9 +295,9 @@ context. Historical instructions are inspected content, not automatically active
 ## CI and verification boundaries
 
 CI supplies read-only Git credentials, commits declarations and lock, explicitly syncs accepted
-objects, then runs offline sync check and scoped validation/lint. Noninteractive execution does
-not wait for credential prompts. An inaccessible private object may be indistinguishable from a
-missing one; diagnostics must not claim certainty the server does not provide.
+objects, then runs offline sync check and scoped validation/lint. Noninteractive execution does not
+wait for credential prompts. An inaccessible private object may be indistinguishable from a missing
+one; diagnostics must not claim certainty the server does not provide.
 
 `sync --check` verifies local correspondence, integrity, accepted versions, and required paths. It
 cannot prove remote reachability or credential validity. Core document validation, manifest

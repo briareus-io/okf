@@ -3,7 +3,9 @@ type: Command
 group: query
 mutates: false
 title: okf graph
-description: Renders the entire link graph or a direction- and depth-bounded neighborhood as mermaid, dot, or graphml.
+description: >-
+  Renders the entire link graph or a direction- and depth-bounded neighborhood as
+  mermaid, dot, or graphml.
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
@@ -23,10 +25,10 @@ Use [links](links.md) when only one concept's direct outbound targets are needed
 With `--json`, the selected graph artifact is returned as one `graph` record containing its
 format, root, direction, depth, and content.
 
-Cross-bundle nodes retain bundle identity, concept ID and version evidence. Registration alone
-does not widen examination scope. Edges preserve original references, unresolved statuses and
-optional provenance snapshot evidence; current candidates are separate from matched requests.
-Working-tree versions remain mutable rather than being labeled immutable commits.
+Cross-bundle nodes retain bundle identity, concept ID and version evidence. Registration alone does
+not widen examination scope. Edges preserve original references, unresolved statuses and optional
+provenance snapshot evidence; current candidates are separate from matched requests. Working-tree
+versions remain mutable rather than being labeled immutable commits.
 
 ## Filtered traversal
 
@@ -58,4 +60,4 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `graph,scope,bundle-node,bundle-edge`.
 
-Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--workspace-revision`.
+Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--selection`, `--workspace-revision`.

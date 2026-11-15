@@ -3,7 +3,9 @@ type: Command
 group: render
 mutates: true
 title: okf docs
-description: 'Generates documentation from a bundle: progressive-disclosure index.md files, or html, md, pdf, graphml, or obsidian output via --format.'
+description: >-
+  Generates documentation from a bundle: progressive-disclosure index.md files, or html,
+  md, pdf, graphml, or obsidian output via --format.
 sources:
 - resource: crates/okf-cli/src/commands/schema.rs
   kind: git-path
@@ -28,6 +30,6 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `docs,change`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`, `--selection`.
 
 `--format index` writes indexes throughout the bundle, replacing their bodies; it does not merge curated prose. Use it only when all affected index bodies are generated or replacement is already authorized. Preserve curated indexes and edit only necessary links otherwise. Validate after writes. Other formats emit output rather than updating indexes; the default is `md`.
