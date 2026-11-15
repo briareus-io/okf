@@ -141,6 +141,14 @@ fn unsupported_globals_hidden_and_machine_capabilities_explicit() {
     );
     assert_eq!(command("changeset plan")["mutates"], false);
     assert_eq!(command("changeset apply")["mutates"], true);
+    for name in ["changeset plan", "changeset apply", "changeset digest"] {
+        assert_eq!(command(name)["supported_globals"]["scope-bundle"], true);
+        assert_eq!(command(name)["supported_globals"]["catalog-scope"], true);
+    }
+    assert_eq!(
+        command("changeset recover")["supported_globals"]["scope-bundle"],
+        false
+    );
     assert_eq!(command("ontology field-type show")["mutates"], false);
 }
 

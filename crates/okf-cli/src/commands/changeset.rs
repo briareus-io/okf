@@ -5,17 +5,26 @@ use okf_core::error::{OkfError, Result};
 use okf_core::mutate::{changeset, transaction};
 use serde_json::json;
 
-pub fn run(command: &ChangeSetCmd, json_output: bool) -> Result<i32> {
+pub fn run(
+    command: &ChangeSetCmd,
+    json_output: bool,
+    scope_bundle: &[String],
+    catalog_scope: bool,
+) -> Result<i32> {
     let (args, apply) = match command {
         ChangeSetCmd::Plan(a) => (a, false),
         ChangeSetCmd::Apply(a) => (a, !a.dry_run),
         ChangeSetCmd::Digest(a) => {
             let root = resolve_bundle(a.bundle.as_deref())?;
-            let digest = changeset::digest_read_only(&root)?;
+            let (digest, examined) = changeset::digest_read_only_scoped_with_evidence(
+                &root,
+                scope_bundle,
+                catalog_scope,
+            )?;
             if json_output {
-                output::print_line(
-                    &json!({"kind":"baseline","schema_version":1,"bundle":root,"base_digest":digest}),
-                )?;
+                let mut record = json!({"kind":"baseline","schema_version":1,"bundle":root,"base_digest":digest});
+                add_scope_evidence(&mut record, &examined);
+                output::print_line(&record)?;
             } else {
                 output::print_text_line(format_args!("{digest}"))?;
             }
@@ -46,13 +55,10 @@ pub fn run(command: &ChangeSetCmd, json_output: bool) -> Result<i32> {
     let value = structured::parse_yaml(&raw)?;
     let set = serde_yaml::from_value(value)
         .map_err(|e| OkfError::Usage(format!("invalid change set: {e}")))?;
-    let plan = changeset::prepare(&root, &set)?;
     let _gate = args
         .require_ontology_gate
         .then(transaction::strengthen_ontology_gate);
-    if args.require_ontology_gate {
-        okf_core::mutate::gate::check_changes(&root, &plan.changes, true)?;
-    }
+    let plan = changeset::prepare_scoped(&root, &set, scope_bundle, catalog_scope)?;
     if args
         .expect
         .as_deref()
@@ -64,6 +70,7 @@ pub fn run(command: &ChangeSetCmd, json_output: bool) -> Result<i32> {
         ));
     }
     let digest = plan.base_digest.clone();
+    let examined = plan.examined_bundles();
     let count = plan.changes.len();
     let allowed_dangling = plan.allowed_dangling.clone();
     let records = plan.changes.iter().map(|c| {
@@ -99,9 +106,9 @@ pub fn run(command: &ChangeSetCmd, json_output: bool) -> Result<i32> {
         }
     }
     if json_output {
-        output::print_line(
-            &json!({"kind":"changeset-summary","base_digest":digest,"files":count,"applied":apply,"publication":"journaled-per-file","allowed_dangling":allowed_dangling.len()}),
-        )?;
+        let mut record = json!({"kind":"changeset-summary","base_digest":digest,"files":count,"applied":apply,"publication":"journaled-per-file","allowed_dangling":allowed_dangling.len()});
+        add_scope_evidence(&mut record, &examined);
+        output::print_line(&record)?;
     } else {
         output::print_text_line(format_args!(
             "{} {count} file(s); base digest: {digest}",
@@ -109,4 +116,12 @@ pub fn run(command: &ChangeSetCmd, json_output: bool) -> Result<i32> {
         ))?;
     }
     Ok(0)
+}
+
+fn add_scope_evidence(record: &mut serde_json::Value, examined: &[String]) {
+    if !examined.is_empty() {
+        // A successful scoped baseline requires every requested member to be examined.
+        // These identities come from the guarded capture, including the primary bundle.
+        record["scope"] = json!({"requested":examined,"examined":examined,"unavailable":[]});
+    }
 }

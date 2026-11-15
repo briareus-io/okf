@@ -19,6 +19,11 @@ Registering another bundle does not authorize automatic traversal. Request it wi
 `--scope-bundle` or deliberately use `--catalog-scope` on commands that support scope.
 Report requested scope, examined material, and unavailable members separately.
 
+`changeset plan`, `changeset apply`, and `changeset digest` accept these scope options
+for guarded examination of typed cross-bundle targets. Their write ownership remains the
+selected bundle. Use the same scope for a reviewed baseline and its later apply; see
+the [write-gate contract](../reference/command-contracts.md#apply-a-local-ontology-write-policy).
+
 ## References select targets, not examination scope
 
 Ordinary cross-bundle paths retain their filesystem-layout meaning. A logical authored link

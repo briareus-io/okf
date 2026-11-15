@@ -283,6 +283,54 @@ configuration leaves it disabled. There is no command-line override that weakens
 gate. The gate needs an available ontology and sufficiently complete checking. Existing
 unrelated violations can remain; new violations cannot be offset by fixing different ones.
 
+For typed references into another registered bundle, changeset plan and apply accept
+explicit read scope. For example, with `planning.main` and `product.main` registered:
+
+```sh
+okf changeset plan --bundle-id planning.main --from @plan.yaml \
+  --require-ontology-gate --scope-bundle product.main --json
+okf changeset apply --bundle-id planning.main --from @plan.yaml \
+  --require-ontology-gate --scope-bundle product.main --expect <base-digest>
+```
+
+Repeat `--scope-bundle` for additional targets, or deliberately use `--catalog-scope`.
+Use the same scope for the reviewed plan or `changeset digest` and its later apply.
+Scope broadens examination only: all operations still write to the selected bundle.
+Catalog registration alone does not broaden the gate's scope.
+Typed `okf://` references require explicit examination scope too; without it the gate
+returns `write-gate-incomplete` rather than treating them as external web links.
+
+In this scoped gate, a reference target rule such as `target: product.main:Specification`
+requires both the registered target bundle identity `product.main` and an actual concept
+type of `Specification`, or a subtype declared in that target bundle's ontology. The
+reference value still identifies the concept, for example `../product/spec.md` or
+`okf://product.main/spec.md`; the bundle root itself is not a typed concept. Unqualified
+target types also use the target bundle's ontology for inheritance. Exact type matches
+do not need a target ontology; checking a possible subtype does. The `bundle-id:Type`
+form is reserved for qualification in scoped gate matching; unscoped matching retains
+literal type-string behavior.
+
+An unexamined or unavailable target bundle produces `write-gate-incomplete`. A missing
+concept in an examined bundle is a broken reference; changeset reference validation may
+reject it before the ontology check. The gate treats a missing concept, wrong bundle
+identity, or incompatible target type as an ontology finding and rejects a new or worsened
+violation. Neither an existence check nor ungated plan success establishes typed correctness.
+
+The scoped baseline includes the selected bundle's existing baseline, whole examined
+target-bundle file snapshots, effective settings and ontology identity/content digests,
+catalog bytes and resolved registrations, workspace configuration, and requested scope.
+Consequently, even an unrelated authored file change in an examined target bundle can
+invalidate a reviewed digest. Apply rechecks these inputs and rejects a changed baseline;
+changed or unavailable scoped inputs when applying a retained plan are a
+`baseline-conflict`. A fresh command that cannot examine its requested scope can instead
+fail with `write-gate-incomplete` before it obtains a comparable baseline.
+
+Shared guards on examined working-tree target bundles remain held through publication
+of the selected bundle, excluding cooperating target writers. Catalog mappings are
+recaptured and checked before publication, but catalog edits and arbitrary filesystem
+editors are outside those bundle guards. This is not an atomic snapshot of all catalog
+and filesystem activity, nor a transaction that writes multiple bundles.
+
 Shared ontology changes can affect several bundles. A refusal identifies dependent bundles;
 use `--check-dependent-bundles` on the ontology command to examine them explicitly:
 
@@ -293,7 +341,8 @@ okf ontology update Note knowledge --description "A maintained note" --check-dep
 The operation publishes the sidecar, not consumer concept files. Unavailable required
 consumers block the update. Typed targets outside a consumer's examined bundle produce
 `write-gate-incomplete`; dependent-sidecar examination does not broaden ordinary reference
-traversal. This is a current capability limit, not an invalid-OKF verdict.
+traversal. The explicit changeset read scope described above applies to concept changes,
+not to ontology sidecar updates. An incomplete check is not an invalid-OKF verdict.
 
 ## Understand write guarantees
 

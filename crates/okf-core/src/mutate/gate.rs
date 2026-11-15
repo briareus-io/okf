@@ -3,7 +3,7 @@ use super::transaction::FileChange;
 use crate::bundle::loader::Bundle;
 use crate::error::{OkfError, Result};
 use crate::model::concept::{Concept, ConceptId};
-use crate::model::link::{LinkKind, classify, resolve_link};
+use crate::model::link::{LinkKind, LogicalReference, classify, resolve_link};
 use crate::ontology::field_types::{
     ViolationKind, check_concept_with_budget, concept_is_a, resolve_field,
 };
@@ -11,6 +11,185 @@ use crate::ontology::schema::Ontology;
 use serde_yaml::Value;
 use std::collections::BTreeMap;
 use std::path::Path;
+
+/// Frozen, explicitly examined reference targets. The caller binds these views and
+/// their catalog identities to the guarded publication; the gate never widens scope.
+#[derive(Debug, Clone)]
+pub struct Scope {
+    pub primary_id: String,
+    pub targets: BTreeMap<String, (Bundle, Option<Ontology>)>,
+}
+
+struct TargetView<'a> {
+    bundle_id: Option<&'a str>,
+    id: String,
+    concept: Option<&'a Concept>,
+    ontology: Option<&'a Ontology>,
+    local: bool,
+}
+
+fn incomplete(message: impl Into<String>) -> OkfError {
+    OkfError::classified(crate::error::FailureReason::WriteGateIncomplete, message)
+}
+
+fn is_concept_path(path: &Path, allow_extensionless: bool) -> bool {
+    !crate::bundle::walk::is_support_path(path)
+        && (path.extension().and_then(|s| s.to_str()) == Some("md")
+            || (allow_extensionless && path.extension().is_none()))
+        && !matches!(
+            path.file_stem().and_then(|s| s.to_str()),
+            Some("index" | "log")
+        )
+}
+
+/// Resolve against the primary prospective state or a frozen examined sibling.
+/// None means a genuinely external URI, not an unavailable OKF target.
+fn reference_target<'a>(
+    bundle: &'a Bundle,
+    ontology: &'a Ontology,
+    source: &ConceptId,
+    raw: &str,
+    scope: Option<&'a Scope>,
+) -> Result<Option<TargetView<'a>>> {
+    let logical = LogicalReference::parse(raw).map_err(|e| incomplete(e.to_string()))?;
+    if logical.is_none() && classify(raw) == LinkKind::External {
+        return Ok(None);
+    }
+    let local_root = std::fs::canonicalize(&bundle.root).unwrap_or_else(|_| bundle.root.clone());
+    let (owner, target_bundle, target_ontology, id, local, concept_path) = if let Some(logical) =
+        logical
+    {
+        let scope = scope.ok_or_else(|| {
+            incomplete(format!(
+                "logical reference requires explicit examination scope: {raw}"
+            ))
+        })?;
+        if logical.bundle == scope.primary_id {
+            (
+                Some(scope.primary_id.as_str()),
+                bundle,
+                Some(ontology),
+                ConceptId::from_relative(logical.path.strip_suffix(".md").unwrap_or(&logical.path))
+                    .0,
+                true,
+                is_concept_path(Path::new(&logical.path), true),
+            )
+        } else {
+            let (target, ontology) = scope.targets.get(&logical.bundle).ok_or_else(|| {
+                incomplete(format!(
+                    "reference to unexamined bundle: {}",
+                    logical.bundle
+                ))
+            })?;
+            (
+                Some(
+                    scope
+                        .targets
+                        .get_key_value(&logical.bundle)
+                        .expect("examined target")
+                        .0
+                        .as_str(),
+                ),
+                target,
+                ontology.as_ref(),
+                ConceptId::from_relative(logical.path.strip_suffix(".md").unwrap_or(&logical.path))
+                    .0,
+                false,
+                is_concept_path(Path::new(&logical.path), true),
+            )
+        }
+    } else if let Some(path) = crate::graph::catalog::ordinary_path(&local_root, &source.0, raw)
+        && !path.starts_with(&local_root)
+    {
+        let (owner, (target, ontology)) = scope
+            .and_then(|scope| {
+                scope
+                    .targets
+                    .iter()
+                    .filter(|(_, (target, _))| path.starts_with(&target.root))
+                    .max_by_key(|(_, (target, _))| target.root.components().count())
+            })
+            .ok_or_else(|| {
+                incomplete(format!(
+                    "reference outside examined bundle: {} {path:?}",
+                    source.0
+                ))
+            })?;
+        let relative = path.strip_prefix(&target.root).expect("target owns path");
+        let relative = relative.to_string_lossy();
+        (
+            Some(owner.as_str()),
+            target,
+            ontology.as_ref(),
+            ConceptId::from_relative(relative.strip_suffix(".md").unwrap_or(&relative)).0,
+            false,
+            is_concept_path(Path::new(relative.as_ref()), false),
+        )
+    } else {
+        (
+            scope.map(|scope| scope.primary_id.as_str()),
+            bundle,
+            Some(ontology),
+            resolve_link(source, raw).0,
+            true,
+            scope.is_none()
+                || crate::graph::catalog::ordinary_path(&local_root, &source.0, raw)
+                    .is_some_and(|path| is_concept_path(&path, false)),
+        )
+    };
+    Ok(Some(TargetView {
+        bundle_id: owner,
+        concept: concept_path.then(|| target_bundle.get(&id)).flatten(),
+        id,
+        ontology: target_ontology,
+        local,
+    }))
+}
+
+fn matches_target(target: &TargetView<'_>, expected: &[&str]) -> Result<bool> {
+    let actual = target.concept.and_then(Concept::concept_type).unwrap_or("");
+    let mut unknown_inheritance = false;
+    for expected in expected {
+        let expected = if target.bundle_id.is_some()
+            && let Some((bundle, name)) = expected.split_once(':')
+            && crate::bundle::catalog::valid_id(bundle)
+            && !name.is_empty()
+        {
+            if Some(bundle) != target.bundle_id {
+                continue;
+            }
+            name
+        } else {
+            expected
+        };
+        if actual == expected {
+            return Ok(true);
+        }
+        if let Some(ontology) = target.ontology {
+            if concept_is_a(ontology, actual, expected) {
+                return Ok(true);
+            }
+        } else if !actual.is_empty() {
+            unknown_inheritance = true;
+        }
+    }
+    if unknown_inheritance {
+        return Err(incomplete(format!(
+            "target ontology unavailable for inheritance check: {}:{}",
+            target.bundle_id.unwrap_or(""),
+            target.id
+        )));
+    }
+    Ok(false)
+}
+
+fn target_identity(target: &TargetView<'_>, identities: &BTreeMap<String, String>) -> String {
+    if target.local {
+        identities.get(&target.id).unwrap_or(&target.id).clone()
+    } else {
+        format!("{}:{}", target.bundle_id.unwrap_or(""), target.id)
+    }
+}
 
 type Findings = BTreeMap<String, usize>;
 fn rank(value: &str) -> u8 {
@@ -106,6 +285,7 @@ fn findings(
     bundle: &Bundle,
     ontology: &Ontology,
     identities: &BTreeMap<String, String>,
+    scope: Option<&Scope>,
 ) -> Result<Findings> {
     let mut out = Findings::new();
     for c in &bundle.concepts {
@@ -226,38 +406,22 @@ fn findings(
                     );
                     continue;
                 };
-                if classify(raw) == LinkKind::External {
+                let Some(target) = reference_target(bundle, ontology, &c.id, raw, scope)? else {
                     continue;
-                }
-                let local_root =
-                    std::fs::canonicalize(&bundle.root).unwrap_or_else(|_| bundle.root.clone());
-                if let Some(path) = crate::graph::catalog::ordinary_path(&local_root, &c.id.0, raw)
-                    && !path.starts_with(&local_root)
-                {
-                    return Err(OkfError::classified(
-                        crate::error::FailureReason::WriteGateIncomplete,
-                        format!("reference outside examined bundle: {id} {path:?}"),
-                    ));
-                }
-                let target = resolve_link(&c.id, raw);
-                let canonical_id = identities.get(&target.0).unwrap_or(&target.0);
-                match bundle.get(&target.0) {
+                };
+                let canonical_id = target_identity(&target, identities);
+                match target.concept {
                     None => record(
                         &mut out,
                         id,
                         "reference-missing",
                         &path,
                         &constraint,
-                        canonical_id,
+                        &canonical_id,
                     ),
                     Some(t) => {
                         let actual = t.concept_type().unwrap_or("");
-                        if !rule
-                            .target
-                            .types()
-                            .iter()
-                            .any(|expected| concept_is_a(ontology, actual, expected))
-                        {
+                        if !matches_target(&target, &rule.target.types())? {
                             record(
                                 &mut out,
                                 id,
@@ -288,24 +452,19 @@ fn findings(
                 .get(&edge.rule)
                 .and_then(|r| edge.authored_kind.as_ref().and_then(|k| r.kinds.get(k)))
                 .and_then(|k| k.target.as_ref())
-                && let Some(target) = bundle.get(&resolve_link(&c.id, &edge.raw_reference).0)
+                && let Some(target) =
+                    reference_target(bundle, ontology, &c.id, &edge.raw_reference, scope)?
+                && let Some(concept) = target.concept
             {
-                let actual = target.concept_type().unwrap_or("");
-                if !targets
-                    .types()
-                    .iter()
-                    .any(|t| concept_is_a(ontology, actual, t))
-                {
+                let actual = concept.concept_type().unwrap_or("");
+                if !matches_target(&target, &targets.types())? {
                     record(
                         &mut out,
                         id,
                         "relationship-target",
                         &edge.field_path,
                         &serialized(targets)?,
-                        &format!(
-                            "{}:{actual}",
-                            identities.get(&target.id.0).unwrap_or(&target.id.0)
-                        ),
+                        &format!("{}:{actual}", target_identity(&target, identities)),
                     );
                 }
             }
@@ -361,6 +520,25 @@ fn identity_payload(c: &Concept, ontology: &Ontology) -> String {
 }
 /// Check a final metadata state; moves can preserve findings only with unambiguous identity.
 pub fn check_changes(root: &Path, changes: &[FileChange], strengthen: bool) -> Result<()> {
+    check_changes_inner(root, changes, strengthen, None)
+}
+
+/// Check using frozen target bundles captured under the caller's publication guards.
+pub fn check_changes_scoped(
+    root: &Path,
+    changes: &[FileChange],
+    strengthen: bool,
+    scope: &Scope,
+) -> Result<()> {
+    check_changes_inner(root, changes, strengthen, Some(scope))
+}
+
+fn check_changes_inner(
+    root: &Path,
+    changes: &[FileChange],
+    strengthen: bool,
+    scope: Option<&Scope>,
+) -> Result<()> {
     if !changes.iter().any(|c| {
         c.path.extension().and_then(|s| s.to_str()) == Some("md")
             && !matches!(
@@ -429,8 +607,8 @@ pub fn check_changes(root: &Path, changes: &[FileChange], strengthen: bool) -> R
         }
     }
     compare(
-        &findings(&before, &ontology, &identities)?,
-        &findings(&after, &ontology, &BTreeMap::new())?,
+        &findings(&before, &ontology, &identities, scope)?,
+        &findings(&after, &ontology, &BTreeMap::new(), scope)?,
     )
 }
 /// Compare the whole consumer bundle under the prior and prospective sidecar definitions.
@@ -445,8 +623,8 @@ pub fn check_ontology_change(
     }
     let bundle = crate::bundle::loader::load_bundle(root)?;
     let old = before
-        .map(|o| findings(&bundle, o, &BTreeMap::new()))
+        .map(|o| findings(&bundle, o, &BTreeMap::new(), None))
         .transpose()?
         .unwrap_or_default();
-    compare(&old, &findings(&bundle, after, &BTreeMap::new())?)
+    compare(&old, &findings(&bundle, after, &BTreeMap::new(), None)?)
 }

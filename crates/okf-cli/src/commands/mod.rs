@@ -226,7 +226,7 @@ pub fn run(mut cli: Cli) -> Result<i32> {
             OntologyCmd::FieldType(cmd) => ontology::run_field_type(cmd, json),
             OntologyCmd::Apply(a) => ontology::run_apply(a, json),
         },
-        Command::Changeset(a) => changeset::run(a, json),
+        Command::Changeset(a) => changeset::run(a, json, &cli.scope_bundle, cli.catalog_scope),
         // RENDER
         Command::Docs(a) => render::run_docs(a, json),
     }

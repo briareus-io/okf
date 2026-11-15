@@ -9,9 +9,9 @@ sources:
 ---
 # Develop and document OKF
 
-`cargo xtask install` builds and installs the 0.6.4 CLI.
+`cargo xtask install` builds and installs the 0.6.5 CLI.
 Review the [migration guide](../reference/migrations/0.6.0.md) and
-[0.6.4 release notes](https://github.com/briareus-io/okf/blob/v0.6.4/releases/0.6.4.md) before running it over
+[0.6.5 release notes](https://github.com/briareus-io/okf/blob/v0.6.5/releases/0.6.5.md) before running it over
 an existing installation.
 
 ```sh

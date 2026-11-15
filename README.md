@@ -12,19 +12,22 @@ inspect workflow context and artifacts, and trace source impact.
 
 ## Install
 
-**CLI/plugin 0.6.4 upgrade:** read the [migration guide](knowledge/reference/migrations/0.6.0.md)
+**CLI/plugin 0.6.5 upgrade:** read the [migration guide](knowledge/reference/migrations/0.6.0.md)
 before updating an existing installation or automation. Install CLI and plugin together;
-the 0.6.4 plugin supports stable CLI versions `>=0.6.3, <0.7.0`. The document format remains OKF v0.2.
-Read the [0.6.4 release notes](releases/0.6.4.md) for changes and upgrade guidance.
+the 0.6.5 plugin supports stable CLI versions `>=0.6.5, <0.7.0`. The document format remains OKF v0.2.
+Read the [0.6.5 release notes](releases/0.6.5.md) for changes and upgrade guidance.
+Version 0.6.5 adds explicit read scope to ontology-gated changesets: use
+`--scope-bundle ID` or `--catalog-scope` to check registered targets while retaining
+single-bundle writes. Typed `okf://` references now require explicit examination scope.
 
 For a published release, download its matching installer, inspect it, then run it. If this
 checkout's version has not been published yet, use the source-build instructions below:
 
 ```sh
 curl --fail --location --proto '=https' --proto-redir '=https' \
-  https://github.com/briareus-io/okf/releases/download/v0.6.4/install.sh -o install.sh
+  https://github.com/briareus-io/okf/releases/download/v0.6.5/install.sh -o install.sh
 # Review install.sh before running it.
-sh install.sh 0.6.4
+sh install.sh 0.6.5
 export PATH="$HOME/.local/bin:$PATH"
 okf version
 ```

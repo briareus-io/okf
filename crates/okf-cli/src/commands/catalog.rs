@@ -385,7 +385,9 @@ pub fn prepare(cli: &mut Cli) -> Result<Option<i32>> {
     let scope_command = crate::exit::command_name(&cli.command);
     let supports_scope = crate::cli::supports_scope(&scope_command);
     if scoped && !supports_scope {
-        return Err(OkfError::Usage("scope flags are supported only by graph, backlinks, links, resolve, affected, lint, search, and list".into()));
+        return Err(OkfError::Usage(format!(
+            "scope flags are not supported by {scope_command}; see command help for supported options"
+        )));
     }
     if revision && !crate::cli::supports_revision(&scope_command) {
         return Err(OkfError::Usage("--revision is supported only by graph, backlinks, links, resolve, affected, search, and list; this command reads the working tree".into()));
@@ -537,6 +539,7 @@ pub fn prepare(cli: &mut Cli) -> Result<Option<i32>> {
                 | Command::Refresh(_)
                 | Command::Bundle(_)
                 | Command::Doctor(_)
+                | Command::Changeset(_)
         )
         && (context.catalog.is_some() || scoped || revision)
     {

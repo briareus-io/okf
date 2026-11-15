@@ -11,7 +11,7 @@ sources:
 ---
 # CLI globals and record contracts
 
-> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.6.4, OKF spec 0.2). Do not hand-edit; regenerate instead.
+> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.6.5, OKF spec 0.2). Do not hand-edit; regenerate instead.
 
 See the [command index](../commands/index.md) for individual arguments and [command contracts](command-contracts.md) for shared behavior. Skills carry focused generated references with their workflows.
 
@@ -45,7 +45,8 @@ Authored concept metadata remains open. These computed records describe scope, i
   "baseline": {
     "base_digest": "opaque string",
     "bundle": "path",
-    "schema_version": 1
+    "schema_version": 1,
+    "scope": "{requested:array<string>,examined:array<string>,unavailable:array<string>} (optional; explicit scoped baseline, includes primary)"
   },
   "bundle-affected": {
     "bundle": "string",
@@ -118,7 +119,8 @@ Authored concept metadata remains open. These computed records describe scope, i
     "applied": "boolean",
     "base_digest": "string",
     "files": "integer",
-    "publication": "journaled-per-file"
+    "publication": "journaled-per-file",
+    "scope": "{requested:array<string>,examined:array<string>,unavailable:array<string>} (optional; explicit scoped baseline, includes primary)"
   },
   "concept": {
     "discriminator": "no kind field is added; unprojected concept metadata",

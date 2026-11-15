@@ -21,6 +21,13 @@ The token covers the inputs declared by the changeset baseline contract; a
 later apply must recapture and compare the covered state. It is not a snapshot
 for arbitrary follow-up reads.
 
+With `--scope-bundle` or `--catalog-scope`, the token also covers examined target bundles
+and the catalog/configuration inputs that identify and interpret them. Use the same
+scope on the later apply. An unrelated file change within an examined bundle can
+invalidate the digest; obtaining a digest does not validate a proposed concept's types.
+See the [scoped write-gate contract](../reference/command-contracts.md#apply-a-local-ontology-write-policy)
+for coverage, conflict handling, and consistency limits.
+
 ## Arguments
 
 | Argument | Type | Required | Description |
@@ -31,4 +38,6 @@ Global `--json` requests NDJSON. The optional trailing `bundle` positional is a 
 
 Output stream: `baseline`.
 
-Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`.
+Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--scope-bundle`.
+
+Returns the baseline token without an operation document. Use the same `--scope-bundle` or `--catalog-scope` as the later scoped plan/apply to cover its examined target inputs. The token does not establish ontology correctness or approve an operation document; apply validates the proposed changes and rechecks its covered baseline.

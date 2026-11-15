@@ -1116,6 +1116,9 @@ pub fn supports_scope(name: &str) -> bool {
             | "catalog update"
             | "mv"
             | "rm"
+            | "changeset plan"
+            | "changeset apply"
+            | "changeset digest"
     )
 }
 pub fn supports_revision(name: &str) -> bool {

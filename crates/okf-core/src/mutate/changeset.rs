@@ -163,6 +163,139 @@ pub struct Plan {
     pub allowed_dangling: Vec<String>,
     before: BTreeMap<PathBuf, Vec<u8>>,
     interpretation: String,
+    scope: Option<ScopeBaseline>,
+    require_gate: bool,
+}
+
+/// Additional registered bundles are read dependencies, never write destinations.
+#[derive(Clone)]
+struct ScopeRequest {
+    bundles: Vec<String>,
+    catalog_scope: bool,
+}
+struct ScopeBaseline {
+    request: ScopeRequest,
+    signature: String,
+    examined: Vec<String>,
+}
+impl Plan {
+    /// Registered bundles whose inputs are bound to this scoped plan.
+    pub fn examined_bundles(&self) -> Vec<String> {
+        self.scope
+            .as_ref()
+            .map(|s| s.examined.clone())
+            .unwrap_or_default()
+    }
+}
+struct ScopeCapture {
+    gate: super::gate::Scope,
+    signature: String,
+    roots: Vec<PathBuf>,
+}
+fn incomplete(message: impl Into<String>) -> OkfError {
+    OkfError::classified(crate::error::FailureReason::WriteGateIncomplete, message)
+}
+fn conflict(message: impl Into<String>) -> OkfError {
+    OkfError::classified(crate::error::FailureReason::BaselineConflict, message)
+}
+fn scope_context(
+    root: &Path,
+    request: &ScopeRequest,
+) -> Result<(crate::bundle::context::Context, Vec<String>)> {
+    let context = crate::bundle::context::current_context(Some(&root.to_string_lossy()), None)?;
+    let catalog = context
+        .catalog
+        .as_ref()
+        .ok_or_else(|| incomplete("scoped changeset requires an available catalog"))?;
+    if context.primary.id.is_none() {
+        return Err(incomplete(
+            "scoped changeset requires a registered primary bundle",
+        ));
+    }
+    let ids = if request.catalog_scope {
+        catalog.entries.keys().cloned().collect::<BTreeSet<_>>()
+    } else {
+        request.bundles.iter().cloned().collect()
+    };
+    for id in &ids {
+        let entry = catalog
+            .entries
+            .get(id)
+            .ok_or_else(|| incomplete(format!("unknown scoped bundle: {id}")))?;
+        if !entry.available {
+            return Err(incomplete(format!("scoped bundle unavailable: {id}")));
+        }
+    }
+    Ok((context, ids.into_iter().collect()))
+}
+fn scope_roots(root: &Path, request: &ScopeRequest) -> Result<Vec<PathBuf>> {
+    let (context, ids) = scope_context(root, request)?;
+    let catalog = context.catalog.as_ref().unwrap();
+    Ok(ids
+        .iter()
+        .filter(|id| Some(id.as_str()) != context.primary.id.as_deref())
+        .map(|id| catalog.entries[id].root.clone())
+        .collect())
+}
+fn capture_scope(root: &Path, request: &ScopeRequest) -> Result<ScopeCapture> {
+    let (context, ids) = scope_context(root, request)?;
+    let catalog = context.catalog.as_ref().unwrap();
+    // Catalog bytes plus resolved entries cover registration and override changes.
+    // Effective settings below cover external sidecar contents and configuration.
+    let entries: Vec<_> = catalog.entries.values().map(|e| (e, &e.settings)).collect();
+    let mut evidence = vec![
+        serde_json::to_string(&(
+            &catalog.path,
+            std::fs::read(&catalog.path)?,
+            entries,
+            context
+                .config_path
+                .as_ref()
+                .map(std::fs::read)
+                .transpose()?,
+            &context.config_path,
+            &ids,
+            request.catalog_scope,
+        ))
+        .map_err(|e| OkfError::Internal(e.to_string()))?,
+    ];
+    let mut targets = BTreeMap::new();
+    let mut roots = Vec::new();
+    for id in ids {
+        if Some(id.as_str()) == context.primary.id.as_deref() {
+            continue;
+        }
+        let target = &catalog.entries[&id].root;
+        let files =
+            snapshot(target).map_err(|e| incomplete(format!("cannot examine {id}: {e}")))?;
+        let (settings, ontology) = crate::bundle::settings::load_for(target)
+            .map_err(|e| incomplete(format!("cannot interpret {id}: {e}")))?;
+        let interpretation =
+            serde_json::to_string(&settings).map_err(|e| OkfError::Internal(e.to_string()))?;
+        evidence.push(
+            serde_json::to_string(&(&id, target, digest(&files, &interpretation)))
+                .map_err(|e| OkfError::Internal(e.to_string()))?,
+        );
+        let bundle = snapshot_bundle(target, &files, None)
+            .map_err(|e| incomplete(format!("cannot examine {id}: {e}")))?;
+        roots.push(target.clone());
+        targets.insert(id, (bundle, ontology));
+    }
+    Ok(ScopeCapture {
+        gate: super::gate::Scope {
+            primary_id: context.primary.id.unwrap(),
+            targets,
+        },
+        signature: serde_json::to_string(&evidence)
+            .map_err(|e| OkfError::Internal(e.to_string()))?,
+        roots,
+    })
+}
+fn scoped_interpretation(interpretation: &str, scope: Option<&str>) -> String {
+    scope.map_or_else(
+        || interpretation.to_owned(),
+        |scope| serde_json::to_string(&(interpretation, scope)).expect("strings serialize"),
+    )
 }
 
 fn usage(s: impl Into<String>) -> OkfError {
@@ -610,7 +743,37 @@ fn control_paths(root: &Path, ontology: Option<&Path>) -> Result<BTreeSet<PathBu
 
 /// Preview and apply share this exact preparation. No bundle files are changed here.
 pub fn prepare(root: &Path, set: &ChangeSet) -> Result<Plan> {
+    prepare_scoped(root, set, &[], false)
+}
+
+pub fn prepare_scoped(
+    root: &Path,
+    set: &ChangeSet,
+    scope_bundle: &[String],
+    catalog_scope: bool,
+) -> Result<Plan> {
     let _guard = transaction::writer_lock(root)?;
+    let request = (!scope_bundle.is_empty() || catalog_scope).then(|| ScopeRequest {
+        bundles: scope_bundle.to_vec(),
+        catalog_scope,
+    });
+    let roots = request
+        .as_ref()
+        .map(|r| scope_roots(root, r))
+        .transpose()?
+        .unwrap_or_default();
+    let _readers = transaction::reader_locks(&roots)
+        .map_err(|e| incomplete(format!("cannot lock scoped examination: {e}")))?;
+    let scope = request
+        .as_ref()
+        .map(|r| capture_scope(root, r))
+        .transpose()?;
+    if scope.as_ref().is_some_and(|s| s.roots != roots) {
+        return Err(conflict(
+            "scope mapping changed while acquiring read barriers; preview again",
+        ));
+    }
+    let require_gate = transaction::ontology_gate_strengthened();
     if set.version != 1 || set.operations.is_empty() {
         return Err(usage(
             "change set requires version: 1 and nonempty operations",
@@ -621,7 +784,13 @@ pub fn prepare(root: &Path, set: &ChangeSet) -> Result<Plan> {
         serde_json::to_string(&settings).map_err(|e| OkfError::Internal(e.to_string()))?;
     let controls = control_paths(root, settings.ontology_path.as_deref())?;
     let before = snapshot(root)?;
-    let base_digest = digest(&before, &interpretation);
+    let base_digest = digest(
+        &before,
+        &scoped_interpretation(
+            &interpretation,
+            scope.as_ref().map(|s| s.signature.as_str()),
+        ),
+    );
     let workspace = Workspace::new()?;
     let _staging_evidence = transaction::suppress_publication_evidence();
     let stage = &workspace.0;
@@ -781,18 +950,51 @@ pub fn prepare(root: &Path, set: &ChangeSet) -> Result<Plan> {
         })
         .collect();
     transaction::preflight(root, &changes)?;
-    super::gate::check_changes(root, &changes, transaction::ontology_gate_strengthened())?;
+    if let Some(scope) = &scope {
+        super::gate::check_changes_scoped(root, &changes, require_gate, &scope.gate)?;
+        if capture_scope(root, request.as_ref().unwrap())?.signature != scope.signature {
+            return Err(conflict(
+                "scoped examination inputs changed during planning; preview again",
+            ));
+        }
+    } else {
+        super::gate::check_changes(root, &changes, require_gate)?;
+    }
     Ok(Plan {
         base_digest,
         changes,
         allowed_dangling,
         before,
         interpretation,
+        scope: scope.map(|scope| ScopeBaseline {
+            request: request.unwrap(),
+            signature: scope.signature,
+            examined: std::iter::once(scope.gate.primary_id)
+                .chain(scope.gate.targets.into_keys())
+                .collect(),
+        }),
+        require_gate,
     })
 }
 
 pub fn apply(root: &Path, plan: Plan, expected: Option<&str>) -> Result<()> {
     let guard = transaction::writer_lock(root)?;
+    let _gate = plan
+        .require_gate
+        .then(transaction::strengthen_ontology_gate);
+    let roots = plan
+        .scope
+        .as_ref()
+        .map(|s| scope_roots(root, &s.request))
+        .transpose()
+        .map_err(|e| {
+            conflict(format!(
+                "scoped examination unavailable since planning: {e}"
+            ))
+        })?
+        .unwrap_or_default();
+    let _readers = transaction::reader_locks(&roots)
+        .map_err(|e| conflict(format!("scoped examination cannot be guarded: {e}")))?;
     if expected.is_some_and(|value| value != plan.base_digest) {
         return Err(OkfError::classified(
             crate::error::FailureReason::BaselineConflict,
@@ -807,13 +1009,99 @@ pub fn apply(root: &Path, plan: Plan, expected: Option<&str>) -> Result<()> {
             "bundle or interpretation changed during planning; preview again",
         ));
     }
-    transaction::commit_locked(root, &guard, plan.changes)
+    if let Some(baseline) = &plan.scope {
+        let scope = capture_scope(root, &baseline.request).map_err(|e| {
+            conflict(format!(
+                "scoped examination unavailable since planning: {e}"
+            ))
+        })?;
+        if scope.roots != roots || scope.signature != baseline.signature {
+            return Err(conflict(
+                "scoped examination inputs changed since planning; preview again",
+            ));
+        }
+        super::gate::check_changes_scoped(
+            root,
+            &plan.changes,
+            transaction::ontology_gate_strengthened(),
+            &scope.gate,
+        )?;
+        if capture_scope(root, &baseline.request)
+            .map_err(|e| {
+                conflict(format!(
+                    "scoped examination changed before publication: {e}"
+                ))
+            })?
+            .signature
+            != baseline.signature
+        {
+            return Err(conflict(
+                "scoped examination inputs changed before publication; preview again",
+            ));
+        }
+        // The scoped check above replaces the single-bundle check; read barriers stay
+        // alive until journaled publication completes.
+        let _checked = transaction::suppress_ontology_gate();
+        transaction::commit_locked(root, &guard, plan.changes)
+    } else {
+        transaction::commit_locked(root, &guard, plan.changes)
+    }
 }
 
 /// Acquire the same covered baseline used by changeset plan and apply, without staging edits.
 pub fn digest_read_only(root: &Path) -> Result<String> {
+    digest_read_only_scoped(root, &[], false)
+}
+pub fn digest_read_only_scoped(
+    root: &Path,
+    scope_bundle: &[String],
+    catalog_scope: bool,
+) -> Result<String> {
+    Ok(digest_read_only_scoped_with_evidence(root, scope_bundle, catalog_scope)?.0)
+}
+
+/// Return the digest and registered examination IDs from the same guarded capture.
+pub fn digest_read_only_scoped_with_evidence(
+    root: &Path,
+    scope_bundle: &[String],
+    catalog_scope: bool,
+) -> Result<(String, Vec<String>)> {
     let _guard = transaction::writer_lock(root)?;
     let interpretation = serde_json::to_string(&crate::bundle::settings::load_for(root)?.0)
         .map_err(|e| OkfError::Internal(e.to_string()))?;
-    Ok(digest(&snapshot(root)?, &interpretation))
+    let request = (!scope_bundle.is_empty() || catalog_scope).then(|| ScopeRequest {
+        bundles: scope_bundle.to_vec(),
+        catalog_scope,
+    });
+    let roots = request
+        .as_ref()
+        .map(|r| scope_roots(root, r))
+        .transpose()?
+        .unwrap_or_default();
+    let _readers = transaction::reader_locks(&roots)
+        .map_err(|e| incomplete(format!("cannot lock scoped examination: {e}")))?;
+    let scope = request
+        .as_ref()
+        .map(|r| capture_scope(root, r))
+        .transpose()?;
+    if scope.as_ref().is_some_and(|s| s.roots != roots) {
+        return Err(conflict(
+            "scope mapping changed while acquiring read barriers; retry",
+        ));
+    }
+    let baseline = digest(
+        &snapshot(root)?,
+        &scoped_interpretation(
+            &interpretation,
+            scope.as_ref().map(|s| s.signature.as_str()),
+        ),
+    );
+    let examined = scope
+        .map(|scope| {
+            std::iter::once(scope.gate.primary_id)
+                .chain(scope.gate.targets.into_keys())
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok((baseline, examined))
 }

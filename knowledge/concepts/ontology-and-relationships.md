@@ -6,6 +6,8 @@ description: Use optional local types and explicit references without changing O
 sources:
 - resource: crates/okf-core/src/ontology/schema.rs
   kind: git-path
+- resource: crates/okf-core/src/mutate/gate.rs
+  kind: git-path
 ---
 # Ontology and relationships
 
@@ -21,6 +23,13 @@ which guides use a command, and which decisions explain a behavior?
 Relationship rules add a kind and inverse label to a declared reference. Backlinks are an
 incoming view of the authored assertion; they do not invent another assertion or imply consent.
 Nested selectors retain occurrence pairing when attributes and targets share a list item.
+
+Scoped ontology-gated changesets can check typed references into explicitly examined
+registered bundles. A rule target of `product.main:Specification` constrains the bundle
+identity and the target concept's type; it does not type the bundle root. The reference
+itself remains a path or logical `okf://` link to a concept. Inheritance is checked in the
+target bundle's ontology. See the [write-gate contract](../reference/command-contracts.md#apply-a-local-ontology-write-policy)
+for scope, unavailable targets, and guarded publication.
 
 Inspect the [actual ontology](../ontology.yaml), follow the
 [modeling guide](../guides/model-your-knowledge.md), and use

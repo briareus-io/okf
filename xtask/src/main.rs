@@ -61,7 +61,7 @@ fn main() {
         }
         Some("install") => {
             eprintln!(
-                "OKF CLI/plugin 0.6.4 fixes mv link rewriting and pipe exit status and hardens writes and Git handling. Review releases/0.6.4.md and knowledge/reference/migrations/0.6.0.md before installing."
+                "OKF CLI/plugin 0.6.5 adds scoped ontology-gated changesets and guarded cross-bundle validation. The plugin requires CLI >=0.6.5, <0.7.0. Review releases/0.6.5.md and knowledge/reference/migrations/0.6.0.md before installing."
             );
             if local_signing::enabled() {
                 let install_root = local_signing::install_root(&root);
@@ -594,6 +594,13 @@ fn command_guidance(name: &str) -> &'static str {
             Existing unrelated broken references may remain. Concept replacement/edit invalidates verification; content cannot supply verification. \
             Plan and `apply --dry-run` print all file diffs plus a base digest without publishing authored bundle content; coordination state may be created. \
             Use `apply --expect <base-digest>` to guard a reviewed baseline, with the same reviewed change document. \
+            Explicit `--scope-bundle` or `--catalog-scope` permits ontology-gated examination of registered target bundles; \
+            use the same scope for plan, digest, and apply. Read scope never authorizes writes outside the selected bundle. \
+            Scoped target rules such as `product.main:Specification` require that registered bundle identity and the actual target type, \
+            with inheritance evaluated in the target bundle's ontology. Unexamined or unavailable targets fail with `write-gate-incomplete`. \
+            Scoped baselines cover target bundle snapshots, interpretation inputs, catalog registrations and requested scope; \
+            unrelated target-file changes can invalidate a reviewed digest. Target read guards remain held through publication \
+            against cooperating writers; catalog mappings are rechecked, not locked as an atomic global snapshot. \
             Apply without `--expect` already prepares, validates, and rechecks its publication baseline in one invocation; \
             it cannot guard an application decision made before that invocation. \
             Publication is journaled and atomic per file. Ordinary working-tree CLI reads hold shared publication guards \
@@ -603,6 +610,11 @@ fn command_guidance(name: &str) -> &'static str {
             without a coordination guarantee against privileged or external writers. \
             Cooperating CLI writers refuse a pending transaction. Cross-bundle writes and configuration changes are unsupported. \
             On interrupted publication use `changeset recover`; do not remove the journal manually."
+        }
+        "changeset digest" => {
+            "Returns the baseline token without an operation document. Use the same `--scope-bundle` or `--catalog-scope` \
+            as the later scoped plan/apply to cover its examined target inputs. The token does not establish ontology correctness \
+            or approve an operation document; apply validates the proposed changes and rechecks its covered baseline."
         }
         "changeset recover" => {
             "Roll back an interrupted uncommitted publication, or finish cleanup of a committed one. \
