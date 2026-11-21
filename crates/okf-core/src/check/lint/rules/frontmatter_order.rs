@@ -11,6 +11,7 @@ pub fn run(ctx: &RuleContext<'_>) -> Vec<Finding> {
     ctx.bundle.concepts.iter().filter(|concept| {
         needs_order_normalization(concept, ctx.ontology).unwrap_or(false)
     }).map(|concept| Finding {
+                comparison_detail: None,
         rule: RULE.into(), code: None, field_path: None, severity,
         concept: Some(concept.id.0.clone()),
         message: "frontmatter should put type first, ontology fields next, and custom fields last (recursively); run okf lint --fix".into(),

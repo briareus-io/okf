@@ -1,5 +1,8 @@
 //! Typed scalar semantics from OKF v0.2.
 
+/// Explicit OKF v0.2 document lifecycle values.
+pub const LIFECYCLE_STATUSES: &[&str] = &["draft", "stable", "deprecated"];
+
 /// A parsed timestamp normalized for chronological comparison.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Timestamp {

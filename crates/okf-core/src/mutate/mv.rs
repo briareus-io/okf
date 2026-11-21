@@ -19,7 +19,7 @@
 use std::path::{Path, PathBuf};
 
 use pulldown_cmark::{Event, Parser, Tag};
-use serde_yaml::Value;
+use yaml_serde::Value;
 
 use crate::bundle::loader::load_bundle;
 use crate::error::{OkfError, Result};

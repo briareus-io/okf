@@ -1,6 +1,6 @@
 //! Structured frontmatter assignments, object paths and RFC 6902 patches.
 use serde::Deserialize;
-use serde_yaml::{Mapping, Value};
+use yaml_serde::{Mapping, Value};
 
 use crate::error::{OkfError, Result};
 use crate::model::frontmatter::Frontmatter;

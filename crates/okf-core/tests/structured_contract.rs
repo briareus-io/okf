@@ -4,7 +4,7 @@ use okf_core::ontology::load::parse_ontology;
 
 fn codes(ontology: &str, metadata: &str) -> Vec<(String, String)> {
     let ontology = parse_ontology(ontology).unwrap();
-    let metadata = Frontmatter::from_map(serde_yaml::from_str(metadata).unwrap());
+    let metadata = Frontmatter::from_map(yaml_serde::from_str(metadata).unwrap());
     check_concept(&ontology, &metadata, |_| None)
         .into_iter()
         .filter_map(|finding| match finding.kind {
@@ -125,7 +125,7 @@ fn missing_nested_branches_do_not_become_empty_selected_lists() {
     let concept = Concept {
         id: ConceptId::from_relative("note"),
         frontmatter: Frontmatter::from_map(
-            serde_yaml::from_str("type: Note\nnorms: []\ntags: []\n").unwrap(),
+            yaml_serde::from_str("type: Note\nnorms: []\ntags: []\n").unwrap(),
         ),
         body: String::new(),
     };
@@ -159,7 +159,7 @@ fn facet_numeric_ties_use_numeric_order_and_keep_scalar_types_distinct() {
         .map(|(i, value)| Concept {
             id: ConceptId::from_relative(&format!("note{i}")),
             frontmatter: Frontmatter::from_map(
-                serde_yaml::from_str(&format!("type: Note\nvalue: {value}\n")).unwrap(),
+                yaml_serde::from_str(&format!("type: Note\nvalue: {value}\n")).unwrap(),
             ),
             body: String::new(),
         })

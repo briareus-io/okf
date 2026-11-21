@@ -11,7 +11,7 @@
 //! or empty map). Required enums are omitted so validation can flag them instead of guessing.
 use std::path::{Path, PathBuf};
 
-use serde_yaml::{Mapping, Value};
+use yaml_serde::{Mapping, Value};
 
 use crate::error::{OkfError, Result};
 use crate::model::concept::{Concept, ConceptId};

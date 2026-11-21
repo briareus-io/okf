@@ -19,9 +19,9 @@ fn success(output: &Output) {
         String::from_utf8_lossy(&output.stderr)
     );
 }
-fn read_fm(dir: &std::path::Path, path: &str) -> serde_yaml::Value {
+fn read_fm(dir: &std::path::Path, path: &str) -> yaml_serde::Value {
     let text = std::fs::read_to_string(dir.join(path)).unwrap();
-    serde_yaml::from_str(text.split("---").nth(1).unwrap()).unwrap()
+    yaml_serde::from_str(text.split("---").nth(1).unwrap()).unwrap()
 }
 fn setup() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();

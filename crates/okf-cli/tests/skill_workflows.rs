@@ -193,14 +193,14 @@ fn nested_authoring(doc: &str) {
         "# Preserve this producer extension.\nx-owner: keep-me\nokf_ontology: '0.1'\nconcepts: {Team: {}, Procedure: {}}\n",
     )
     .unwrap();
-    let mut changes: serde_yaml::Value = serde_yaml::from_str(&model).unwrap();
+    let mut changes: yaml_serde::Value = yaml_serde::from_str(&model).unwrap();
     changes
         .as_mapping_mut()
         .unwrap()
-        .remove(serde_yaml::Value::String("okf_ontology".into()));
+        .remove(yaml_serde::Value::String("okf_ontology".into()));
     fs::write(
         root.path().join("changes.yaml"),
-        serde_yaml::to_string(&changes).unwrap(),
+        yaml_serde::to_string(&changes).unwrap(),
     )
     .unwrap();
     let baseline = fs::read(&ontology).unwrap();
@@ -445,7 +445,7 @@ fn migrate_example_document(root: &Path, bundle: &str, source_name: &str) {
     let original = fs::read_to_string(root.join(format!("legacy/{source_name}.md"))).unwrap();
     let (_, rest) = original.split_once("---\n").unwrap();
     let (metadata, body) = rest.split_once("---\n").unwrap();
-    let metadata: serde_yaml::Value = serde_yaml::from_str(metadata).unwrap();
+    let metadata: yaml_serde::Value = yaml_serde::from_str(metadata).unwrap();
     let body_file = root.join("migration-body.md");
     fs::write(
         &body_file,
@@ -719,8 +719,8 @@ fn structured_mutation() {
         ],
     );
     let content = fs::read_to_string(&concept).unwrap();
-    let metadata: serde_yaml::Value =
-        serde_yaml::from_str(content.split("---").nth(1).unwrap()).unwrap();
+    let metadata: yaml_serde::Value =
+        yaml_serde::from_str(content.split("---").nth(1).unwrap()).unwrap();
     assert_eq!(metadata["deadline"]["within"].as_i64(), Some(48));
     assert_eq!(
         metadata["norms"][0]["deadline"]["within"].as_i64(),

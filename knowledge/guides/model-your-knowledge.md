@@ -26,6 +26,12 @@ sources:
 Use this guide when you need to add structured metadata and make its relationships queryable. You
 need the CLI on PATH and a checkout containing the example artifacts.
 
+Check the [standard frontmatter fields](../concepts/bundles-and-concepts.md#standard-frontmatter-fields)
+before choosing a field name. Ontology editing commands, including `--dry-run`, report incompatible
+top-level `status` declarations in the resulting ontology. Text output sends the advisory to stderr.
+With `--json`, the `change` record includes a `findings` array when advisories are present.
+Even an advisory configured as `error` permits an otherwise valid write.
+
 ## Define and edit one guide
 
 This exercise uses a [Guide definition](../references/authoring/guide.yaml) and a

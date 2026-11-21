@@ -8,9 +8,9 @@ use crate::ontology::field_types::{
     ViolationKind, check_concept_with_budget, concept_is_a, resolve_field,
 };
 use crate::ontology::schema::Ontology;
-use serde_yaml::Value;
 use std::collections::BTreeMap;
 use std::path::Path;
+use yaml_serde::Value;
 
 /// Frozen, explicitly examined reference targets. The caller binds these views and
 /// their catalog identities to the guarded publication; the gate never widens scope.
@@ -227,7 +227,7 @@ fn canonical(value: &Value) -> String {
 }
 fn serialized<T: serde::Serialize>(value: &T) -> Result<String> {
     Ok(canonical(
-        &serde_yaml::to_value(value).map_err(|e| OkfError::Internal(e.to_string()))?,
+        &yaml_serde::to_value(value).map_err(|e| OkfError::Internal(e.to_string()))?,
     ))
 }
 // Build paths exactly as the field checker does. Ambiguous authored dotted keys are
@@ -290,7 +290,7 @@ fn findings(
     let mut out = Findings::new();
     for c in &bundle.concepts {
         let id = identities.get(&c.id.0).unwrap_or(&c.id.0);
-        let root = serde_yaml::to_value(&c.frontmatter.map)
+        let root = yaml_serde::to_value(&c.frontmatter.map)
             .map_err(|e| OkfError::Internal(e.to_string()))?;
         let definition = c
             .concept_type()

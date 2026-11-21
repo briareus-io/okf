@@ -24,6 +24,7 @@ pub fn run(ctx: &RuleContext<'_>) -> Vec<Finding> {
         let Some(entries) = value.as_sequence() else {
             if let Some(severity) = ctx.config.source_missing {
                 findings.push(Finding {
+                    comparison_detail: None,
                     code: Some("source-unavailable".into()),
                     field_path: Some("sources".into()),
                     rule: UNAVAILABLE_RULE.into(),
@@ -38,6 +39,7 @@ pub fn run(ctx: &RuleContext<'_>) -> Vec<Finding> {
             if let Some(message) = crate::check::stale::malformed_source_entry(entry, index) {
                 if let Some(severity) = ctx.config.source_missing {
                     findings.push(Finding {
+                        comparison_detail: None,
                         code: Some("source-unavailable".into()),
                         field_path: Some(format!("sources[{index}]")),
                         rule: UNAVAILABLE_RULE.into(),
@@ -55,6 +57,7 @@ pub fn run(ctx: &RuleContext<'_>) -> Vec<Finding> {
             if matches!(source.kind, SourceKind::Other(_)) {
                 if let Some(severity) = ctx.config.source_missing {
                     findings.push(Finding {
+                        comparison_detail: Some(source.resource.clone()),
                         code: Some("source-unsupported".into()),
                         field_path: Some("sources".into()),
                         rule: UNSUPPORTED_RULE.into(),
@@ -73,6 +76,7 @@ pub fn run(ctx: &RuleContext<'_>) -> Vec<Finding> {
                 && let Some(severity) = ctx.config.source_unrecorded
             {
                 findings.push(Finding {
+                comparison_detail: Some(source.resource.clone()),
                         code: None,
                         field_path: None,
                         rule: UNRECORDED_RULE.to_string(),
@@ -95,6 +99,7 @@ pub fn run(ctx: &RuleContext<'_>) -> Vec<Finding> {
                     .to_ascii_lowercase()
                     .contains("no such file");
                 findings.push(Finding {
+                    comparison_detail: Some(source.resource.clone()),
                     code: Some(
                         if missing {
                             "source-missing"

@@ -15,7 +15,7 @@ use crate::model::concept::ConceptId;
 use crate::model::link::{LinkKind, classify, raw_links, resolve_link};
 use crate::parse::{markdown::split_frontmatter, parse_concept};
 use crate::query::artifact::{ArtifactKind, ResolvedArtifact};
-use serde_yaml::Value;
+use yaml_serde::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DoctorSeverity {

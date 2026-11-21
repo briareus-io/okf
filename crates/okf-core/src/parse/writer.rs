@@ -49,7 +49,7 @@ pub fn write_concept_formatted(
         && let Some(ct) = concept
             .frontmatter
             .get("type")
-            .and_then(serde_yaml::Value::as_str)
+            .and_then(yaml_serde::Value::as_str)
             .and_then(|name| ontology.concepts.get(name))
     {
         for (name, field) in &ct.fields {
@@ -70,8 +70,8 @@ pub fn write_concept_formatted(
     Ok(assemble(&fm, &concept.body))
 }
 
-fn order_value(value: &mut serde_yaml::Value, ty: &crate::ontology::field_types::ResolvedType) {
-    use serde_yaml::{Mapping, Value};
+fn order_value(value: &mut yaml_serde::Value, ty: &crate::ontology::field_types::ResolvedType) {
+    use yaml_serde::{Mapping, Value};
     match value {
         Value::Mapping(map) => {
             let mut remaining = std::mem::take(map);

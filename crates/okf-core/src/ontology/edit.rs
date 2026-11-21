@@ -13,7 +13,7 @@ use crate::error::{OkfError, Result};
 
 use super::load::{parse_ontology, validate_ontology};
 use super::schema::{ConceptType, Field, FieldType, Ontology, ReferenceRule, RelationshipRule};
-use serde_yaml::{Mapping, Value};
+use yaml_serde::{Mapping, Value};
 
 /// Add a new concept type. Errors if a type with `name` already exists (use
 /// [`update_concept_type`] / [`upsert_concept_type`] to modify).
@@ -126,7 +126,7 @@ pub fn remove_relationship(
 /// declarations remain, and other supplied properties replace their complete value.
 pub fn merge_concept_type(existing: &ConceptType, definition: &Value) -> Result<ConceptType> {
     let supplied = mapping(definition, "concept definition")?;
-    let mut result = serde_yaml::to_value(existing).map_err(|e| OkfError::Yaml(e.to_string()))?;
+    let mut result = yaml_serde::to_value(existing).map_err(|e| OkfError::Yaml(e.to_string()))?;
     let out = result.as_mapping_mut().unwrap();
     for (key, value) in supplied {
         let name = key
@@ -148,7 +148,7 @@ pub fn merge_concept_type(existing: &ConceptType, definition: &Value) -> Result<
             out.insert(key.clone(), value.clone());
         }
     }
-    serde_yaml::from_value(result)
+    yaml_serde::from_value(result)
         .map_err(|e| OkfError::Usage(format!("invalid concept definition: {e}")))
 }
 
@@ -183,7 +183,7 @@ pub fn apply_changes(ontology: &mut Ontology, changes: &Value) -> Result<()> {
         let name = declaration_name(name)?;
         validate_field_type_name(&name)?;
         mapping(definition, "field-type definition")?;
-        let parsed = serde_yaml::from_value(definition.clone())
+        let parsed = yaml_serde::from_value(definition.clone())
             .map_err(|e| OkfError::Usage(format!("invalid field-type definition: {e}")))?;
         candidate.field_types.insert(name, parsed);
     }
@@ -309,7 +309,7 @@ pub fn to_yaml(ontology: &Ontology) -> Result<String> {
     // Validate the in-memory model, then round-trip through the parser as a belt-and-braces
     // check that what we are about to write parses back cleanly.
     validate_ontology(ontology)?;
-    let text = serde_yaml::to_string(ontology).map_err(|e| OkfError::Internal(e.to_string()))?;
+    let text = yaml_serde::to_string(ontology).map_err(|e| OkfError::Internal(e.to_string()))?;
     parse_ontology(&text)?;
     Ok(text)
 }

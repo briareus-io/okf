@@ -1,6 +1,6 @@
 //! Inspect an Attested Computation contract without executing it.
 
-use serde_yaml::Value;
+use yaml_serde::Value;
 
 use crate::bundle::loader::Bundle;
 use crate::error::{OkfError, Result};

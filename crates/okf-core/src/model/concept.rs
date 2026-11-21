@@ -2,7 +2,7 @@
 use super::frontmatter::Frontmatter;
 use super::standard::{parse_timestamp, valid_actor};
 use super::trust::{TrustTier, derive_trust_tier};
-use serde_yaml::Value;
+use yaml_serde::Value;
 
 /// A concept's ID is its bundle-relative path without the `.md` suffix, with a leading
 /// slash (e.g. `/tables/customers`).

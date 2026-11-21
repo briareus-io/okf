@@ -17,7 +17,10 @@ use crate::ontology::schema::Ontology;
 
 /// Severity of a lint finding, ordered `Info < Warn < Error` so a threshold is a simple
 /// comparison.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "lowercase")]
 pub enum Severity {
     Info,
     Warn,
@@ -35,8 +38,11 @@ impl Severity {
 }
 
 /// A single advisory finding.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct Finding {
+    /// Stable rule-specific subject used alongside rule, code, field and concept in lint baselines.
+    #[serde(skip)]
+    pub comparison_detail: Option<String>,
     pub rule: String,
     pub code: Option<String>,
     pub field_path: Option<String>,
@@ -197,6 +203,7 @@ mod tests {
 
     fn finding(sev: Severity) -> Finding {
         Finding {
+            comparison_detail: None,
             code: None,
             field_path: None,
             rule: "x".to_string(),

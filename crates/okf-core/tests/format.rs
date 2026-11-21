@@ -37,7 +37,7 @@ fn yaml_roundtrip_wrapping_and_idempotence() {
         let value = serde_json::json!({"type":"Note", "notes":[s], "nested":{"value":s}});
         let input = format!(
             "---\n{}---\n# Body\n",
-            serde_yaml::to_string(&value).unwrap()
+            yaml_serde::to_string(&value).unwrap()
         );
         let output = format_document(&input, &settings).unwrap();
         assert_eq!(

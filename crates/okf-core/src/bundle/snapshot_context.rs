@@ -108,6 +108,7 @@ pub struct SnapshotEvidence {
 }
 #[derive(Debug, Clone)]
 pub struct SnapshotContext {
+    pub workspace_commit: Option<String>,
     pub context: Context,
     pub selection: SnapshotSelection,
     pub evidence: Vec<SnapshotEvidence>,
@@ -202,6 +203,7 @@ pub fn prepare_primary_revision(current: &Context, revision: &str) -> Result<Sna
         }
     }
     Ok(SnapshotContext {
+        workspace_commit: Some(tree.commit.clone()),
         context,
         selection: SnapshotSelection {
             workspace_revision: Some(tree.commit.clone()),
@@ -241,6 +243,7 @@ pub fn prepare_with(
     )?;
     let selection = normalized;
     let mut context = current.clone();
+    let mut workspace_commit = None;
     let mut mappings = BTreeMap::new();
     let mut evidence = Vec::new();
     let mut scope: BTreeSet<String> = examined_ids.iter().cloned().collect();
@@ -260,6 +263,7 @@ pub fn prepare_with(
             anchor
         };
         let tree = backend.materialize(base, revision)?;
+        workspace_commit = Some(tree.commit.clone());
         let old_primary = source_path(&current.primary.root)?;
         context.primary.root = mapped(&old_primary, &tree);
         mappings.insert(old_primary.clone(), context.primary.root.clone());
@@ -275,7 +279,7 @@ pub fn prepare_with(
             let mut catalog = load_catalog(&historical_path, None)?;
             // Relative locations escaping the workspace remain external working-tree context.
             let authored: super::catalog::CatalogFile =
-                serde_yaml::from_str(&std::fs::read_to_string(&historical_path)?)
+                yaml_serde::from_str(&std::fs::read_to_string(&historical_path)?)
                     .map_err(|e| OkfError::Usage(format!("invalid historical catalog: {e}")))?;
             for (id, declaration) in &authored.bundles {
                 if declaration.location.type_ == "directory" {
@@ -376,7 +380,7 @@ pub fn prepare_with(
                 .settings
                 .get("remote")
                 .and_then(|origin| origin.get("commit"))
-                .and_then(serde_yaml::Value::as_str)
+                .and_then(yaml_serde::Value::as_str)
                 .is_some_and(|accepted| accepted != tree.commit);
             changed.root = root.clone();
             changed.available = root.is_dir();
@@ -394,6 +398,7 @@ pub fn prepare_with(
         }
     }
     Ok(SnapshotContext {
+        workspace_commit,
         context,
         selection,
         evidence,

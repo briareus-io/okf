@@ -3,7 +3,7 @@ use std::io::Read;
 use std::mem::MaybeUninit;
 
 use okf_core::error::{OkfError, Result};
-use serde_yaml::Value;
+use yaml_serde::Value;
 
 /// Resolve literal text, `@file`, or one stdin input per invocation.
 #[derive(Default)]
@@ -67,10 +67,10 @@ pub fn preview_diff(path: &std::path::Path, before: &str, after: &str) -> String
 }
 
 /// Parse one YAML document with string mapping keys and no tags/anchors/aliases.
-/// `serde_yaml::Value` rejects duplicate mapping keys, including nested duplicates.
+/// `yaml_serde::Value` rejects duplicate mapping keys, including nested duplicates.
 pub fn parse_yaml(input: &str) -> Result<Value> {
     check_tokens(input)?;
-    let value: Value = serde_yaml::from_str(input)
+    let value: Value = yaml_serde::from_str(input)
         .map_err(|e| OkfError::Usage(format!("invalid structured YAML: {e}")))?;
     check_value(&value, 0)?;
     Ok(value)
@@ -113,7 +113,7 @@ fn check_value(value: &Value, depth: usize) -> Result<()> {
 }
 
 /// Inspect tokens before deserialization so aliases cannot expand or lose their identity.
-/// Uses the same YAML scanner dependency as serde_yaml; token inspection leaves quoted and
+/// Uses the same YAML scanner dependency as yaml_serde; token inspection leaves quoted and
 /// block scalar contents untouched.
 fn check_tokens(input: &str) -> Result<()> {
     use unsafe_libyaml as unsafe_yaml;

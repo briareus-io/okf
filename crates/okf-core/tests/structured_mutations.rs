@@ -7,17 +7,17 @@ use okf_core::mutate::structured::{
     PatchOperation, StructuredEdits, object_path, parse_path_assignment, pointer,
 };
 use okf_core::parse::parse_concept;
-use serde_yaml::Value;
+use yaml_serde::Value;
 
 fn yaml(text: &str) -> Value {
-    serde_yaml::from_str(text).unwrap()
+    yaml_serde::from_str(text).unwrap()
 }
 fn fm(text: &str) -> Frontmatter {
-    Frontmatter::from_map(serde_yaml::from_str(text).unwrap())
+    Frontmatter::from_map(yaml_serde::from_str(text).unwrap())
 }
 fn patch(text: &str) -> StructuredEdits {
     StructuredEdits {
-        patch: serde_yaml::from_str(text).unwrap(),
+        patch: yaml_serde::from_str(text).unwrap(),
         ..Default::default()
     }
 }
@@ -351,13 +351,13 @@ fn patch_operations_require_all_standard_members() {
         "[{op: remove}]",
     ] {
         assert!(
-            serde_yaml::from_str::<Vec<PatchOperation>>(malformed).is_err(),
+            yaml_serde::from_str::<Vec<PatchOperation>>(malformed).is_err(),
             "{malformed}"
         );
     }
     // RFC 6902 requires operation members not defined by the operation to be ignored.
     let operations: Vec<PatchOperation> =
-        serde_yaml::from_str("[{op: add, path: /x, value: null, ignored: true}]").unwrap();
+        yaml_serde::from_str("[{op: add, path: /x, value: null, ignored: true}]").unwrap();
     assert_eq!(operations.len(), 1);
 }
 

@@ -13,7 +13,7 @@
 use std::path::Path;
 use std::path::PathBuf;
 
-use serde_yaml::{Mapping, Value};
+use yaml_serde::{Mapping, Value};
 
 use crate::error::{OkfError, Result};
 use crate::model::concept::ConceptId;

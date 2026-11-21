@@ -10,7 +10,7 @@ use crate::{
 };
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use serde_yaml::Value;
+use yaml_serde::Value;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Relationship {
@@ -134,7 +134,7 @@ pub fn relationships(concept: &Concept, ontology: &Ontology) -> Vec<Relationship
     else {
         return vec![];
     };
-    let root = serde_yaml::to_value(&concept.frontmatter.map).unwrap_or_default();
+    let root = yaml_serde::to_value(&concept.frontmatter.map).unwrap_or_default();
     let mut out = Vec::new();
     for (name, rule) in &ct.relationships {
         let Some(reference) = ct.references.get(&rule.reference) else {

@@ -118,7 +118,7 @@ fn capture(
             ctx.catalog.as_ref().and_then(|c| {
                 std::fs::read(&c.path)
                     .ok()
-                    .and_then(|b| serde_yaml::from_slice::<super::catalog::CatalogFile>(&b).ok())
+                    .and_then(|b| yaml_serde::from_slice::<super::catalog::CatalogFile>(&b).ok())
                     .and_then(|f| {
                         f.catalog_overrides
                             .map(|p| c.path.parent().unwrap_or(cwd).join(p))

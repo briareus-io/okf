@@ -264,10 +264,10 @@ pub fn fingerprint_bundle_resource(
     let reference = crate::model::link::LogicalReference::parse(&source.resource)?
         .ok_or_else(|| OkfError::Usage("bundle-resource requires an okf:// reference".into()))?;
     if let Some(declared) = source.extra.get("bundle_ref") {
-        let _: crate::graph::catalog::BundleRef = serde_yaml::from_value(declared.clone())
+        let _: crate::graph::catalog::BundleRef = yaml_serde::from_value(declared.clone())
             .map_err(|e| OkfError::Usage(format!("invalid bundle_ref: {e}")))?;
-        if declared.get("id").and_then(serde_yaml::Value::as_str) != Some(&reference.bundle)
-            || declared.get("path").and_then(serde_yaml::Value::as_str) != Some(&reference.path)
+        if declared.get("id").and_then(yaml_serde::Value::as_str) != Some(&reference.bundle)
+            || declared.get("path").and_then(yaml_serde::Value::as_str) != Some(&reference.path)
         {
             return Err(OkfError::Usage(
                 "logical URI and bundle_ref disagree".into(),
@@ -282,7 +282,7 @@ pub fn fingerprint_bundle_resource(
                 .and_then(|c| c.entries.get(&reference.bundle))
                 .ok_or_else(|| OkfError::Usage("unknown bundle ID".into()))?;
             let expected = declared.get("snapshot").unwrap();
-            if let Some(commit) = expected.get("commit").and_then(serde_yaml::Value::as_str) {
+            if let Some(commit) = expected.get("commit").and_then(yaml_serde::Value::as_str) {
                 let actual = if let Some(origin) = crate::bundle::remote::origin(&entry.root)? {
                     origin.commit
                 } else {
@@ -322,7 +322,7 @@ pub fn fingerprint_bundle_resource(
         .get("bundle_ref")
         .and_then(|v| v.get("snapshot"))
         .and_then(|v| v.get("commit"))
-        .and_then(serde_yaml::Value::as_str)
+        .and_then(yaml_serde::Value::as_str)
     {
         let historical = crate::bundle::remote::read_snapshot(&root, commit, &path)?;
         if historical != bytes {
@@ -334,7 +334,7 @@ pub fn fingerprint_bundle_resource(
         .get("bundle_ref")
         .and_then(|v| v.get("snapshot"))
         .and_then(|v| v.get("digest"))
-        .and_then(serde_yaml::Value::as_str)
+        .and_then(yaml_serde::Value::as_str)
         && expected.strip_prefix("sha256:").unwrap_or(expected) != digest
     {
         return Err(OkfError::Usage(

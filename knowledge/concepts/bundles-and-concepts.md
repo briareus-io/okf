@@ -25,6 +25,22 @@ are usable examples. `ontology.yaml` is the optional local modeling sidecar;
 `okf-bundle.yaml` carries portable settings, guidance, and workflows. A workspace catalog
 registers bundle IDs and locations; a standalone bundle does not require one.
 
+## Standard frontmatter fields
+
+| Field or family | Meaning in OKF v0.2 |
+|-----------------|---------------------|
+| `type` | Required non-empty concept type. Bundles can define their own type names. |
+| `title`, `description`, `tags`, `resource` | Optional discovery metadata for the display name, one-line summary, tags, and represented resource. |
+| `status`, `stale_after` | Optional document lifecycle and freshness. Explicit status values are `draft`, `stable`, and `deprecated`. An absent status means `stable`. |
+| `sources`, `usage_window` | Provenance entries identify sources by resource. A usage window can give the time interval for source usage counts. |
+| `generated`, `verified` | Generation and verification evidence, including actors and timestamps. |
+| `runtime`, `parameters`, `computation`, `executor`, `attester` | Fields of the exact `Attested Computation` contract. See [computation check](../commands/computation-check.md) for its requirements and inline computation form. |
+
+A local ontology can require an explicit lifecycle status or narrow its values to a subset
+such as `[draft, stable]`. For a workflow with states such as `open` and `closed`, use a custom
+field such as `workflow_state`. This manual uses `decision_status` for `accepted` and
+`superseded`. A nested field such as `ticket.status` can have its own vocabulary.
+
 ## Knowledge and support files
 
 The optional root `.okf-bundle/` directory holds scripts, templates, longer instructions,

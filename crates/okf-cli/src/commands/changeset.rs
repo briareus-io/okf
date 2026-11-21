@@ -53,7 +53,7 @@ pub fn run(
     let root = resolve_bundle(args.bundle.as_deref())?;
     let raw = structured::InputReader::default().read(&args.from)?;
     let value = structured::parse_yaml(&raw)?;
-    let set = serde_yaml::from_value(value)
+    let set = yaml_serde::from_value(value)
         .map_err(|e| OkfError::Usage(format!("invalid change set: {e}")))?;
     let _gate = args
         .require_ontology_gate

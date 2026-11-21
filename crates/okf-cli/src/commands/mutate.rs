@@ -143,7 +143,7 @@ fn parse_structured(
         })
         .collect::<Result<_>>()?;
     let patch = match patch {
-        Some(raw) => serde_yaml::from_value(parse_yaml(&reader.read(raw)?)?)
+        Some(raw) => yaml_serde::from_value(parse_yaml(&reader.read(raw)?)?)
             .map_err(|e| okf_core::error::OkfError::Usage(format!("invalid --patch: {e}")))?,
         None => Vec::new(),
     };
@@ -335,7 +335,7 @@ fn parse_source_args(args: &[String]) -> Result<Vec<Source>> {
                     "id" | "title" | "author" | "last_modified" if !value.trim().is_empty() => {
                         extra.insert(
                             key.trim().to_string(),
-                            serde_yaml::Value::String(value.trim().to_string()),
+                            yaml_serde::Value::String(value.trim().to_string()),
                         );
                     }
                     "usage_count" if value.trim().parse::<u64>().is_ok() => {
@@ -345,7 +345,7 @@ fn parse_source_args(args: &[String]) -> Result<Vec<Source>> {
                             .expect("invariant: guard verified the value parses");
                         extra.insert(
                             "usage_count".to_string(),
-                            serde_yaml::Value::Number(count.into()),
+                            yaml_serde::Value::Number(count.into()),
                         );
                     }
                     other => {
@@ -384,7 +384,7 @@ fn parse_source_json_args(args: &[String], reader: &mut InputReader) -> Result<V
     args.iter()
         .map(|raw| {
             let content = reader.read(raw)?;
-            let value: serde_yaml::Value = serde_yaml::from_str(&content)
+            let value: yaml_serde::Value = yaml_serde::from_str(&content)
                 .map_err(|e| OkfError::Usage(format!("invalid --add-source-json: {e}")))?;
             let source = Source::from_value(&value).ok_or_else(|| {
                 OkfError::Usage("--add-source-json must be a source mapping".to_string())

@@ -2,7 +2,7 @@
 use crate::bundle::loader::Bundle;
 use crate::model::concept::Concept;
 use pulldown_cmark::{Event, Parser, TagEnd};
-use serde_yaml::Value;
+use yaml_serde::Value;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum TextMatchMode {
@@ -306,7 +306,7 @@ fn body_line(body: &str, source_offset: usize) -> usize {
 fn yaml_text(value: &Value) -> String {
     match value {
         Value::String(value) => value.clone(),
-        _ => serde_yaml::to_string(value)
+        _ => yaml_serde::to_string(value)
             .unwrap_or_default()
             .trim()
             .to_string(),
@@ -459,7 +459,7 @@ fn body_line_offset(concept: &Concept) -> usize {
     if concept.frontmatter.map.is_empty() {
         2
     } else {
-        serde_yaml::to_string(&concept.frontmatter.map)
+        yaml_serde::to_string(&concept.frontmatter.map)
             .map_or(2, |frontmatter| frontmatter.lines().count() + 2)
     }
 }

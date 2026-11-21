@@ -244,7 +244,7 @@ fn fail_on_threshold_drives_exit_decision() {
 // --- stale (drift) via the public StaleChecker over fakes -------------------
 
 fn concept(id: &str, yaml: &str) -> Concept {
-    let map: indexmap::IndexMap<String, serde_yaml::Value> = serde_yaml::from_str(yaml).unwrap();
+    let map: indexmap::IndexMap<String, yaml_serde::Value> = yaml_serde::from_str(yaml).unwrap();
     Concept {
         id: ConceptId::from_relative(id),
         frontmatter: Frontmatter::from_map(map),

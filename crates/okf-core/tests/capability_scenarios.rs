@@ -11,7 +11,7 @@ use std::fmt::Write as _;
 
 fn findings(schema: &str, metadata: &str) -> Vec<(String, String)> {
     let o = parse_ontology(schema).unwrap();
-    let f = Frontmatter::from_map(serde_yaml::from_str(metadata).unwrap());
+    let f = Frontmatter::from_map(yaml_serde::from_str(metadata).unwrap());
     check_concept(&o, &f, |_| None)
         .into_iter()
         .filter_map(|v| match v.kind {
@@ -133,14 +133,14 @@ fn unknown_constraints_remain_visible_and_root_metadata_stays_open() {
     assert_eq!(f, vec![("metadata-unenforced".into(), "value".into())]);
     let ontology = parse_ontology(schema).unwrap();
     assert!(
-        serde_yaml::to_string(&ontology)
+        yaml_serde::to_string(&ontology)
             .unwrap()
             .contains("x-unimplemented")
     );
 }
 #[test]
 fn selector_subset_and_case_sensitive_explicit_traversal() {
-    let root: serde_yaml::Value = serde_yaml::from_str(
+    let root: yaml_serde::Value = yaml_serde::from_str(
         "norms:\n- action.name: inspect\n- other: false\npolicy.status: live\nquote\"key: yes\n",
     )
     .unwrap();
@@ -195,7 +195,7 @@ fn reference_cardinality_counts_duplicate_and_unresolved_occurrences() {
     let schema = "okf_ontology: '0.1'\nconcepts:\n  Note:\n    references:\n      links: {selector: 'rows[].target', target: Note, cardinality: 0..1}\n";
     let o = parse_ontology(schema).unwrap();
     let f = Frontmatter::from_map(
-        serde_yaml::from_str("type: Note\nrows: [{target: /missing}, {target: /missing}]\n")
+        yaml_serde::from_str("type: Note\nrows: [{target: /missing}, {target: /missing}]\n")
             .unwrap(),
     );
     let violations = check_concept(&o, &f, |_| None);

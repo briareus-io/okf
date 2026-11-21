@@ -14,6 +14,7 @@ pub fn run(ctx: &RuleContext<'_>) -> Vec<Finding> {
     for concept in &ctx.bundle.concepts {
         if concept.title().is_none_or(|t| t.trim().is_empty()) {
             out.push(Finding {
+                comparison_detail: None,
                 code: None,
                 field_path: None,
                 rule: RULE.to_string(),

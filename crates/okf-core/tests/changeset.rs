@@ -91,13 +91,13 @@ fn unchanged_binary_artifacts_stay_covered_by_apply_baseline() {
 fn structured_create_preserves_unknown_values_and_rejects_verified() {
     let root = tempfile::tempdir().unwrap();
     let input = "version: 1\noperations:\n- op: create\n  path: new\n  frontmatter:\n    type: Note\n    custom: {count: 7, active: true}\n  body: '# New'\n";
-    let set: ChangeSet = serde_yaml::from_str(input).unwrap();
+    let set: ChangeSet = yaml_serde::from_str(input).unwrap();
     let plan = changeset::prepare(root.path(), &set).unwrap();
     changeset::apply(root.path(), plan, None).unwrap();
     let created = fs::read_to_string(root.path().join("new.md")).unwrap();
     assert!(created.contains("count: 7"), "{created}");
     assert!(created.contains("active: true"), "{created}");
-    let invalid: ChangeSet = serde_yaml::from_str("version: 1\noperations:\n- op: create\n  path: other\n  frontmatter: {type: Note, verified: []}\n").unwrap();
+    let invalid: ChangeSet = yaml_serde::from_str("version: 1\noperations:\n- op: create\n  path: other\n  frontmatter: {type: Note, verified: []}\n").unwrap();
     assert!(changeset::prepare(root.path(), &invalid).is_err());
 }
 
@@ -106,7 +106,7 @@ fn allow_dangling_only_waives_removed_target_references() {
     let root = tempfile::tempdir().unwrap();
     fs::write(root.path().join("old.md"), note("old\n")).unwrap();
     fs::write(root.path().join("ref.md"), note("[old](old.md)\n")).unwrap();
-    let set: ChangeSet = serde_yaml::from_str(
+    let set: ChangeSet = yaml_serde::from_str(
         "version: 1\noperations:\n- op: remove\n  path: old\n  allow_dangling: true\n",
     )
     .unwrap();

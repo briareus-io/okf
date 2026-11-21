@@ -22,7 +22,7 @@ pub enum Operation {
     },
     CreateStructured {
         path: String,
-        frontmatter: serde_yaml::Mapping,
+        frontmatter: yaml_serde::Mapping,
         body: String,
     },
     Replace {
@@ -62,7 +62,7 @@ enum OperationInput {
     Create {
         path: String,
         content: Option<String>,
-        frontmatter: Option<serde_yaml::Mapping>,
+        frontmatter: Option<yaml_serde::Mapping>,
         body: Option<String>,
     },
     Replace {
@@ -477,7 +477,7 @@ fn write_document(root: &Path, path: &str, content: &str, replace: bool) -> Resu
 fn write_structured_document(
     root: &Path,
     path: &str,
-    frontmatter: &serde_yaml::Mapping,
+    frontmatter: &yaml_serde::Mapping,
     body: &str,
 ) -> Result<()> {
     let (id, rel) = concept_path(path)?;
@@ -688,10 +688,10 @@ fn missing(
             .concept_type()
             .and_then(|name| ontology.and_then(|o| o.concepts.get(name)))
         {
-            fn strings<'a>(value: &'a serde_yaml::Value, out: &mut Vec<&'a str>) {
+            fn strings<'a>(value: &'a yaml_serde::Value, out: &mut Vec<&'a str>) {
                 match value {
-                    serde_yaml::Value::String(s) if !s.trim().is_empty() => out.push(s),
-                    serde_yaml::Value::Sequence(items) => {
+                    yaml_serde::Value::String(s) if !s.trim().is_empty() => out.push(s),
+                    yaml_serde::Value::Sequence(items) => {
                         for item in items {
                             strings(item, out);
                         }
@@ -720,13 +720,13 @@ fn missing(
         if let Some(sources) = concept
             .frontmatter
             .get("sources")
-            .and_then(serde_yaml::Value::as_sequence)
+            .and_then(yaml_serde::Value::as_sequence)
         {
             for source in sources {
-                let Some(raw) = source.get("resource").and_then(serde_yaml::Value::as_str) else {
+                let Some(raw) = source.get("resource").and_then(yaml_serde::Value::as_str) else {
                     continue;
                 };
-                match source.get("kind").and_then(serde_yaml::Value::as_str) {
+                match source.get("kind").and_then(yaml_serde::Value::as_str) {
                     Some("file" | "line-range" | "markdown-heading") => {
                         check(&concept.id.0, raw, true);
                     }
@@ -738,7 +738,7 @@ fn missing(
         if let Some(raw) = concept
             .frontmatter
             .get("computation")
-            .and_then(serde_yaml::Value::as_str)
+            .and_then(yaml_serde::Value::as_str)
         {
             check(&concept.id.0, raw, false);
         }
@@ -747,7 +747,7 @@ fn missing(
                 .frontmatter
                 .get(key)
                 .and_then(|v| v.get("resource"))
-                .and_then(serde_yaml::Value::as_str)
+                .and_then(yaml_serde::Value::as_str)
             {
                 check(&concept.id.0, raw, false);
             }

@@ -61,7 +61,7 @@ fn main() {
         }
         Some("install") => {
             eprintln!(
-                "OKF CLI/plugin 0.6.6 adds recovery-safe selection receipts and logical-reference changeset validation. The plugin requires CLI >=0.6.6, <0.7.0. Review releases/0.6.6.md and knowledge/reference/migrations/0.6.0.md before installing."
+                "OKF CLI/plugin 0.6.7 adds lint baselines, partial CI settings overrides, and ontology lifecycle diagnostics. The plugin requires CLI >=0.6.7, <0.7.0. Review releases/0.6.7.md and knowledge/reference/migrations/0.6.0.md before installing."
             );
             if local_signing::enabled() {
                 let install_root = local_signing::install_root(&root);
@@ -727,18 +727,23 @@ fn command_guidance(name: &str) -> &'static str {
         "lint" => {
             "For sources with a fingerprint kind, `source-unrecorded` warns when no baseline exists. \
             `source-missing` errors when file, line-range, or markdown-heading sources cannot be \
-            fingerprinted, even without a baseline. Lint does not fetch URLs or inspect Git sources. \
+            fingerprinted, even without a baseline. These source-health rules skip URL fetching and Git fingerprint checks. \
             Configure `source_unrecorded: off` (or `info`, `warn`, `error`; default `warn`) under \
             `settings.lint` in `okf-bundle.yaml`. Legacy TOML bundle settings remain compatibility input. \
             Disabling this rule leaves `source-missing` and `stale` checks active. \
-            All lint settings accept `off`, `info`, `warn`, or `error`. Defaults: `broken_link` \
+            All lint rule severities accept `off`, `info`, `warn`, or `error`. Defaults: `broken_link` \
             and `source_missing` are `error`; `missing_title`, `spec_v02` (finding rule `okf-v02`), \
             `ontology_violation`, `source_unrecorded`, `invalid_reference`, and `index_coverage` are `warn`; \
             `missing_description` and `orphan` are `info`. Omitted settings keep these defaults. \
             `off` suppresses the selected lint rule only; validation and stale checks remain independent. \
             `index_exclude` controls index coverage exclusions and `finding_budget` limits ontology \
             findings (positive, default 1,000 per concept). \
-            Use `--fail-on warn` to fail on warnings as well as errors."
+            The size rules `body_max_lines`, `frontmatter_max_lines`, and `max_line_length` default to `off` \
+            and each requires its corresponding positive `_limit` when enabled. CI can select a partial \
+            YAML `settings.lint` mapping with `OKF_SETTINGS_OVERRIDES`. \
+            Ontology lint reports incompatible top-level `status` declarations once per type, even in empty bundles. \
+            Use `--fail-on warn` to fail on warnings as well as errors. With `--baseline` or `--baseline-ref`, \
+            that threshold applies to introduced or worsened findings. `--write-baseline` captures all enabled severities."
         }
         "doctor" => {
             "Inspect migration findings without changing files by default. \

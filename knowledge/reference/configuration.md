@@ -123,11 +123,53 @@ Omitted settings retain these defaults:
 | `source_unrecorded` | source-unrecorded | warn |
 | `source_missing` | source-missing | error |
 | `index_coverage` | index-coverage | warn |
+| `body_max_lines` | body-max-lines | off |
+| `frontmatter_max_lines` | frontmatter-max-lines | off |
+| `max_line_length` | max-line-length | off |
 
 `off` suppresses only the selected lint rule. Conformance validation and `stale` checks
 remain independent. `index_exclude` accepts glob patterns for index coverage exclusions.
 `finding_budget` is a positive ontology finding limit (default 1,000 per concept).
 `--fail-on` controls only the exit threshold; it does not change finding severities.
+
+## CI lint overrides
+
+A bundle can give authors a warning when a concept exceeds a shared limit:
+
+```yaml
+# okf-bundle.yaml
+manifest_version: 1
+settings:
+  lint:
+    body_max_lines: warn
+    body_max_lines_limit: 300
+```
+
+CI can promote that warning to an error while inheriting the 300-line limit:
+
+```yaml
+# .ci/okf-settings.yaml
+settings:
+  lint:
+    body_max_lines: error
+```
+
+Run `OKF_SETTINGS_OVERRIDES=.ci/okf-settings.yaml okf lint` from the project root. The path
+is relative to the working directory or absolute. The CLI reads this file only when selected.
+Use the same environment variable with `okf bundle context` to inspect effective values and
+the source of each overridden key.
+
+The override file accepts a partial `settings.lint` mapping. Each supplied key replaces its
+bundle value, including list-valued settings such as `index_exclude`. Omitted keys retain their
+effective values. Unknown override keys, null values, unreadable files, and invalid effective
+settings produce configuration errors. Existing legacy/manifest conflicts must be resolved first.
+For catalog scope the same file applies separately to every examined bundle, each retaining its
+own omitted values. Pin CI to a CLI version with override support.
+
+For the three size rules, the corresponding positive integer keys are `body_max_lines_limit`,
+`frontmatter_max_lines_limit`, and `max_line_length_limit`. A limit alone leaves the rule's
+severity unchanged. See [concept size](../commands/lint.md#concept-size) for counting rules,
+line-length scope, and Markdown exclusions.
 
 ## Presentation formatting
 

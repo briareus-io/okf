@@ -22,7 +22,7 @@
 //! so a single invocation is deterministic regardless of flag order.
 use std::path::{Path, PathBuf};
 
-use serde_yaml::Value;
+use yaml_serde::Value;
 
 use super::structured::StructuredEdits;
 use crate::check::validate::validate_document;
@@ -375,7 +375,7 @@ pub fn parse_scalar(raw: &str) -> Value {
     {
         // Only accept as a number when it round-trips exactly (rejects "1.0", "1e",…).
         if f.to_string() == raw {
-            return Value::Number(serde_yaml::Number::from(f));
+            return Value::Number(yaml_serde::Number::from(f));
         }
     }
     Value::String(raw.to_string())

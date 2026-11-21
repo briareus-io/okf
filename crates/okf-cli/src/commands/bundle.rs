@@ -397,13 +397,13 @@ fn context_one(
         ))?;
         output::print_text_line(format_args!(
             "Effective settings:\n{}",
-            serde_yaml::to_string(&text_settings(settings))
+            yaml_serde::to_string(&text_settings(settings))
                 .map_err(|e| OkfError::Internal(e.to_string()))?
         ))?;
         if args.settings_detail == "full" {
             output::print_text_line(format_args!(
                 "Setting origins:\n{}",
-                serde_yaml::to_string(&context.setting_origins)
+                yaml_serde::to_string(&context.setting_origins)
                     .map_err(|e| OkfError::Internal(e.to_string()))?
             ))?;
         } else if !omitted.is_empty() {

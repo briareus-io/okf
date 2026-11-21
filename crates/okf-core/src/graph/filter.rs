@@ -587,11 +587,11 @@ pub fn rooted_filtered_graph(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_yaml::Value;
+    use yaml_serde::Value;
     fn concept(id: &str, yaml: &str, body: &str) -> Concept {
         Concept {
             id: ConceptId::from_relative(id),
-            frontmatter: Frontmatter::from_map(serde_yaml::from_str(yaml).unwrap()),
+            frontmatter: Frontmatter::from_map(yaml_serde::from_str(yaml).unwrap()),
             body: body.into(),
         }
     }
@@ -761,7 +761,7 @@ concepts:
             base.overlay(&EdgeFilters::default(), &["typo".into()])
                 .is_err()
         );
-        assert!(serde_yaml::from_str::<EdgeFilters>("kinds: [blocks]").is_err());
+        assert!(yaml_serde::from_str::<EdgeFilters>("kinds: [blocks]").is_err());
     }
     #[test]
     fn ordinary_edges_only_match_endpoint_filters_and_unknown_kinds_do_not_match() {

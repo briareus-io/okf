@@ -12,3 +12,4 @@ pub mod spec_v02;
 pub mod index_coverage;
 
 pub mod frontmatter_order;
+pub mod size;

@@ -20,8 +20,8 @@ fn success(root: &std::path::Path, args: &[&str]) -> Output {
     );
     out
 }
-fn ontology(root: &std::path::Path) -> serde_yaml::Value {
-    serde_yaml::from_str(&std::fs::read_to_string(root.join("ontology.yaml")).unwrap()).unwrap()
+fn ontology(root: &std::path::Path) -> yaml_serde::Value {
+    yaml_serde::from_str(&std::fs::read_to_string(root.join("ontology.yaml")).unwrap()).unwrap()
 }
 fn payload(bytes: &[u8]) -> serde_json::Value {
     std::str::from_utf8(bytes)
@@ -71,8 +71,8 @@ fn ontology_inspection_exposes_selectors_relationships_and_authored_properties()
     assert_eq!(record["extends"], "Base");
     assert_eq!(record["fields"][0]["declaration"]["min"], 1);
     assert_eq!(record["references"][0]["declaration"]["local"], "retained");
-    let declared: serde_yaml::Value =
-        serde_yaml::from_str(&serde_json::to_string(&record["declaration"]).unwrap()).unwrap();
+    let declared: yaml_serde::Value =
+        yaml_serde::from_str(&serde_json::to_string(&record["declaration"]).unwrap()).unwrap();
     assert_eq!(declared, ontology(root)["concepts"]["Procedure"]);
 }
 
@@ -153,7 +153,7 @@ fn unrelated_ontology_update_preserves_literal_scalar_in_preview_and_write() {
         .collect::<Vec<_>>()
         .join("\n")
         + "\n";
-    let parsed: serde_yaml::Value = serde_yaml::from_str(&generated).unwrap();
+    let parsed: yaml_serde::Value = yaml_serde::from_str(&generated).unwrap();
     assert_eq!(parsed["concepts"]["Service"]["description"], before);
     success(
         root,
@@ -661,4 +661,129 @@ fn stdin_and_file_inputs_share_strict_parsing_and_single_consumer_rule() {
             "---\ndescription: updated\n",
         ],
     );
+}
+
+#[test]
+fn lifecycle_conflicts_follow_resolved_declarations_in_preview_apply_and_lint() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let patch = r"
+field_types:
+  Workflow: {base: enum, values: [open, closed]}
+  Mixed: {extends: Workflow, values: [draft, active]}
+concepts:
+  Item: {fields: {status: {type: Workflow}}}
+  MixedItem: {fields: {status: {type: Mixed}}}
+  BadShape: {fields: {status: {type: object}}}
+  Narrow: {fields: {status: {type: Mixed, values: [draft, stable], required: true}}}
+  Plain: {fields: {status: {type: string}}}
+  Ticket: {fields: {ticket: {type: object, fields: {status: {type: Workflow}}}}}
+";
+    let args = ["ontology", "apply", "--from", patch, "--json"];
+    let preview = success(root, &[&args[..], &["--dry-run"]].concat());
+    let preview = payload(&preview.stdout);
+    assert!(!root.join("ontology.yaml").exists());
+    let apply = payload(&success(root, &args).stdout);
+    assert_eq!(preview["findings"], apply["findings"]);
+    let expected = [
+        "concepts.Item.fields.status",
+        "concepts.MixedItem.fields.status",
+        "concepts.BadShape.fields.status",
+    ];
+    let fields: Vec<_> = apply["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["field_path"].as_str().unwrap())
+        .collect();
+    assert_eq!(fields, expected);
+    let findings = |args: &[&str]| {
+        let output = run(root, args);
+        let rows: Vec<_> = String::from_utf8(output.stdout)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+            .filter(|f| f["code"] == "ontology-status-conflict")
+            .collect();
+        (output.status.code(), rows)
+    };
+    let lint = ["lint", "--json"];
+    let (code, empty) = findings(&lint);
+    assert_eq!(code, Some(0));
+    assert_eq!(empty.len(), 3);
+    assert!(empty.iter().all(|f| f["concept"].is_null()
+        && f["rule"] == "ontology-violation"
+        && f["severity"] == "warn"));
+    assert_eq!(
+        findings(&["lint", "--json", "--fail-on", "warn"]).0,
+        Some(1)
+    );
+    for n in 0..10 {
+        std::fs::write(
+            root.join(format!("{n}.md")),
+            "---\ntype: Item\nstatus: submitted\n---\n",
+        )
+        .unwrap();
+    }
+    assert_eq!(findings(&lint).1, empty);
+    let records = String::from_utf8(success(root, &lint).stdout).unwrap();
+    assert!(
+        records
+            .lines()
+            .any(|line| line.contains("invalid status") && line.contains("submitted"))
+    );
+    assert!(
+        records
+            .lines()
+            .any(|line| line.contains("expected one of") && line.contains("submitted"))
+    );
+    std::fs::write(
+        root.join("okf-bundle.yaml"),
+        "manifest_version: 1\nsettings: {lint: {ontology_violation: off}}\n",
+    )
+    .unwrap();
+    assert!(findings(&lint).1.is_empty());
+}
+
+#[test]
+fn catalog_lifecycle_warnings_respect_bundle_severity_and_remain_advisory_on_write() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::write(root.join("okf-catalog.yaml"),"catalog_version: 2\ndefault_bundle: test.a\nbundles:\n  test.a: {location: {type: directory, path: a}}\n  test.b: {location: {type: directory, path: b}}\n").unwrap();
+    for (id, severity) in [("a", "error"), ("b", "off")] {
+        let bundle = root.join(id);
+        std::fs::create_dir(&bundle).unwrap();
+        std::fs::write(
+            bundle.join("okf-bundle.yaml"),
+            format!(
+                "manifest_version: 1\nsettings: {{lint: {{ontology_violation: {severity}}}}}\n"
+            ),
+        )
+        .unwrap();
+        let result = success(
+            &bundle,
+            &[
+                "ontology",
+                "add",
+                "Item",
+                "--field",
+                "status:enum:required:open|closed",
+            ],
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&result.stderr).contains("concepts.Item.fields.status"),
+            id == "a"
+        );
+    }
+    let out = run(root, &["lint", "--catalog-scope", "--json"]);
+    assert_eq!(out.status.code(), Some(1));
+    let rows: Vec<_> = String::from_utf8(out.stdout)
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str::<serde_json::Value>(l).unwrap())
+        .filter(|v| v["code"] == "ontology-status-conflict")
+        .collect();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["bundle"], "test.a");
+    assert_eq!(rows[0]["severity"], "error");
 }

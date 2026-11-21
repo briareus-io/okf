@@ -28,7 +28,7 @@ pub fn find_ontology(bundle_root: &Path) -> Option<PathBuf> {
 /// field types resolvable, no `extends` cycles, cardinalities well-formed).
 pub fn parse_ontology(text: &str) -> Result<Ontology> {
     let ontology: Ontology =
-        serde_yaml::from_str(text).map_err(|e| OkfError::Yaml(e.to_string()))?;
+        yaml_serde::from_str(text).map_err(|e| OkfError::Yaml(e.to_string()))?;
     validate_ontology(&ontology)?;
     Ok(ontology)
 }

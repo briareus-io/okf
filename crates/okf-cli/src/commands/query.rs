@@ -963,17 +963,17 @@ fn field_matches(concept: &Concept, key: &str, value: &str) -> bool {
         return false;
     };
     match val {
-        serde_yaml::Value::Sequence(items) => items.iter().any(|item| yaml_scalar_eq(item, value)),
+        yaml_serde::Value::Sequence(items) => items.iter().any(|item| yaml_scalar_eq(item, value)),
         other => yaml_scalar_eq(other, value),
     }
 }
 
-fn yaml_scalar_eq(v: &serde_yaml::Value, want: &str) -> bool {
+fn yaml_scalar_eq(v: &yaml_serde::Value, want: &str) -> bool {
     match v {
-        serde_yaml::Value::String(s) => s == want,
-        serde_yaml::Value::Bool(b) => (*b && want == "true") || (!*b && want == "false"),
-        serde_yaml::Value::Number(n) => n.to_string() == want,
-        serde_yaml::Value::Tagged(tagged) => yaml_scalar_eq(&tagged.value, want),
+        yaml_serde::Value::String(s) => s == want,
+        yaml_serde::Value::Bool(b) => (*b && want == "true") || (!*b && want == "false"),
+        yaml_serde::Value::Number(n) => n.to_string() == want,
+        yaml_serde::Value::Tagged(tagged) => yaml_scalar_eq(&tagged.value, want),
         _ => false,
     }
 }

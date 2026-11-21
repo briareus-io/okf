@@ -9,7 +9,7 @@ use std::str::FromStr;
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use serde_yaml::Value;
+use yaml_serde::Value;
 
 use crate::error::OkfError;
 

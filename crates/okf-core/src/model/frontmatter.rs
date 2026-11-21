@@ -1,10 +1,10 @@
 //! Order-preserving, unknown-key-preserving frontmatter — the round-trip linchpin.
 //!
-//! Backed by `indexmap::IndexMap<String, serde_yaml::Value>` so key order and unknown
+//! Backed by `indexmap::IndexMap<String, yaml_serde::Value>` so key order and unknown
 //! keys survive parsing in authored order and writing semantically, and so NDJSON can mirror
 //! the frontmatter verbatim.
 use indexmap::IndexMap;
-use serde_yaml::Value;
+use yaml_serde::Value;
 
 /// Lossless frontmatter: an ordered map of YAML values. Never discards keys.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

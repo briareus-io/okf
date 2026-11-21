@@ -111,21 +111,28 @@ pub fn run_validate(args: &crate::cli::ValidateArgs, json: bool) -> Result<i32> 
 
 /// `okf lint [bundle] [--fix] [--fail-on <sev>]`.
 pub fn run_lint(args: &LintArgs, json: bool) -> Result<i32> {
-    okf_core::check::lint::validate_configuration(&resolve_bundle(args.bundle.as_deref())?)?;
-    let fail_on = match &args.fail_on {
-        Some(s) => FailOn::from_str(s.as_str())?,
-        None => FailOn::default(), // error
-    };
     let root = resolve_bundle(args.bundle.as_deref())?;
-    let bundle = load_bundle(&root)?;
-    let (effective, ontology) = okf_core::bundle::settings::load_for(&root)?;
+    let context = okf_core::bundle::context::current_context(Some(&root.to_string_lossy()), None)?;
+    lint_in(args, json, &context, &mut |record, _| {
+        output::print_line(record)
+    })
+}
+
+pub(super) fn lint_in(
+    args: &LintArgs,
+    json: bool,
+    context: &okf_core::bundle::context::Context,
+    emit: &mut super::lint_baseline::Emit<'_>,
+) -> Result<i32> {
+    let root = &context.primary.root;
+    okf_core::check::lint::validate_configuration(root)?;
+    let fail_on = FailOn::from_str(args.fail_on.map_or("error", crate::cli::FailOnArg::as_str))?;
+    let bundle = load_bundle(root)?;
+    let (effective, ontology) = okf_core::bundle::settings::load_in(context, root)?;
     let config = lint_config(&effective.settings)?;
     if args.fix && config.frontmatter_order.is_some() {
-        let fixed = okf_core::check::lint::rules::frontmatter_order::fix(
-            &bundle,
-            &root,
-            ontology.as_ref(),
-        )?;
+        let fixed =
+            okf_core::check::lint::rules::frontmatter_order::fix(&bundle, root, ontology.as_ref())?;
         if json {
             output::print_line(
                 &json!({"kind": "fix", "rule": "frontmatter-order", "fixed": fixed}),
@@ -134,13 +141,16 @@ pub fn run_lint(args: &LintArgs, json: bool) -> Result<i32> {
             eprintln!("--fix: normalized frontmatter order in {fixed} concepts");
         }
     }
-    let bundle = if args.fix {
-        load_bundle(&root)?
-    } else {
-        bundle
-    };
-    let mut findings = lint_bundle(&bundle, ontology.as_ref(), &config);
-    let context = okf_core::bundle::context::current_context(Some(&root.to_string_lossy()), None)?;
+    let bundle = if args.fix { load_bundle(root)? } else { bundle };
+    let mut findings = okf_core::check::lint::rules::ontology_violation::declaration_findings(
+        ontology.as_ref(),
+        config.ontology_violation,
+    )?;
+    findings.extend(lint_bundle(&bundle, ontology.as_ref(), &config));
+    findings.extend(okf_core::check::lint::rules::size::run(
+        &bundle,
+        &effective.settings.lint,
+    )?);
     findings.extend(okf_core::check::lint::rules::invalid_reference::run(
         &bundle,
         ontology.as_ref(),
@@ -162,16 +172,19 @@ pub fn run_lint(args: &LintArgs, json: bool) -> Result<i32> {
 
     if json {
         for f in &findings {
-            output::print_line(&json!({
-                "kind": "finding",
-                "rule": f.rule,
-                "severity": f.severity.as_str(),
-                "concept": f.concept,
-                "message": f.message,
-                "code": f.code,
-                "field_path": f.field_path,
-                "bundle": effective.bundle,
-            }))?;
+            emit(
+                &json!({
+                    "kind": "finding",
+                    "rule": f.rule,
+                    "severity": f.severity.as_str(),
+                    "concept": f.concept,
+                    "message": f.message,
+                    "code": f.code,
+                    "field_path": f.field_path,
+                    "bundle": effective.bundle,
+                }),
+                f.comparison_detail.as_deref(),
+            )?;
         }
     } else {
         if findings.is_empty() && index_findings.is_empty() {
@@ -199,7 +212,7 @@ pub fn run_lint(args: &LintArgs, json: bool) -> Result<i32> {
             record["rule"] = json!("index-coverage");
             record["severity"] = json!(index_severity.as_str());
             record["bundle"] = json!(effective.bundle);
-            output::print_line(&record)?;
+            emit(&record, None)?;
         } else {
             output::print_text_line(format_args!(
                 "{}\tindex-coverage\t{}\t{}",
@@ -245,8 +258,8 @@ pub fn run_stale(args: &StaleArgs, json: bool) -> Result<i32> {
                 .flatten()
         })
         .filter(|entry| entry.as_mapping().is_some_and(|mapping| {
-            matches!(mapping.get(serde_yaml::Value::String("resource".into())), Some(serde_yaml::Value::String(resource)) if !resource.trim().is_empty())
-                && !mapping.contains_key(serde_yaml::Value::String("kind".into()))
+            matches!(mapping.get(yaml_serde::Value::String("resource".into())), Some(yaml_serde::Value::String(resource)) if !resource.trim().is_empty())
+                && !mapping.contains_key(yaml_serde::Value::String("kind".into()))
         }))
         .count();
 
@@ -570,7 +583,7 @@ pub fn run_doctor(args: &DoctorArgs, json_output: bool) -> Result<i32> {
         } else {
             output::print_text_line(format_args!(
                 "{}",
-                serde_yaml::to_string(&plan).map_err(|e| OkfError::Internal(e.to_string()))?
+                yaml_serde::to_string(&plan).map_err(|e| OkfError::Internal(e.to_string()))?
             ))?;
         }
         return Ok(if plan.unresolved.is_empty() { 0 } else { 1 });
@@ -584,7 +597,7 @@ pub fn run_doctor(args: &DoctorArgs, json_output: bool) -> Result<i32> {
         } else {
             output::print_text_line(format_args!(
                 "{}",
-                serde_yaml::to_string(&report).map_err(|e| OkfError::Internal(e.to_string()))?
+                yaml_serde::to_string(&report).map_err(|e| OkfError::Internal(e.to_string()))?
             ))?;
         }
         return Ok(0);

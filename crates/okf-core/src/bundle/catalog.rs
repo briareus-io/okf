@@ -15,7 +15,7 @@ pub struct CatalogFile {
 pub struct Registration {
     pub location: Location,
     #[serde(flatten)]
-    pub settings: BTreeMap<String, serde_yaml::Value>,
+    pub settings: BTreeMap<String, yaml_serde::Value>,
 }
 #[derive(Debug, Clone, Deserialize)]
 pub struct Location {
@@ -34,7 +34,7 @@ pub struct CatalogEntry {
     pub overridden: bool,
     pub available: bool,
     #[serde(skip)]
-    pub settings: BTreeMap<String, serde_yaml::Value>,
+    pub settings: BTreeMap<String, yaml_serde::Value>,
 }
 #[derive(Debug, Clone)]
 pub struct Catalog {
@@ -46,7 +46,7 @@ pub struct Catalog {
 /// Used by initial update planning and impact analysis; shares override precedence with
 /// ordinary context (environment, legacy workspace pointer, catalog pointer).
 pub fn declared_directory_entries(path: &Path) -> Result<BTreeMap<String, CatalogEntry>> {
-    let file: CatalogFile = serde_yaml::from_slice(&std::fs::read(path)?)
+    let file: CatalogFile = yaml_serde::from_slice(&std::fs::read(path)?)
         .map_err(|e| OkfError::Usage(format!("invalid catalog: {e}")))?;
     if !matches!(file.catalog_version, 1 | 2) {
         return Err(OkfError::Usage("unsupported catalog_version".into()));
@@ -72,7 +72,7 @@ pub fn declared_directory_entries(path: &Path) -> Result<BTreeMap<String, Catalo
         struct Overrides {
             bundles: BTreeMap<String, String>,
         }
-        let overrides: Overrides = serde_yaml::from_slice(&std::fs::read(&p)?)
+        let overrides: Overrides = yaml_serde::from_slice(&std::fs::read(&p)?)
             .map_err(|e| OkfError::Usage(format!("invalid catalog overrides: {e}")))?;
         let mut resolved = BTreeMap::new();
         for (id, location) in overrides.bundles {
@@ -144,9 +144,9 @@ fn load_catalog_impl(
     selection_only: bool,
 ) -> Result<Catalog> {
     let text = std::fs::read_to_string(path)?;
-    let value: serde_yaml::Value = serde_yaml::from_str(&text)
+    let value: yaml_serde::Value = yaml_serde::from_str(&text)
         .map_err(|e| OkfError::Usage(format!("invalid catalog {}: {e}", path.display())))?;
-    let file: CatalogFile = serde_yaml::from_value(value)
+    let file: CatalogFile = yaml_serde::from_value(value)
         .map_err(|e| OkfError::Usage(format!("invalid catalog {}: {e}", path.display())))?;
     if !matches!(file.catalog_version, 1 | 2) {
         return Err(OkfError::Usage(
@@ -186,7 +186,7 @@ fn load_catalog_impl(
                 };
                 settings.insert(
                     "remote".into(),
-                    serde_yaml::to_value(&resolved.origin)
+                    yaml_serde::to_value(&resolved.origin)
                         .map_err(|e| OkfError::Usage(e.to_string()))?,
                 );
                 resolved.root
@@ -215,9 +215,9 @@ fn load_catalog_impl(
             bundles: BTreeMap<String, String>,
         }
         let override_text = std::fs::read_to_string(overrides)?;
-        let value: serde_yaml::Value = serde_yaml::from_str(&override_text)
+        let value: yaml_serde::Value = yaml_serde::from_str(&override_text)
             .map_err(|e| OkfError::Usage(format!("invalid catalog overrides: {e}")))?;
-        let file: Overrides = serde_yaml::from_value(value)
+        let file: Overrides = yaml_serde::from_value(value)
             .map_err(|e| OkfError::Usage(format!("invalid catalog overrides: {e}")))?;
         for (id, root) in file.bundles {
             let entry = entries.get_mut(&id).ok_or_else(|| {

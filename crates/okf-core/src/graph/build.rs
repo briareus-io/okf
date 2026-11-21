@@ -81,10 +81,10 @@ mod tests {
     use crate::model::concept::Concept;
     use crate::model::frontmatter::Frontmatter;
     use indexmap::IndexMap as Map;
-    use serde_yaml::Value;
+    use yaml_serde::Value;
 
     fn concept(id: &str, yaml: &str, body: &str) -> Concept {
-        let map: Map<String, Value> = serde_yaml::from_str(yaml).unwrap();
+        let map: Map<String, Value> = yaml_serde::from_str(yaml).unwrap();
         Concept {
             id: ConceptId::from_relative(id),
             frontmatter: Frontmatter::from_map(map),

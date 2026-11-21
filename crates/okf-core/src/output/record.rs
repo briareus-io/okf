@@ -5,7 +5,7 @@
 //! `trust_tier`. There is no fixed concept schema: the record *is* the frontmatter.
 use crate::model::concept::Concept;
 use serde_json::{Map, Value as Json};
-use serde_yaml::Value as Yaml;
+use yaml_serde::Value as Yaml;
 
 /// Convert a YAML value into the equivalent JSON value. Non-string mapping keys are
 /// coerced to their string form (spec frontmatter keys are strings in practice).
@@ -47,7 +47,7 @@ fn yaml_scalar_key(v: &Yaml) -> String {
         Yaml::Bool(b) => b.to_string(),
         Yaml::Number(n) => n.to_string(),
         Yaml::Null => "null".to_string(),
-        _ => serde_yaml::to_string(v)
+        _ => yaml_serde::to_string(v)
             .unwrap_or_default()
             .trim()
             .to_string(),

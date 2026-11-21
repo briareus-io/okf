@@ -201,7 +201,7 @@ mod tests {
             c.frontmatter = Frontmatter::from_map(
                 [(
                     "type".to_string(),
-                    serde_yaml::Value::String("U".to_string()),
+                    yaml_serde::Value::String("U".to_string()),
                 )]
                 .into_iter()
                 .collect(),

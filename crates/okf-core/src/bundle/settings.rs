@@ -29,6 +29,55 @@ pub struct LintSettings {
     pub orphan: Option<String>,
     pub spec_v02: Option<String>,
     pub source_missing: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body_max_lines: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body_max_lines_limit: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frontmatter_max_lines: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frontmatter_max_lines_limit: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_line_length: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_line_length_limit: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_line_length_scope: Option<LineScope>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_line_length_exclude_code_blocks: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_line_length_exclude_tables: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_line_length_exclude_links: Option<bool>,
+}
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum LineScope {
+    #[default]
+    Body,
+    Frontmatter,
+    All,
+}
+impl LintSettings {
+    fn size_rules(&self) -> [(&str, Option<&str>, Option<usize>); 3] {
+        [
+            (
+                "body_max_lines",
+                self.body_max_lines.as_deref(),
+                self.body_max_lines_limit,
+            ),
+            (
+                "frontmatter_max_lines",
+                self.frontmatter_max_lines.as_deref(),
+                self.frontmatter_max_lines_limit,
+            ),
+            (
+                "max_line_length",
+                self.max_line_length.as_deref(),
+                self.max_line_length_limit,
+            ),
+        ]
+    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -147,11 +196,60 @@ pub struct EffectiveSettings {
     pub ontology_path: Option<PathBuf>,
     pub ontology_digest: Option<String>,
     pub settings: BundleSettings,
+    #[serde(skip)]
+    pub(crate) override_origins: BTreeMap<String, String>,
 }
-fn resolve_settings(
-    context: &Context,
-    root: &Path,
-) -> Result<(Option<String>, BundleSettings, Option<PathBuf>)> {
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OverrideFile {
+    settings: OverrideSettings,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OverrideSettings {
+    lint: BTreeMap<String, yaml_serde::Value>,
+}
+
+// Apply only authored lint keys. Collections such as index_exclude are one setting.
+fn apply_overrides(settings: &mut BundleSettings) -> Result<BTreeMap<String, String>> {
+    let mut origins = BTreeMap::new();
+    let Some(path) = std::env::var_os("OKF_SETTINGS_OVERRIDES") else {
+        return Ok(origins);
+    };
+    let path = PathBuf::from(path);
+    let error = |message: String| {
+        OkfError::Usage(format!(
+            "OKF_SETTINGS_OVERRIDES {}: {message}",
+            path.display()
+        ))
+    };
+    let bytes = std::fs::read(&path).map_err(|e| error(e.to_string()))?;
+    let file: OverrideFile = yaml_serde::from_slice(&bytes).map_err(|e| error(e.to_string()))?;
+    let mut merged = yaml_serde::to_value(&settings.lint).map_err(|e| error(e.to_string()))?;
+    for (key, value) in file.settings.lint {
+        if value.is_null() {
+            return Err(error(format!("null override for settings.lint.{key}")));
+        }
+        merged[&key] = value;
+        origins.insert(
+            format!("lint.{key}"),
+            format!("override:{}", path.display()),
+        );
+    }
+    settings.lint = yaml_serde::from_value(merged).map_err(|e| error(e.to_string()))?;
+    // LintSettings tolerates legacy unknown keys. Explicit overrides must take effect.
+    let accepted = yaml_serde::to_value(&settings.lint).map_err(|e| error(e.to_string()))?;
+    for key in origins.keys() {
+        if accepted.get(&key["lint.".len()..]).is_none() {
+            return Err(error(format!("unknown setting {key}")));
+        }
+    }
+    validate_settings(settings).map_err(|e| error(e.to_string()))?;
+    Ok(origins)
+}
+
+fn resolve_settings(context: &Context, root: &Path) -> Result<EffectiveSettings> {
     let abs = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
     let id = context
         .catalog
@@ -173,10 +271,10 @@ fn resolve_settings(
     });
     let loaded = super::manifest::load(root)?;
     let mut legacy_value = legacy
-        .map(serde_yaml::to_value)
+        .map(yaml_serde::to_value)
         .transpose()
         .map_err(|e| OkfError::Usage(e.to_string()))?
-        .unwrap_or_else(|| serde_yaml::Value::Mapping(Default::default()));
+        .unwrap_or_else(|| yaml_serde::Value::Mapping(Default::default()));
     let base = context
         .config_path
         .as_ref()
@@ -186,7 +284,7 @@ fn resolve_settings(
     if let Some(old) = legacy_value.get_mut("ontology")
         && let Some(path) = old.as_str()
     {
-        *old = serde_yaml::Value::String(
+        *old = yaml_serde::Value::String(
             super::catalog::absolute(&base.join(path))?
                 .to_string_lossy()
                 .into_owned(),
@@ -197,7 +295,7 @@ fn resolve_settings(
         if let Some(value) = portable.get_mut("ontology")
             && let Some(path) = value.as_str()
         {
-            *value = serde_yaml::Value::String(
+            *value = yaml_serde::Value::String(
                 super::catalog::absolute(&root.join(path))?
                     .to_string_lossy()
                     .into_owned(),
@@ -205,9 +303,10 @@ fn resolve_settings(
         }
         merge_settings(&mut legacy_value, portable, "settings")?;
     }
-    let settings: BundleSettings = serde_yaml::from_value(legacy_value)
+    let mut settings: BundleSettings = yaml_serde::from_value(legacy_value)
         .map_err(|e| OkfError::Usage(format!("invalid effective bundle settings: {e}")))?;
     validate_settings(&settings)?;
+    let override_origins = apply_overrides(&mut settings)?;
     let base = context
         .config_path
         .as_ref()
@@ -218,32 +317,37 @@ fn resolve_settings(
     } else {
         load::find_ontology(root)
     };
-    Ok((id, settings, ontology_path))
+    Ok(EffectiveSettings {
+        bundle: id,
+        settings,
+        ontology_path,
+        ontology_digest: None,
+        override_origins,
+    })
 }
 
 /// Resolve the optional ontology path without reading it, so diagnostics can identify a
 /// configured sidecar even when it is missing or unreadable.
 pub fn ontology_path_for(context: &Context, root: &Path) -> Result<Option<PathBuf>> {
-    resolve_settings(context, root).map(|(_, _, path)| path)
+    resolve_settings(context, root).map(|effective| effective.ontology_path)
 }
 
 pub fn for_context(context: &Context, root: &Path) -> Result<EffectiveSettings> {
-    let (id, settings, ontology_path) = resolve_settings(context, root)?;
-    let ontology_digest = ontology_path
+    let mut effective = resolve_settings(context, root)?;
+    effective.ontology_digest = effective
+        .ontology_path
         .as_ref()
         .map(|p| std::fs::read(p).map(|bytes| crate::fingerprint::canonicalize::sha256_hex(&bytes)))
         .transpose()
         .map_err(|e| OkfError::Environment(format!("cannot read configured ontology: {e}")))?;
-    Ok(EffectiveSettings {
-        bundle: id,
-        ontology_path,
-        ontology_digest,
-        settings,
-    })
+    Ok(effective)
 }
 pub fn load_for(root: &Path) -> Result<(EffectiveSettings, Option<Ontology>)> {
     let context = current_context(Some(&root.to_string_lossy()), None)?;
-    let effective = for_context(&context, root)?;
+    load_in(&context, root)
+}
+pub fn load_in(context: &Context, root: &Path) -> Result<(EffectiveSettings, Option<Ontology>)> {
+    let effective = for_context(context, root)?;
     let ontology = effective
         .ontology_path
         .as_ref()
@@ -407,7 +511,20 @@ pub fn validate_settings(settings: &BundleSettings) -> Result<()> {
             .build()
             .map_err(|e| OkfError::Usage(format!("invalid index exclusion {glob:?}: {e}")))?;
     }
+    for (rule, severity, limit) in settings.lint.size_rules() {
+        if limit == Some(0) || (severity.unwrap_or("off") != "off" && limit.is_none()) {
+            return Err(OkfError::Usage(format!(
+                "{rule} requires a positive {rule}_limit"
+            )));
+        }
+    }
     for (rule, severity) in [
+        ("body_max_lines", &settings.lint.body_max_lines),
+        (
+            "frontmatter_max_lines",
+            &settings.lint.frontmatter_max_lines,
+        ),
+        ("max_line_length", &settings.lint.max_line_length),
         ("broken_link", &settings.lint.broken_link),
         ("invalid_reference", &settings.lint.invalid_reference),
         ("missing_title", &settings.lint.missing_title),
@@ -509,14 +626,14 @@ pub fn for_context_at(
         .and_then(|p| p.parent())
         .unwrap_or(root);
     let mut merged = legacy
-        .map(serde_yaml::to_value)
+        .map(yaml_serde::to_value)
         .transpose()
         .map_err(|e| OkfError::Usage(e.to_string()))?
-        .unwrap_or_else(|| serde_yaml::Value::Mapping(Default::default()));
+        .unwrap_or_else(|| yaml_serde::Value::Mapping(Default::default()));
     if let Some(old) = merged.get_mut("ontology")
         && let Some(path) = old.as_str()
     {
-        *old = serde_yaml::Value::String(
+        *old = yaml_serde::Value::String(
             super::catalog::absolute(&base.join(path))?
                 .to_string_lossy()
                 .into_owned(),
@@ -526,16 +643,16 @@ pub fn for_context_at(
         HistoricalFile::Bytes(bytes) => {
             let text = std::str::from_utf8(&bytes).map_err(|e| OkfError::Usage(e.to_string()))?;
             super::manifest::parse(text)?;
-            let raw: serde_yaml::Value =
-                serde_yaml::from_str(text).map_err(|e| OkfError::Usage(e.to_string()))?;
+            let raw: yaml_serde::Value =
+                yaml_serde::from_str(text).map_err(|e| OkfError::Usage(e.to_string()))?;
             let mut portable = raw
                 .get("settings")
                 .cloned()
-                .unwrap_or_else(|| serde_yaml::Value::Mapping(Default::default()));
+                .unwrap_or_else(|| yaml_serde::Value::Mapping(Default::default()));
             if let Some(value) = portable.get_mut("ontology")
                 && let Some(path) = value.as_str()
             {
-                *value = serde_yaml::Value::String(
+                *value = yaml_serde::Value::String(
                     super::catalog::absolute(&root.join(path))?
                         .to_string_lossy()
                         .into_owned(),
@@ -550,9 +667,10 @@ pub fn for_context_at(
             ));
         }
     }
-    let settings: BundleSettings = serde_yaml::from_value(merged)
+    let mut settings: BundleSettings = yaml_serde::from_value(merged)
         .map_err(|e| OkfError::Usage(format!("invalid historical settings: {e}")))?;
     validate_settings(&settings)?;
+    let override_origins = apply_overrides(&mut settings)?;
     let configured = settings.ontology.is_some();
     let base = context
         .config_path
@@ -600,6 +718,7 @@ pub fn for_context_at(
                 .as_ref()
                 .map(|b| crate::fingerprint::canonicalize::sha256_hex(b)),
             settings,
+            override_origins,
         },
         ontology,
     ))
@@ -615,12 +734,12 @@ pub fn load_for_at(root: &Path, version: &str) -> Result<(EffectiveSettings, Opt
 
 /// Merge only disjoint/equal declarations; conflicting legacy values require migration review.
 pub fn merge_settings(
-    base: &mut serde_yaml::Value,
-    new: serde_yaml::Value,
+    base: &mut yaml_serde::Value,
+    new: yaml_serde::Value,
     path: &str,
 ) -> Result<()> {
     match (base, new) {
-        (serde_yaml::Value::Mapping(old), serde_yaml::Value::Mapping(new)) => {
+        (yaml_serde::Value::Mapping(old), yaml_serde::Value::Mapping(new)) => {
             for (key, value) in new {
                 if let Some(prior) = old.get_mut(&key) {
                     merge_settings(

@@ -1,7 +1,7 @@
 //! Trust tiers and the trust frontmatter families.
 use super::frontmatter::Frontmatter;
 use super::standard::{parse_timestamp, valid_actor};
-use serde_yaml::Value;
+use yaml_serde::Value;
 
 /// Derived trust tier (lowest to highest), computed from the `verified` field's actors.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,7 +78,7 @@ mod tests {
     use indexmap::IndexMap;
 
     fn fm(yaml: &str) -> Frontmatter {
-        let map: IndexMap<String, Value> = serde_yaml::from_str(yaml).unwrap();
+        let map: IndexMap<String, Value> = yaml_serde::from_str(yaml).unwrap();
         Frontmatter::from_map(map)
     }
 

@@ -81,7 +81,7 @@ fn field_types_extends_and_object_composition() {
     assert_eq!(
         pm.constraints
             .get("min")
-            .and_then(serde_yaml::Value::as_i64),
+            .and_then(yaml_serde::Value::as_i64),
         Some(0)
     ); // added by derived def
 
@@ -209,7 +209,7 @@ fn check_concept_flags_missing_and_cardinality_and_target() {
     // one computations link pointing at a Metric (wrong target) — 0..n allows the count.
     fm.map.insert(
         "computations".into(),
-        serde_yaml::Value::Sequence(vec!["/metrics/revenue".into()]),
+        yaml_serde::Value::Sequence(vec!["/metrics/revenue".into()]),
     );
 
     let resolve = |link: &str| {

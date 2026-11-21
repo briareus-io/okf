@@ -444,6 +444,13 @@ fn lint(
     };
     let mut result: Vec<_> = lint_bundle(&bundle, ontology.as_ref(), &config)
         .into_iter()
+        .chain(
+            crate::check::lint::rules::ontology_violation::declaration_findings(
+                ontology.as_ref(),
+                severity(s.ontology_violation.as_deref(), Severity::Warn),
+            )?,
+        )
+        .chain(crate::check::lint::rules::size::run(&bundle, s)?)
         .chain(crate::check::lint::rules::invalid_reference::run(
             &bundle,
             ontology.as_ref(),

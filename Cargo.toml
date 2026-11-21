@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/okf-core", "crates/okf-cli", "xtask"]
 
 [workspace.package]
-version = "0.6.6"
+version = "0.6.7"
 edition = "2024"
 license = "MIT"
 rust-version = "1.98"
@@ -11,7 +11,7 @@ rust-version = "1.98"
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
-serde_yaml = "0.9"
+yaml_serde = "0.10"
 indexmap = { version = "2", features = ["serde"] }
 toml = "1"
 tempfile = "3"

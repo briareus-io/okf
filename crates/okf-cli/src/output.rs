@@ -163,7 +163,9 @@ pub fn mark_failure(code: i32, reason: &str) {
     OPERATION.with(|state| {
         if let Some(op) = state.borrow_mut().as_mut() {
             if code >= 2 {
-                op.examination = "not-applicable";
+                if !op.reasons.iter().any(|r| r == "lint-baseline-incomplete") {
+                    op.examination = "not-applicable";
+                }
                 op.matching = "not-applicable";
                 op.expansion = "not-applicable";
                 op.content = "not-applicable";

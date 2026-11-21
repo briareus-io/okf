@@ -10,10 +10,10 @@ use crate::model::source::Source;
 use crate::ontology::load::try_load;
 use crate::parse::parse_concept;
 use serde::{Deserialize, Serialize};
-use serde_yaml::Value;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use yaml_serde::Value;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub struct Node {
@@ -866,7 +866,7 @@ fn build_catalog_graph_impl(
                 }
                 let declared = value
                     .get("bundle_ref")
-                    .map(|v| serde_yaml::from_value::<BundleRef>(v.clone()));
+                    .map(|v| yaml_serde::from_value::<BundleRef>(v.clone()));
                 let bundle_file_kind =
                     matches!(kind, Some("file" | "line-range" | "markdown-heading"));
                 let path_source = if git_kind || bundle_file_kind {
@@ -922,7 +922,7 @@ fn build_catalog_graph_impl(
                 .concept_type()
                 .and_then(|name| ontology.as_ref().and_then(|o| o.concepts.get(name)))
             {
-                let yaml = serde_yaml::to_value(&concept.frontmatter.map).unwrap_or_default();
+                let yaml = yaml_serde::to_value(&concept.frontmatter.map).unwrap_or_default();
                 for (key, rule) in &ct.references {
                     let selector = crate::graph::relationships::reference_selector(
                         key,

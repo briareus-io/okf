@@ -10,6 +10,7 @@ pub mod changeset;
 pub mod check;
 pub mod filters;
 pub mod format;
+mod lint_baseline;
 pub mod mutate;
 pub mod ontology;
 pub mod query;
@@ -106,12 +107,12 @@ pub fn run(mut cli: Cli) -> Result<i32> {
                 "bundle path and --bundle-id are conflicting selectors".into(),
             ));
         }
-        if let Some(path) = explicit {
-            if std::fs::canonicalize(path)? != receipt.root {
-                return Err(okf_core::error::OkfError::Usage(
-                    "bundle path conflicts with --selection".into(),
-                ));
-            }
+        if let Some(path) = explicit
+            && std::fs::canonicalize(path)? != receipt.root
+        {
+            return Err(okf_core::error::OkfError::Usage(
+                "bundle path conflicts with --selection".into(),
+            ));
         }
         if cli
             .bundle_id

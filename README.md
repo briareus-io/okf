@@ -12,22 +12,22 @@ inspect workflow context and artifacts, and trace source impact.
 
 ## Install
 
-**CLI/plugin 0.6.6 upgrade:** read the [migration guide](knowledge/reference/migrations/0.6.0.md)
+**CLI/plugin 0.6.7 upgrade:** read the [migration guide](knowledge/reference/migrations/0.6.0.md)
 before updating an existing installation or automation. Install CLI and plugin together;
-the 0.6.6 plugin supports stable CLI versions `>=0.6.6, <0.7.0`. The document format remains OKF v0.2.
-Read the [0.6.6 release notes](releases/0.6.6.md) for changes and upgrade guidance.
-Version 0.6.6 adds recovery-safe bundle selection and corrects logical-reference
-preflight for scoped ontology-gated changesets. Capture selection with `okf bundle select`
-and reuse its token with `--selection`, including when recovering a pending transaction.
+the 0.6.7 plugin supports stable CLI versions `>=0.6.7, <0.7.0`. The document format remains OKF v0.2.
+Read the [0.6.7 release notes](releases/0.6.7.md) for changes and upgrade guidance.
+Version 0.6.7 lets CI compare lint findings with a saved baseline or a Git revision. It also
+adds opt-in concept size limits, per-run lint settings, and early diagnostics for conflicting
+ontology lifecycle declarations.
 
 For a published release, download its matching installer, inspect it, then run it. If this
 checkout's version has not been published yet, use the source-build instructions below:
 
 ```sh
 curl --fail --location --proto '=https' --proto-redir '=https' \
-  https://github.com/briareus-io/okf/releases/download/v0.6.6/install.sh -o install.sh
+  https://github.com/briareus-io/okf/releases/download/v0.6.7/install.sh -o install.sh
 # Review install.sh before running it.
-sh install.sh 0.6.6
+sh install.sh 0.6.7
 export PATH="$HOME/.local/bin:$PATH"
 okf version
 ```

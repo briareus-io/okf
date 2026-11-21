@@ -13,7 +13,7 @@ use okf_core::{
 fn concept(yaml: &str) -> Concept {
     Concept {
         id: ConceptId::from_relative("note"),
-        frontmatter: Frontmatter::from_map(serde_yaml::from_str(yaml).unwrap()),
+        frontmatter: Frontmatter::from_map(yaml_serde::from_str(yaml).unwrap()),
         body: String::new(),
     }
 }
@@ -140,7 +140,7 @@ concepts:
       record: {type: Record}
 "#;
     let ontology = parse_ontology(yaml).unwrap();
-    let roundtrip = serde_yaml::to_string(&ontology).unwrap();
+    let roundtrip = yaml_serde::to_string(&ontology).unwrap();
     assert_eq!(parse_ontology(&roundtrip).unwrap(), ontology);
     let fields = &ontology.concepts["Note"].fields;
     for (field, expected) in [

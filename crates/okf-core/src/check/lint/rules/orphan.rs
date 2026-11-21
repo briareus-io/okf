@@ -15,6 +15,7 @@ pub fn run(ctx: &RuleContext<'_>) -> Vec<Finding> {
         let id = &concept.id.0;
         if ctx.graph.inbound(id).is_empty() && ctx.graph.outbound(id).is_empty() {
             out.push(Finding {
+                comparison_detail: None,
                 code: None,
                 field_path: None,
                 rule: RULE.to_string(),

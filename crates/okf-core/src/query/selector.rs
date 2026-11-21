@@ -1,6 +1,6 @@
 //! Small, non-executable selectors over authored YAML. Explicit list traversal preserves paths.
 use crate::error::{OkfError, Result};
-use serde_yaml::Value;
+use yaml_serde::Value;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Step {
@@ -161,7 +161,7 @@ mod tests {
     use super::*;
     #[test]
     fn explicit_traversal_and_literal_keys() {
-        let v:Value=serde_yaml::from_str("norms: [{bearer: x, 'action.name': y}, {bearer: z}]\n'policy.status': active\ntags: []").unwrap();
+        let v:Value=yaml_serde::from_str("norms: [{bearer: x, 'action.name': y}, {bearer: z}]\n'policy.status': active\ntags: []").unwrap();
         let s = Selector::parse("norms[][\"action.name\"]")
             .unwrap()
             .select(&v);

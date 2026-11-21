@@ -26,7 +26,7 @@ Useful custom metadata needs queryable structure without imposing a universal do
 
 ## Choice
 
-One selector grammar walks `serde_yaml::Value` directly: dotted property names, explicit `[]`
+One selector grammar walks `yaml_serde::Value` directly: dotted property names, explicit `[]`
 list traversal, and JSON bracket-quoted literal keys. It does not infer traversal, evaluate code,
 or expose a general JSONPath language. Occurrence paths preserve same-record pairing.
 

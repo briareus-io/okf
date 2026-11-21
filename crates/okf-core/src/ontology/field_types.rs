@@ -6,7 +6,7 @@
 //! a primitive base kind plus merged constraints, enum values, list element and object
 //! sub-fields.
 use indexmap::IndexMap;
-use serde_yaml::Value;
+use yaml_serde::Value;
 
 use crate::error::{OkfError, Result};
 use crate::model::frontmatter::Frontmatter;
@@ -259,6 +259,19 @@ pub enum ViolationKind {
     },
 }
 
+impl ViolationKind {
+    pub fn baseline_key(&self) -> String {
+        match self {
+            Self::UnknownType => "unknown-type".into(),
+            Self::MissingRequiredBuiltin(name) => format!("required-builtin:{name}"),
+            Self::MissingRequiredField(name) => format!("required-field:{name}"),
+            Self::CardinalityViolation(name) => format!("cardinality:{name}"),
+            Self::WrongReferenceTarget(name) => format!("reference-target:{name}"),
+            Self::Metadata { code, path } => format!("{code}:{path}"),
+        }
+    }
+}
+
 /// Check a concept's `frontmatter` against its ontology-declared type.
 ///
 /// This is the core logic `check::lint` will drive; it does no I/O and prints nothing.
@@ -403,7 +416,7 @@ fn check_reference<F>(
 {
     let ty = frontmatter.get_str("type").unwrap_or("");
     let links = if let Some(selector) = &rule.selector {
-        let root = serde_yaml::to_value(&frontmatter.map).unwrap_or_default();
+        let root = yaml_serde::to_value(&frontmatter.map).unwrap_or_default();
         crate::query::selector::Selector::parse(selector)
             .map(|s| {
                 s.select(&root)
@@ -437,7 +450,7 @@ fn check_reference<F>(
         );
     }
     if let Some(selector) = &rule.selector {
-        let root = serde_yaml::to_value(&frontmatter.map).unwrap_or_default();
+        let root = yaml_serde::to_value(&frontmatter.map).unwrap_or_default();
         if let Ok(selector) = crate::query::selector::Selector::parse(selector) {
             for o in selector.select(&root).leaves {
                 let reference = o.value.as_str().filter(|s| !s.trim().is_empty());
@@ -822,7 +835,7 @@ fn check_value(
     }
 }
 fn bounded(value: &Value) -> String {
-    serde_yaml::to_string(value)
+    yaml_serde::to_string(value)
         .unwrap_or_else(|_| "<value>".into())
         .trim()
         .chars()

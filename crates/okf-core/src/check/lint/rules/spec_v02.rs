@@ -4,10 +4,10 @@ use std::collections::HashSet;
 
 use pulldown_cmark::{Event, Options, Parser, Tag};
 use regex::Regex;
-use serde_yaml::Value;
+use yaml_serde::Value;
 
 use crate::check::lint::{Finding, RuleContext};
-use crate::model::standard::{parse_timestamp, valid_actor};
+use crate::model::standard::{LIFECYCLE_STATUSES, parse_timestamp, valid_actor};
 
 pub const RULE: &str = "okf-v02";
 
@@ -18,8 +18,9 @@ pub fn run(ctx: &RuleContext<'_>) -> Vec<Finding> {
     let mut out = Vec::new();
     for concept in &ctx.bundle.concepts {
         let fm = &concept.frontmatter;
-        let mut add = |message: String| {
+        let mut add = |subject: &str, message: String| {
             out.push(Finding {
+                comparison_detail: Some(subject.into()),
                 code: None,
                 field_path: None,
                 rule: RULE.to_string(),
@@ -30,20 +31,24 @@ pub fn run(ctx: &RuleContext<'_>) -> Vec<Finding> {
         };
 
         if fm.get("tags").is_some_and(|v| !v.is_sequence()) {
-            add("`tags` should be a YAML list".to_string());
+            add("tags", "`tags` should be a YAML list".to_string());
         }
         if concept
             .description()
             .is_some_and(|d| d.contains(['\n', '\r']))
         {
-            add("`description` should be one line".to_string());
+            add(
+                "description",
+                "`description` should be one line".to_string(),
+            );
         }
         if let Some(status) = fm.get_str("status")
-            && !matches!(status, "draft" | "stable" | "deprecated")
+            && !LIFECYCLE_STATUSES.contains(&status)
         {
-            add(format!(
-                "invalid status {status:?}: expected draft, stable, or deprecated"
-            ));
+            add(
+                "status",
+                format!("invalid status {status:?}: expected draft, stable, or deprecated"),
+            );
         }
         check_timestamp(fm.get("stale_after"), "stale_after", &mut add);
         if let Some(generated) = fm.get("generated") {
@@ -51,11 +56,14 @@ pub fn run(ctx: &RuleContext<'_>) -> Vec<Finding> {
                 Some(map) => {
                     match map.get("by").and_then(Value::as_str) {
                         Some(by) if valid_actor(by) => {}
-                        _ => add("`generated.by` must use the OKF actor convention".to_string()),
+                        _ => add(
+                            "generated.by",
+                            "`generated.by` must use the OKF actor convention".to_string(),
+                        ),
                     }
                     check_timestamp(map.get("at"), "generated.at", &mut add);
                 }
-                None => add("`generated` must be a mapping".to_string()),
+                None => add("generated", "`generated` must be a mapping".to_string()),
             }
         }
         if let Some(verified) = fm.get("verified") {
@@ -63,20 +71,27 @@ pub fn run(ctx: &RuleContext<'_>) -> Vec<Finding> {
                 Value::Sequence(seq) => seq.iter().collect(),
                 Value::Mapping(_) => vec![verified],
                 _ => {
-                    add("`verified` must be a mapping or list of mappings".to_string());
+                    add(
+                        "verified",
+                        "`verified` must be a mapping or list of mappings".to_string(),
+                    );
                     Vec::new()
                 }
             };
             for (i, entry) in entries.into_iter().enumerate() {
                 let Some(map) = entry.as_mapping() else {
-                    add(format!("verified[{i}] must be a mapping"));
+                    add(
+                        &format!("verified[{i}]"),
+                        format!("verified[{i}] must be a mapping"),
+                    );
                     continue;
                 };
                 match map.get("by").and_then(Value::as_str) {
                     Some(by) if valid_actor(by) => {}
-                    _ => add(format!(
-                        "verified[{i}].by must use the OKF actor convention"
-                    )),
+                    _ => add(
+                        &format!("verified[{i}].by"),
+                        format!("verified[{i}].by must use the OKF actor convention"),
+                    ),
                 }
                 check_required_timestamp(map.get("at"), &format!("verified[{i}].at"), &mut add);
             }
@@ -89,7 +104,10 @@ pub fn run(ctx: &RuleContext<'_>) -> Vec<Finding> {
                 Some(entries) => {
                     for (i, entry) in entries.iter().enumerate() {
                         let Some(map) = entry.as_mapping() else {
-                            add(format!("sources[{i}] must be a mapping"));
+                            add(
+                                &format!("sources[{i}]"),
+                                format!("sources[{i}] must be a mapping"),
+                            );
                             continue;
                         };
                         if map
@@ -97,12 +115,18 @@ pub fn run(ctx: &RuleContext<'_>) -> Vec<Finding> {
                             .and_then(Value::as_str)
                             .is_none_or(|s| s.trim().is_empty())
                         {
-                            add(format!("sources[{i}].resource is required"));
+                            add(
+                                &format!("sources[{i}].resource"),
+                                format!("sources[{i}].resource is required"),
+                            );
                         }
                         if let Some(id) = map.get("id").and_then(Value::as_str)
                             && !source_ids.insert(id.to_string())
                         {
-                            add(format!("duplicate sources[].id {id:?}"));
+                            add(
+                                &format!("duplicate-source:{id}"),
+                                format!("duplicate sources[].id {id:?}"),
+                            );
                         }
                         check_timestamp(
                             map.get("last_modified"),
@@ -112,9 +136,12 @@ pub fn run(ctx: &RuleContext<'_>) -> Vec<Finding> {
                         if map.get("usage_count").is_some() {
                             any_usage_count = true;
                             if !map.get("usage_count").is_some_and(|v| v.as_u64().is_some()) {
-                                add(format!(
-                                    "sources[{i}].usage_count must be a non-negative integer"
-                                ));
+                                add(
+                                    &format!("sources[{i}].usage_count"),
+                                    format!(
+                                        "sources[{i}].usage_count must be a non-negative integer"
+                                    ),
+                                );
                             }
                         }
                         if let Some(window) = map.get("usage_window") {
@@ -122,24 +149,28 @@ pub fn run(ctx: &RuleContext<'_>) -> Vec<Finding> {
                         }
                     }
                 }
-                None => add("`sources` must be a list".to_string()),
+                None => add("sources", "`sources` must be a list".to_string()),
             }
         }
         if let Some(window) = fm.get("usage_window") {
             check_window(window, "usage_window", &mut add);
         } else if any_usage_count {
-            add("usage_count should be framed by a shared or per-source usage_window".to_string());
+            add(
+                "usage-window-missing",
+                "usage_count should be framed by a shared or per-source usage_window".to_string(),
+            );
         }
         for id in defined_footnote_references(&concept.body) {
             if !source_ids.contains(&id) {
-                add(format!("footnote [^{id}] has no matching sources[].id"));
+                add(
+                    &format!("footnote:{id}"),
+                    format!("footnote [^{id}] has no matching sources[].id"),
+                );
             }
         }
 
         if concept.concept_type() == Some("Attested Computation") {
-            for issue in computation_issues(concept) {
-                add(issue);
-            }
+            check_computation(concept, &mut add);
         }
     }
     out
@@ -171,14 +202,23 @@ fn defined_footnote_references(body: &str) -> Vec<String> {
 
 /// Shared structural checks for an exact Attested Computation contract.
 pub fn computation_issues(concept: &crate::model::concept::Concept) -> Vec<String> {
-    let fm = &concept.frontmatter;
     let mut issues = Vec::new();
-    let mut add = |message: String| issues.push(message);
+    check_computation(concept, &mut |_, message| issues.push(message));
+    issues
+}
+fn check_computation(concept: &crate::model::concept::Concept, add: &mut impl FnMut(&str, String)) {
+    let fm = &concept.frontmatter;
     if fm.get_str("runtime").is_none_or(|s| s.trim().is_empty()) {
-        add("Attested Computation requires non-empty `runtime`".to_string());
+        add(
+            "runtime",
+            "Attested Computation requires non-empty `runtime`".to_string(),
+        );
     }
     if fm.get("parameters").is_some_and(|v| !v.is_sequence()) {
-        add("Attested Computation `parameters` must be a list".to_string());
+        add(
+            "parameters",
+            "Attested Computation `parameters` must be a list".to_string(),
+        );
     }
     if let Some(parameters) = fm.get("parameters").and_then(Value::as_sequence) {
         let mut names = HashSet::new();
@@ -193,29 +233,34 @@ pub fn computation_issues(concept: &crate::model::concept::Concept) -> Vec<Strin
                     .is_some_and(|s| !s.is_empty())
                 && parameter.get("required").and_then(Value::as_bool).is_some();
             if !valid {
-                add(format!(
-                    "parameters[{i}] must contain name, type, and boolean required"
-                ));
+                add(
+                    &format!("parameters[{i}]"),
+                    format!("parameters[{i}] must contain name, type, and boolean required"),
+                );
             }
             if let Some(name) = parameter.get("name").and_then(Value::as_str)
                 && !names.insert(name.to_string())
             {
-                add(format!("duplicate computation parameter {name:?}"));
+                add(
+                    &format!("duplicate-parameter:{name}"),
+                    format!("duplicate computation parameter {name:?}"),
+                );
             }
         }
     }
     for family in ["executor", "attester"] {
         if let Some(value) = fm.get(family) {
             if !value.is_mapping() {
-                add(format!("`{family}` must be a mapping"));
+                add(family, format!("`{family}` must be a mapping"));
             } else if value
                 .get("resource")
                 .and_then(Value::as_str)
                 .is_none_or(|s| s.trim().is_empty())
             {
-                add(format!(
-                    "`{family}.resource` must be a non-empty path or URI"
-                ));
+                add(
+                    &format!("{family}.resource"),
+                    format!("`{family}.resource` must be a non-empty path or URI"),
+                );
             }
         }
     }
@@ -225,37 +270,43 @@ pub fn computation_issues(concept: &crate::model::concept::Concept) -> Vec<Strin
         .get_str("computation")
         .is_some_and(|s| !s.trim().is_empty());
     if inline == file {
-        add("Attested Computation must use exactly one of inline # Computation fence or `computation` path".to_string());
+        add("computation-form", "Attested Computation must use exactly one of inline # Computation fence or `computation` path".to_string());
     }
     if fence_count > 1 {
-        add("inline # Computation must contain a single fenced code block".to_string());
+        add(
+            "computation-fence-count",
+            "inline # Computation must contain a single fenced code block".to_string(),
+        );
     }
     if inline && !fence_has_content {
-        add("inline computation fence is empty".to_string());
+        add(
+            "computation-fence-empty",
+            "inline computation fence is empty".to_string(),
+        );
     }
-    issues
 }
 
 fn check_timestamp<F>(value: Option<&Value>, name: &str, add: &mut F)
 where
-    F: FnMut(String),
+    F: FnMut(&str, String),
 {
     if let Some(value) = value {
         match value.as_str() {
             Some(raw) if parse_timestamp(raw).is_some() => {}
-            _ => add(format!(
-                "`{name}` must be an ISO 8601 datetime with explicit UTC offset"
-            )),
+            _ => add(
+                name,
+                format!("`{name}` must be an ISO 8601 datetime with explicit UTC offset"),
+            ),
         }
     }
 }
 
 fn check_required_timestamp<F>(value: Option<&Value>, name: &str, add: &mut F)
 where
-    F: FnMut(String),
+    F: FnMut(&str, String),
 {
     if value.is_none() {
-        add(format!("`{name}` is required"));
+        add(name, format!("`{name}` is required"));
     } else {
         check_timestamp(value, name, add);
     }
@@ -263,7 +314,7 @@ where
 
 fn check_window<F>(value: &Value, name: &str, add: &mut F)
 where
-    F: FnMut(String),
+    F: FnMut(&str, String),
 {
     match value.as_mapping() {
         Some(map) => {
@@ -278,10 +329,10 @@ where
                     .and_then(parse_timestamp),
             ) && from > to
             {
-                add(format!("`{name}.from` must not be after `{name}.to`"));
+                add(name, format!("`{name}.from` must not be after `{name}.to`"));
             }
         }
-        None => add(format!("`{name}` must be a {{from,to}} mapping")),
+        None => add(name, format!("`{name}` must be a {{from,to}} mapping")),
     }
 }
 

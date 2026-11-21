@@ -23,10 +23,10 @@ fn environment(message: impl Into<String>) -> OkfError {
     OkfError::Environment(message.into())
 }
 fn yaml<T: serde::de::DeserializeOwned>(bytes: &[u8], name: &str) -> Result<T> {
-    serde_yaml::from_slice(bytes).map_err(|e| usage(format!("invalid {name}: {e}")))
+    yaml_serde::from_slice(bytes).map_err(|e| usage(format!("invalid {name}: {e}")))
 }
 fn encoded<T: Serialize>(value: &T) -> Result<Vec<u8>> {
-    serde_yaml::to_string(value)
+    yaml_serde::to_string(value)
         .map(String::into_bytes)
         .map_err(|e| usage(e.to_string()))
 }
@@ -302,10 +302,10 @@ fn validate_ref(reference: &str) -> Result<()> {
 }
 /// Parse only catalog-owned remote declarations. No catalog recursion or acquisition.
 pub fn registrations(catalog: &Path) -> Result<BTreeMap<String, GitRegistration>> {
-    let value: serde_yaml::Value = yaml(&std::fs::read(catalog)?, "catalog")?;
+    let value: yaml_serde::Value = yaml(&std::fs::read(catalog)?, "catalog")?;
     let version = value
         .get("catalog_version")
-        .and_then(serde_yaml::Value::as_u64)
+        .and_then(yaml_serde::Value::as_u64)
         .ok_or_else(|| usage("catalog_version is required"))?;
     if !matches!(version, 1 | 2) {
         return Err(usage("unsupported catalog_version"));
@@ -356,7 +356,7 @@ pub fn registrations(catalog: &Path) -> Result<BTreeMap<String, GitRegistration>
         let accepts = entry
             .get("accepts")
             .map(|v| {
-                serde_yaml::from_value(v.clone())
+                yaml_serde::from_value(v.clone())
                     .map_err(|e| usage(format!("invalid accepts: {e}")))
             })
             .transpose()?
@@ -915,7 +915,7 @@ fn observe(root: &Path, decl: &GitRegistration, snapshot: &Snapshot) -> Result<O
         if let Some(rest) = text.strip_prefix("---\n")
             && let Some((front, _)) = rest.split_once("\n---")
         {
-            let v: serde_yaml::Value = yaml(front.as_bytes(), "root index")?;
+            let v: yaml_serde::Value = yaml(front.as_bytes(), "root index")?;
             observed.okf_spec = v
                 .get("okf_version")
                 .and_then(|v| v.as_str())
@@ -939,10 +939,10 @@ fn observe(root: &Path, decl: &GitRegistration, snapshot: &Snapshot) -> Result<O
     super::manifest::validate_resources(&root)?;
     if manifest.is_file() {
         let bytes = std::fs::read(&manifest)?;
-        let v: serde_yaml::Value = yaml(&bytes, "remote manifest")?;
+        let v: yaml_serde::Value = yaml(&bytes, "remote manifest")?;
         let version = v
             .get("manifest_version")
-            .and_then(serde_yaml::Value::as_u64)
+            .and_then(yaml_serde::Value::as_u64)
             .ok_or_else(|| usage("remote manifest requires manifest_version"))?;
         if version != 1 {
             return Err(usage("unsupported remote manifest version"));
@@ -1534,7 +1534,7 @@ pub fn ensure_writable(path: &Path) -> Result<()> {
                 }
             }
         }
-        let raw: serde_yaml::Value = yaml(&std::fs::read(&catalog)?, "catalog")?;
+        let raw: yaml_serde::Value = yaml(&std::fs::read(&catalog)?, "catalog")?;
         let override_path = std::env::var_os("OKF_CATALOG_OVERRIDES")
             .map(PathBuf::from)
             .or_else(|| {
@@ -1543,7 +1543,7 @@ pub fn ensure_writable(path: &Path) -> Result<()> {
                     .map(|p| catalog.parent().unwrap_or(Path::new(".")).join(p))
             });
         if let Some(path) = override_path {
-            let value: serde_yaml::Value = yaml(&std::fs::read(&path)?, "catalog overrides")?;
+            let value: yaml_serde::Value = yaml(&std::fs::read(&path)?, "catalog overrides")?;
             if let Some(map) = value.get("bundles").and_then(|v| v.as_mapping()) {
                 for (id, location) in map {
                     if id.as_str().is_some_and(|id| declarations.contains_key(id))

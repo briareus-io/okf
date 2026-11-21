@@ -444,13 +444,13 @@ pub fn resolve_source_in_context(
     context: &crate::bundle::context::Context,
     scope_ids: &[String],
     from: &str,
-    source: &serde_yaml::Value,
+    source: &yaml_serde::Value,
 ) -> Result<(PathBuf, ResolvedArtifact)> {
     let resource = source
         .get("resource")
-        .and_then(serde_yaml::Value::as_str)
+        .and_then(yaml_serde::Value::as_str)
         .ok_or_else(|| OkfError::Usage("source requires resource".into()))?;
-    let kind = source.get("kind").and_then(serde_yaml::Value::as_str);
+    let kind = source.get("kind").and_then(yaml_serde::Value::as_str);
     let logical = crate::model::link::LogicalReference::parse(resource)?;
     let typed_local =
         matches!(kind, Some("file" | "line-range" | "markdown-heading")) && logical.is_none();
@@ -473,7 +473,7 @@ pub fn resolve_source_in_context(
     let Some(mapping) = source.get("bundle_ref") else {
         return Ok(result);
     };
-    let declared: crate::graph::catalog::BundleRef = serde_yaml::from_value(mapping.clone())
+    let declared: crate::graph::catalog::BundleRef = yaml_serde::from_value(mapping.clone())
         .map_err(|e| OkfError::Usage(format!("invalid bundle_ref: {e}")))?;
     if Path::new(&declared.path).is_absolute()
         || Path::new(&declared.path)

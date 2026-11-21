@@ -1,6 +1,6 @@
 # okf CLI — ontology command reference
 
-> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.6.6, OKF spec 0.2). Do not hand-edit; regenerate instead.
+> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.6.7, OKF spec 0.2). Do not hand-edit; regenerate instead.
 
 This focused reference contains only commands selected for the `ontology` workflow. First pass the skill CLI compatibility preflight. Consult this reference when exact arguments or output shapes are needed. For a compatible CLI that rejects documented syntax, use that command's `--help` output as the runtime authority.
 
@@ -163,6 +163,25 @@ Authored concept metadata remains open. These computed records describe scope, i
     "origin": "object",
     "selection_reason": "string (explicit context)",
     "tier": "mandatory|reference (rules)"
+  },
+  "lint-baseline": {
+    "bundles": "map<bundle,version> (file capture)",
+    "entries": "integer (file capture)",
+    "path": "path (file capture)",
+    "revision": "commit (Git comparison)"
+  },
+  "lint-comparison": {
+    "classification": "introduced|existing|worsened|improved|resolved",
+    "count": "positive integer",
+    "identity": "{bundle,rule,concept,code,field_path,subject}",
+    "message": "string",
+    "previous_severity": "info|warn|error|null",
+    "severity": "info|warn|error"
+  },
+  "lint-comparison-summary": {
+    "after_bundles": "map<bundle,version>",
+    "before_bundles": "map<bundle,version>",
+    "counts": "map<classification,count>"
   },
   "ontology_field_type": {
     "definition": "object",
@@ -557,14 +576,17 @@ Advisory checks (broken links, missing fields, orphans, ontology violations).
 | Argument | Type | Required | Description |
 |----------|------|----------|-------------|
 | `<bundle>` | positional | no | Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory) |
+| `--baseline <value>` | string | no | Compare findings with a saved lint baseline |
+| `--write-baseline <value>` | string | no | Atomically save all findings from a complete lint run |
+| `--baseline-ref <value>` | string | no | Compare with the workspace catalog, lock and bundles at this exact local Git revision |
 | `--fix` | bool | no | Normalize frontmatter order bundle-wide for the enabled frontmatter-order rule (default: `false`) |
 | `--fail-on <value>` | string | no | Severity threshold that makes the run fail (exit 1): never|info|warn|error|any (default: `error`) |
 
-Output stream: `finding,scope,fix`.
+Output stream: `finding,scope,fix,lint-baseline,lint-comparison,lint-comparison-summary`.
 
 Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--scope-bundle`, `--selection`.
 
-For sources with a fingerprint kind, `source-unrecorded` warns when no baseline exists. `source-missing` errors when file, line-range, or markdown-heading sources cannot be fingerprinted, even without a baseline. Lint does not fetch URLs or inspect Git sources. Configure `source_unrecorded: off` (or `info`, `warn`, `error`; default `warn`) under `settings.lint` in `okf-bundle.yaml`. Legacy TOML bundle settings remain compatibility input. Disabling this rule leaves `source-missing` and `stale` checks active. All lint settings accept `off`, `info`, `warn`, or `error`. Defaults: `broken_link` and `source_missing` are `error`; `missing_title`, `spec_v02` (finding rule `okf-v02`), `ontology_violation`, `source_unrecorded`, `invalid_reference`, and `index_coverage` are `warn`; `missing_description` and `orphan` are `info`. Omitted settings keep these defaults. `off` suppresses the selected lint rule only; validation and stale checks remain independent. `index_exclude` controls index coverage exclusions and `finding_budget` limits ontology findings (positive, default 1,000 per concept). Use `--fail-on warn` to fail on warnings as well as errors.
+For sources with a fingerprint kind, `source-unrecorded` warns when no baseline exists. `source-missing` errors when file, line-range, or markdown-heading sources cannot be fingerprinted, even without a baseline. These source-health rules skip URL fetching and Git fingerprint checks. Configure `source_unrecorded: off` (or `info`, `warn`, `error`; default `warn`) under `settings.lint` in `okf-bundle.yaml`. Legacy TOML bundle settings remain compatibility input. Disabling this rule leaves `source-missing` and `stale` checks active. All lint rule severities accept `off`, `info`, `warn`, or `error`. Defaults: `broken_link` and `source_missing` are `error`; `missing_title`, `spec_v02` (finding rule `okf-v02`), `ontology_violation`, `source_unrecorded`, `invalid_reference`, and `index_coverage` are `warn`; `missing_description` and `orphan` are `info`. Omitted settings keep these defaults. `off` suppresses the selected lint rule only; validation and stale checks remain independent. `index_exclude` controls index coverage exclusions and `finding_budget` limits ontology findings (positive, default 1,000 per concept). The size rules `body_max_lines`, `frontmatter_max_lines`, and `max_line_length` default to `off` and each requires its corresponding positive `_limit` when enabled. CI can select a partial YAML `settings.lint` mapping with `OKF_SETTINGS_OVERRIDES`. Ontology lint reports incompatible top-level `status` declarations once per type, even in empty bundles. Use `--fail-on warn` to fail on warnings as well as errors. With `--baseline` or `--baseline-ref`, that threshold applies to introduced or worsened findings. `--write-baseline` captures all enabled severities.
 
 ### `okf validate`
 

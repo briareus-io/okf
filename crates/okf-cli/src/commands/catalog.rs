@@ -264,7 +264,7 @@ pub fn run_catalog_command(args: &crate::cli::CatalogArgs, cli: &Cli) -> Result<
                 let mut roots = Vec::new();
                 if !cli.scope_bundle.is_empty() || cli.catalog_scope {
                     let file: okf_core::bundle::catalog::CatalogFile =
-                        serde_yaml::from_slice(&std::fs::read(&path)?)
+                        yaml_serde::from_slice(&std::fs::read(&path)?)
                             .map_err(|e| OkfError::Usage(format!("invalid catalog: {e}")))?;
                     let ids = if cli.catalog_scope {
                         file.bundles
@@ -325,7 +325,7 @@ fn output_report<T: serde::Serialize>(kind: &str, value: &T, json_output: bool) 
     } else {
         output::print_text_line(format_args!(
             "{}",
-            serde_yaml::to_string(value).map_err(|e| OkfError::Internal(e.to_string()))?
+            yaml_serde::to_string(value).map_err(|e| OkfError::Internal(e.to_string()))?
         ))
     }
 }
@@ -488,6 +488,18 @@ pub fn prepare(cli: &mut Cli) -> Result<Option<i32>> {
     }
     if cli.bundle_id.is_some() || context.catalog.is_some() {
         *slot = Some(context.primary.root.to_string_lossy().into_owned());
+    }
+    if let Command::Lint(args) = &cli.command
+        && (args.baseline.is_some() || args.write_baseline.is_some() || args.baseline_ref.is_some())
+    {
+        return super::lint_baseline::run(
+            args,
+            &context,
+            &cli.scope_bundle,
+            cli.catalog_scope,
+            cli.json,
+        )
+        .map(Some);
     }
     match &mut cli.command {
         Command::Search(a) => {
@@ -1023,7 +1035,9 @@ fn run_scoped(cli: &Cli, context: &Context, graph: &CatalogGraph) -> Result<i32>
             }
             Ok(0)
         }
-        Command::Lint(a) => run_lint_scoped(a, cli.json, context, graph),
+        Command::Lint(a) => run_lint_scoped(a, cli.json, context, graph, &mut |row, _| {
+            output::print_line(row)
+        }),
         _ => Err(OkfError::Internal("unsupported scoped dispatch".into())),
     }
 }
@@ -1033,11 +1047,12 @@ fn xml(s: &str) -> String {
         .replace('>', "&gt;")
         .replace('"', "&quot;")
 }
-fn run_lint_scoped(
+pub(super) fn run_lint_scoped(
     args: &crate::cli::LintArgs,
     json_output: bool,
     context: &Context,
     graph: &CatalogGraph,
+    emit: &mut super::lint_baseline::Emit<'_>,
 ) -> Result<i32> {
     use okf_core::check::lint::{FailOn, Finding, Severity, lint_bundle, meets_threshold};
     use std::str::FromStr;
@@ -1065,7 +1080,7 @@ fn run_lint_scoped(
     }
     for examined in &graph.scope.examined {
         okf_core::check::lint::validate_configuration(&examined.root)?;
-        if let Some(ontology) = okf_core::bundle::settings::load_for(&examined.root)?.1 {
+        if let Some(ontology) = okf_core::bundle::settings::load_in(context, &examined.root)?.1 {
             target_ontologies.insert(examined.id.clone(), ontology);
         }
         for concept in okf_core::bundle::loader::load_bundle(&examined.root)?.concepts {
@@ -1083,7 +1098,7 @@ fn run_lint_scoped(
     }
     for examined in &graph.scope.examined {
         let bundle = okf_core::bundle::loader::load_bundle(&examined.root)?;
-        let (effective, ontology) = okf_core::bundle::settings::load_for(&examined.root)?;
+        let (effective, ontology) = okf_core::bundle::settings::load_in(context, &examined.root)?;
         let config = super::check::lint_config(&effective.settings)?;
         let bundle = if args.fix && config.frontmatter_order.is_some() {
             let fixed = okf_core::check::lint::rules::frontmatter_order::fix(
@@ -1112,7 +1127,15 @@ fn run_lint_scoped(
             frontmatter_order: None,
             ..config
         };
-        let mut findings = lint_bundle(&bundle, None, &document_config);
+        let mut findings = okf_core::check::lint::rules::ontology_violation::declaration_findings(
+            ontology.as_ref(),
+            config.ontology_violation,
+        )?;
+        findings.extend(lint_bundle(&bundle, None, &document_config));
+        findings.extend(okf_core::check::lint::rules::size::run(
+            &bundle,
+            &effective.settings.lint,
+        )?);
         findings.extend(okf_core::check::lint::rules::invalid_reference::run(
             &bundle,
             ontology.as_ref(),
@@ -1138,6 +1161,7 @@ fn run_lint_scoped(
                 };
                 if !connected.contains(&node) {
                     findings.push(Finding {
+                        comparison_detail: None,
                         rule: "orphan".into(),
                         code: None,
                         field_path: None,
@@ -1214,6 +1238,7 @@ fn run_lint_scoped(
                         )
                     {
                         findings.push(okf_core::check::lint::Finding {
+                            comparison_detail: Some(violation.kind.baseline_key()),
                             rule: "ontology-violation".into(),
                             code,
                             field_path,
@@ -1277,7 +1302,7 @@ fn run_lint_scoped(
                         if !allows(&reference.target)
                             || kind_target.is_some_and(|expected| !allows(expected))
                         {
-                            findings.push(okf_core::check::lint::Finding{rule:"ontology-violation".into(),code:Some("metadata-reference-target-type".into()),field_path:Some(edge.location.clone()),severity,concept:Some(concept.id.0.clone()),message:format!("{}: reference {:?} targets {}:{actual}, outside its declared target namespace/types",edge.location,edge.resource,target.bundle)});
+                            findings.push(okf_core::check::lint::Finding { comparison_detail: Some(edge.resource.clone()),rule:"ontology-violation".into(),code:Some("metadata-reference-target-type".into()),field_path:Some(edge.location.clone()),severity,concept:Some(concept.id.0.clone()),message:format!("{}: reference {:?} targets {}:{actual}, outside its declared target namespace/types",edge.location,edge.resource,target.bundle)});
                         }
                     }
                 }
@@ -1306,6 +1331,7 @@ fn run_lint_scoped(
                             && finding.code.as_deref() == Some("incomplete-check")
                     }) {
                         findings.push(okf_core::check::lint::Finding {
+                            comparison_detail: None,
                             rule: "ontology-violation".into(),
                             code: Some("incomplete-check".into()),
                             field_path: None,
@@ -1325,8 +1351,9 @@ fn run_lint_scoped(
         failed |= meets_threshold(&findings, fail_on);
         for finding in findings {
             if json_output {
-                output::print_line(
+                emit(
                     &json!({"kind":"finding","rule":finding.rule,"code":finding.code,"field_path":finding.field_path,"severity":finding.severity.as_str(),"concept":finding.concept,"bundle":examined.id,"message":finding.message}),
+                    finding.comparison_detail.as_deref(),
                 )?;
             } else {
                 output::print_text_line(format_args!(
@@ -1360,7 +1387,7 @@ fn run_lint_scoped(
                 value["rule"] = json!("index-coverage");
                 value["severity"] = json!(index_severity.as_str());
                 value["bundle"] = json!(examined.id);
-                output::print_line(&value)?;
+                emit(&value, None)?;
             } else {
                 output::print_text_line(format_args!(
                     "{}\tindex-coverage\t{}:{}\t{}",
@@ -1412,8 +1439,9 @@ fn run_lint_scoped(
                 ("cross-bundle-reference", issue, "warn")
             };
             if json_output {
-                output::print_line(
+                emit(
                     &json!({"kind":"finding","rule":rule,"code":code,"severity":severity,"concept":edge.source.id,"bundle":edge.source.bundle,"field_path":edge.location,"message":edge.evidence,"resolution":edge}),
+                    Some(&edge.resource),
                 )?;
             } else {
                 output::print_text_line(format_args!(
@@ -1434,8 +1462,9 @@ fn run_lint_scoped(
     }
     for unavailable in &graph.scope.unavailable {
         if json_output {
-            output::print_line(
+            emit(
                 &json!({"kind":"finding","rule":"unavailable-bundle","severity":"warn","bundle":unavailable,"message":"requested scope member unavailable"}),
+                None,
             )?;
         } else {
             output::print_text_line(format_args!("warn\tunavailable-bundle\t{unavailable}"))?;

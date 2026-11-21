@@ -19,8 +19,8 @@ use okf_core::ontology::schema::{
     Cardinality, ConceptType, Field, Ontology, ReferenceRule, Target,
 };
 use serde_json::json;
-use serde_yaml::{Mapping, Value};
 use std::collections::HashSet;
+use yaml_serde::{Mapping, Value};
 
 /// The default schema version stamped into a freshly-created `ontology.yaml`.
 const ONTOLOGY_VERSION: &str = "0.1";
@@ -64,13 +64,13 @@ pub fn run_show(args: &OntShowArgs, json: bool) -> Result<i32> {
         if let Some(trust) = &ct.trust {
             output::print_text_line(format_args!(
                 "trust:\n{}",
-                serde_yaml::to_string(trust).map_err(|e| OkfError::Yaml(e.to_string()))?
+                yaml_serde::to_string(trust).map_err(|e| OkfError::Yaml(e.to_string()))?
             ))?;
         }
         if !ct.extra.is_empty() {
             output::print_text(format_args!(
                 "{}",
-                serde_yaml::to_string(&ct.extra).map_err(|e| OkfError::Yaml(e.to_string()))?
+                yaml_serde::to_string(&ct.extra).map_err(|e| OkfError::Yaml(e.to_string()))?
             ))?;
         }
         if !ct.fields.is_empty() {
@@ -92,7 +92,7 @@ pub fn run_show(args: &OntShowArgs, json: bool) -> Result<i32> {
         }
         output::print_text_line(format_args!(
             "effective fields:\n{}",
-            serde_yaml::to_string(
+            yaml_serde::to_string(
                 &ct.fields
                     .iter()
                     .map(|(k, f)| (k, resolve_field(&ontology, f).ok()))
@@ -114,7 +114,7 @@ pub fn run_show(args: &OntShowArgs, json: bool) -> Result<i32> {
                 if !r.extra.is_empty() {
                     output::print_text(format_args!(
                         "{}",
-                        serde_yaml::to_string(&r.extra)
+                        yaml_serde::to_string(&r.extra)
                             .map_err(|e| OkfError::Yaml(e.to_string()))?
                     ))?;
                 }
@@ -123,7 +123,7 @@ pub fn run_show(args: &OntShowArgs, json: bool) -> Result<i32> {
         if !ct.relationships.is_empty() {
             output::print_text_line(format_args!(
                 "relationships:\n{}",
-                serde_yaml::to_string(&ct.relationships)
+                yaml_serde::to_string(&ct.relationships)
                     .map_err(|e| OkfError::Yaml(e.to_string()))?
             ))?;
         }
@@ -248,8 +248,8 @@ pub fn run_field_type(cmd: &OntFieldTypeCmd, json: bool) -> Result<i32> {
             output::print_text_line(format_args!(
                 "# {}\n{}effective:\n{}",
                 args.name,
-                serde_yaml::to_string(definition).map_err(|e| OkfError::Yaml(e.to_string()))?,
-                serde_yaml::to_string(&effective).map_err(|e| OkfError::Yaml(e.to_string()))?
+                yaml_serde::to_string(definition).map_err(|e| OkfError::Yaml(e.to_string()))?,
+                yaml_serde::to_string(&effective).map_err(|e| OkfError::Yaml(e.to_string()))?
             ))?;
         }
         return Ok(0);
@@ -302,7 +302,7 @@ pub fn run_field_type(cmd: &OntFieldTypeCmd, json: bool) -> Result<i32> {
     if let Some(input) = input {
         let value = read_definition(&mut InputReader::default(), input)?;
         require_mapping(&value, "field-type definition")?;
-        let definition = serde_yaml::from_value(value)
+        let definition = yaml_serde::from_value(value)
             .map_err(|e| OkfError::Usage(format!("invalid field-type definition: {e}")))?;
         ontology.field_types.insert(name.clone(), definition);
     } else {
@@ -397,7 +397,7 @@ fn edit_definition(existing: &ConceptType, args: &OntEditArgs) -> Result<Concept
             &mut touched,
             "fields",
             &key,
-            serde_yaml::to_value(declaration).map_err(|e| OkfError::Yaml(e.to_string()))?,
+            yaml_serde::to_value(declaration).map_err(|e| OkfError::Yaml(e.to_string()))?,
         )?;
     }
     for spec in &args.reference {
@@ -407,7 +407,7 @@ fn edit_definition(existing: &ConceptType, args: &OntEditArgs) -> Result<Concept
             &mut touched,
             "references",
             &key,
-            serde_yaml::to_value(declaration).map_err(|e| OkfError::Yaml(e.to_string()))?,
+            yaml_serde::to_value(declaration).map_err(|e| OkfError::Yaml(e.to_string()))?,
         )?;
     }
     for (section, specs) in [
@@ -612,6 +612,23 @@ fn finish(
             require_gate,
         )?;
     }
+    let severity = super::check::lint_severity(
+        settings.settings.lint.ontology_violation.as_deref(),
+        okf_core::check::lint::Severity::Warn,
+    )?;
+    let findings = okf_core::check::lint::rules::ontology_violation::declaration_findings(
+        Some(ontology),
+        severity,
+    )?;
+    let mut change = json!({
+        "kind": "change",
+        "op": format!("ontology-{op}"),
+        "name": name,
+        "requested_bundles": [root],
+        "required_dependent_bundles": dependents,
+        "examined_bundles": roots,
+        "unknown_external_users_covered": false,
+    });
     if !dry_run {
         let primary = root.canonicalize()?;
         let Some(position) = roots.iter().position(|r| r == &primary) else {
@@ -643,15 +660,29 @@ fn finish(
                 generated.into_bytes(),
             )?;
         }
-        return report_change(op, name, json, root, &dependents, &roots);
-    }
-    let diff = preview_diff(&path, &before, &generated);
-    if json {
-        output::print_line(
-            &json!({"kind":"change", "op":format!("ontology-{op}"), "name":name, "dry_run":true, "diff":diff, "before":before, "after":generated, "requested_bundles":[root], "required_dependent_bundles":dependents, "examined_bundles":roots, "unknown_external_users_covered":false}),
-        )?;
     } else {
-        output::print_text(format_args!("{diff}"))?;
+        let diff = preview_diff(&path, &before, &generated);
+        if json {
+            change["dry_run"] = json!(true);
+            change["before"] = json!(before);
+            change["after"] = json!(generated);
+            change["diff"] = json!(diff);
+        } else {
+            output::print_text(format_args!("{diff}"))?;
+        }
+    }
+    if json {
+        if !findings.is_empty() {
+            change["findings"] = json!(findings);
+        }
+        output::print_line(&change)?;
+    } else {
+        if !dry_run {
+            output::print_text_line(format_args!("ontology {op}: {name}"))?;
+        }
+        for finding in findings {
+            eprintln!("{}: {}", finding.severity.as_str(), finding.message);
+        }
     }
     Ok(0)
 }
@@ -709,24 +740,6 @@ fn load_current(
         },
     };
     Ok((ontology, bytes, canonical_target(&path)?))
-}
-
-fn report_change(
-    op: &str,
-    name: &str,
-    json: bool,
-    root: &std::path::Path,
-    dependents: &[String],
-    examined: &[std::path::PathBuf],
-) -> Result<i32> {
-    if json {
-        output::print_line(
-            &json!({"kind": "change", "op": format!("ontology-{op}"), "name": name, "requested_bundles":[root], "required_dependent_bundles":dependents, "examined_bundles":examined, "unknown_external_users_covered":false}),
-        )?;
-    } else {
-        output::print_text_line(format_args!("ontology {op}: {name}"))?;
-    }
-    Ok(0)
 }
 
 /// Build an NDJSON record describing a concept type.

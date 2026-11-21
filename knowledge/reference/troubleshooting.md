@@ -22,6 +22,7 @@ for capability examples and the [CLI reference](../commands/index.md) for exact 
 | Is the bundle manifest usable? | `bundle validate` | Supported schema, declarations, and required resources pass validation. |
 | Are accepted remote dependencies available locally? | `catalog sync --check` | Local snapshots match the accepted lock; this is offline, not a network/authentication check. |
 | Does the bundle satisfy our advisory conventions? | `lint` | Findings are interpreted under configured rules and the selected failure threshold. |
+| Did this change introduce findings that should fail CI? | `lint --baseline <file>` or `lint --baseline-ref <ref>` | Compare the same scope and inspect [comparison results and exit behavior](../commands/lint.md#compare-lint-findings). |
 | Have recorded source fingerprints changed, or has review expiry passed? | `stale` | The reported source checks and expiry observations; kindless provenance is not fingerprinted. |
 | What depends on changes I already know about? | `affected` | Dependents found within the command's examination and traversal scope. |
 | What changed relative to a Git baseline? | `diff` | Concept differences for the selected comparison. |

@@ -160,7 +160,7 @@ immutable query behavior.
 ### Shared selector syntax and implementation
 
 Accepted design: use a small custom selector parser and walker operating directly on the
-existing `serde_yaml::Value` metadata. No JSONPath, JMESPath, or jq/yq engine dependency or
+existing `yaml_serde::Value` metadata. No JSONPath, JMESPath, or jq/yq engine dependency or
 JSON query copy is introduced. JSON scalar and array filter operands use the existing
 `serde_json` parser; filter evaluation and occurrence pairing remain tool-owned logic.
 

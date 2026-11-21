@@ -1,7 +1,7 @@
 //! Lossless YAML load (order-preserving mapping) and serialize.
 use crate::error::{OkfError, Result};
 use indexmap::IndexMap;
-use serde_yaml::Value;
+use yaml_serde::Value;
 
 /// Parse a frontmatter block into an order-preserving map. An empty/blank block is an
 /// empty map (not an error).
@@ -9,7 +9,7 @@ pub fn parse_frontmatter(yaml: &str) -> Result<IndexMap<String, Value>> {
     if yaml.trim().is_empty() {
         return Ok(IndexMap::new());
     }
-    serde_yaml::from_str::<IndexMap<String, Value>>(yaml).map_err(|e| OkfError::Yaml(e.to_string()))
+    yaml_serde::from_str::<IndexMap<String, Value>>(yaml).map_err(|e| OkfError::Yaml(e.to_string()))
 }
 
 /// Serialize a frontmatter map back to YAML text, preserving key order. Returns an empty
@@ -18,7 +18,7 @@ pub fn serialize_frontmatter(map: &IndexMap<String, Value>) -> Result<String> {
     if map.is_empty() {
         return Ok(String::new());
     }
-    serde_yaml::to_string(map).map_err(|e| OkfError::Internal(e.to_string()))
+    yaml_serde::to_string(map).map_err(|e| OkfError::Internal(e.to_string()))
 }
 
 /// Render readable scalars, with a whole-document value equivalence guard.
@@ -31,9 +31,9 @@ pub fn serialize_formatted(
     if map.is_empty() || settings.style == YamlStyle::Legacy {
         return Ok(legacy);
     }
-    let value = serde_yaml::to_value(map).map_err(|e| OkfError::Internal(e.to_string()))?;
+    let value = yaml_serde::to_value(map).map_err(|e| OkfError::Internal(e.to_string()))?;
     let candidate = render_value(&value, settings.line_width, 0)?;
-    if serde_yaml::from_str::<Value>(&candidate).ok().as_ref() == Some(&value) {
+    if yaml_serde::from_str::<Value>(&candidate).ok().as_ref() == Some(&value) {
         Ok(candidate)
     } else {
         // Exotic keys/tags or whitespace must never change a value for presentation.
@@ -47,11 +47,11 @@ fn render_value(value: &Value, width: usize, indent: usize) -> Result<String> {
         Value::Mapping(map) if !map.is_empty() => {
             for (key, value) in map {
                 let Value::String(_) = key else {
-                    return serde_yaml::to_string(value)
+                    return yaml_serde::to_string(value)
                         .map_err(|e| OkfError::Internal(e.to_string()));
                 };
                 let key =
-                    serde_yaml::to_string(key).map_err(|e| OkfError::Internal(e.to_string()))?;
+                    yaml_serde::to_string(key).map_err(|e| OkfError::Internal(e.to_string()))?;
                 append_value(
                     &mut out,
                     &format!("{}:", key.trim_end_matches('\n')),
@@ -154,7 +154,7 @@ fn scalar(value: &Value, available: usize) -> Result<String> {
             ));
         }
     }
-    serde_yaml::to_string(value).map_err(|e| OkfError::Internal(e.to_string()))
+    yaml_serde::to_string(value).map_err(|e| OkfError::Internal(e.to_string()))
 }
 
 /// Only single ASCII-space boundaries are eligible for folding.

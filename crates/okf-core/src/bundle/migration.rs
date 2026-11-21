@@ -4,9 +4,9 @@
 use crate::error::{OkfError, Result};
 use crate::fingerprint::canonicalize::sha256_hex;
 use serde::{Deserialize, Serialize};
-use serde_yaml::{Mapping, Value};
 use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
+use yaml_serde::{Mapping, Value};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -132,7 +132,7 @@ fn merge(target: &mut Value, source: Value, label: &str) -> Result<()> {
 }
 fn yaml_at(path: &Path) -> Result<Value> {
     match read(path)? {
-        Some(b) => serde_yaml::from_slice(&b)
+        Some(b) => yaml_serde::from_slice(&b)
             .map_err(|e| usage(format!("invalid YAML {}: {e}", path.display()))),
         None => Ok(Value::Mapping(Mapping::new())),
     }
@@ -275,7 +275,7 @@ pub fn plan_with_options(config: &Path, options: MigrationOptions) -> Result<Mig
                         "chosen default bundle ID already refers to a different location",
                     ));
                 }
-                let reg = serde_yaml::to_value(
+                let reg = yaml_serde::to_value(
                     serde_json::json!({"location":{"type":"directory","path":relative(base,path)}}),
                 )
                 .map_err(|e| usage(e.to_string()))?;
@@ -336,7 +336,7 @@ pub fn plan_with_options(config: &Path, options: MigrationOptions) -> Result<Mig
                 ));
                 continue;
             }
-            let mut value = serde_yaml::to_value(settings).map_err(|e| usage(e.to_string()))?;
+            let mut value = yaml_serde::to_value(settings).map_err(|e| usage(e.to_string()))?;
             if let Some(ontology) = value.get_mut("ontology") {
                 let raw = ontology
                     .as_str()
@@ -388,7 +388,7 @@ pub fn plan_with_options(config: &Path, options: MigrationOptions) -> Result<Mig
                 out.unresolved.push(format!("{}: {e}", path.display()));
                 continue;
             }
-            let serialized = serde_yaml::to_string(&manifest).map_err(|e| usage(e.to_string()))?;
+            let serialized = yaml_serde::to_string(&manifest).map_err(|e| usage(e.to_string()))?;
             if let Err(e) = super::manifest::parse(&serialized) {
                 out.unresolved.push(format!("{}: {e}", path.display()));
                 continue;
@@ -407,7 +407,7 @@ pub fn plan_with_options(config: &Path, options: MigrationOptions) -> Result<Mig
     stage(
         &mut out,
         target_catalog,
-        Some(serde_yaml::to_string(&catalog).map_err(|e| usage(e.to_string()))?),
+        Some(yaml_serde::to_string(&catalog).map_err(|e| usage(e.to_string()))?),
     )?;
     let table = legacy
         .as_table_mut()
@@ -439,7 +439,7 @@ pub fn plan_with_options(config: &Path, options: MigrationOptions) -> Result<Mig
 pub fn save(plan: &MigrationPlan, path: &Path) -> Result<()> {
     use std::io::Write;
     super::remote::ensure_writable(path)?;
-    let bytes = serde_yaml::to_string(plan).map_err(|e| usage(e.to_string()))?;
+    let bytes = yaml_serde::to_string(plan).map_err(|e| usage(e.to_string()))?;
     let mut file = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -461,7 +461,7 @@ pub fn save(plan: &MigrationPlan, path: &Path) -> Result<()> {
     Ok(())
 }
 pub fn load(path: &Path) -> Result<MigrationPlan> {
-    serde_yaml::from_slice(&std::fs::read(path)?)
+    yaml_serde::from_slice(&std::fs::read(path)?)
         .map_err(|e| usage(format!("invalid migration plan: {e}")))
 }
 pub fn apply(plan: &MigrationPlan) -> Result<MigrationReport> {

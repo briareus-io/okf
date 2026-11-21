@@ -13,7 +13,7 @@ from urllib.parse import unquote, urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 BUNDLE = ROOT / "knowledge"
 BINARY = Path(os.environ.get("OKF_DOCS_BIN", ROOT / "target/debug/okf")).resolve()
-ENV = {k: v for k, v in os.environ.items() if k not in ("OKF_BUNDLE", "OKF_CATALOG", "OKF_CATALOG_OVERRIDES")}
+ENV = {k: v for k, v in os.environ.items() if k not in ("OKF_BUNDLE", "OKF_CATALOG", "OKF_CATALOG_OVERRIDES", "OKF_SETTINGS_OVERRIDES")}
 
 
 def run(*args, expected=0, cwd=ROOT):

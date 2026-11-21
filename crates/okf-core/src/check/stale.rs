@@ -14,9 +14,9 @@
 //! [`FakeFs`]: crate::ports::fs::FakeFs
 //! [`FakeGit`]: crate::ports::git::FakeGit
 //! [`FixedClock`]: crate::ports::clock::FixedClock
-use serde_yaml::Value;
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
+use yaml_serde::Value;
 
 use crate::bundle::loader::Bundle;
 use crate::fingerprint::{Engine, Fingerprinter};
@@ -367,7 +367,7 @@ fn cache_key(source: &Source) -> (String, String) {
             format!(
                 "{}\n{}",
                 source.resource,
-                serde_yaml::to_string(&source.extra).unwrap_or_default()
+                yaml_serde::to_string(&source.extra).unwrap_or_default()
             )
         } else {
             source.resource.clone()
@@ -466,12 +466,12 @@ mod tests {
     use crate::ports::fs::FakeFs;
     use crate::ports::git::{FakeGit, Git};
     use indexmap::IndexMap;
-    use serde_yaml::Value;
     use std::cell::Cell;
     use std::path::PathBuf;
+    use yaml_serde::Value;
 
     fn concept(id: &str, yaml: &str) -> Concept {
-        let map: IndexMap<String, Value> = serde_yaml::from_str(yaml).unwrap();
+        let map: IndexMap<String, Value> = yaml_serde::from_str(yaml).unwrap();
         Concept {
             id: ConceptId::from_relative(id),
             frontmatter: Frontmatter::from_map(map),

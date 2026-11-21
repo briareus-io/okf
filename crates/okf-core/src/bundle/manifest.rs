@@ -40,7 +40,7 @@ pub struct Manifest {
     #[serde(default)]
     pub workflows: BTreeMap<String, Workflow>,
     #[serde(default)]
-    pub extensions: BTreeMap<String, serde_yaml::Value>,
+    pub extensions: BTreeMap<String, yaml_serde::Value>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -128,7 +128,7 @@ pub struct LoadedManifest {
     pub manifest: Manifest,
     pub path: PathBuf,
     pub digest: String,
-    pub settings_value: serde_yaml::Value,
+    pub settings_value: yaml_serde::Value,
 }
 fn usage(message: impl Into<String>) -> OkfError {
     OkfError::Usage(message.into())
@@ -236,7 +236,7 @@ fn check_input(root: &Path, input: &WorkflowInput, value: &Value) -> Result<()> 
 }
 pub fn parse(text: &str) -> Result<Manifest> {
     let manifest: Manifest =
-        serde_yaml::from_str(text).map_err(|e| usage(format!("invalid {FILENAME}: {e}")))?;
+        yaml_serde::from_str(text).map_err(|e| usage(format!("invalid {FILENAME}: {e}")))?;
     if manifest.manifest_version != 1 {
         return Err(usage(format!(
             "unsupported manifest_version {}; supported: 1",
@@ -323,7 +323,7 @@ pub fn load(root: &Path) -> Result<Option<LoadedManifest>> {
         Err(e) => return Err(usage(format!("cannot read {}: {e}", path.display()))),
     };
     let manifest = parse(&text)?;
-    let raw: serde_yaml::Value = serde_yaml::from_str(&text).map_err(|e| usage(e.to_string()))?;
+    let raw: yaml_serde::Value = yaml_serde::from_str(&text).map_err(|e| usage(e.to_string()))?;
     Ok(Some(LoadedManifest {
         manifest,
         path,
@@ -331,7 +331,7 @@ pub fn load(root: &Path) -> Result<Option<LoadedManifest>> {
         settings_value: raw
             .get("settings")
             .cloned()
-            .unwrap_or_else(|| serde_yaml::Value::Mapping(Default::default())),
+            .unwrap_or_else(|| yaml_serde::Value::Mapping(Default::default())),
     }))
 }
 pub fn validate(root: &Path, commands: &[String]) -> Result<Option<LoadedManifest>> {
@@ -552,6 +552,7 @@ pub fn context(
             &mut setting_origins,
         );
     }
+    setting_origins.extend(effective.override_origins.clone());
     let mut records = Vec::new();
     let mut digests = BTreeMap::new();
     let mut resource_digests = BTreeMap::new();

@@ -29,7 +29,7 @@ pub fn run(ctx: &RuleContext<'_>) -> Vec<Finding> {
                         .filter_map(|(_, r)| r.selector.as_ref())
                         .any(|raw| {
                             let root =
-                                serde_yaml::to_value(&concept.frontmatter.map).unwrap_or_default();
+                                yaml_serde::to_value(&concept.frontmatter.map).unwrap_or_default();
                             crate::query::selector::Selector::parse(raw)
                                 .ok()
                                 .is_some_and(|s| {
@@ -65,6 +65,7 @@ pub fn run(ctx: &RuleContext<'_>) -> Vec<Finding> {
                 });
             if !explicit_nested && !existing_artifact {
                 out.push(Finding {
+                    comparison_detail: Some(target.0.clone()),
                     code: None,
                     field_path: None,
                     rule: RULE.to_string(),

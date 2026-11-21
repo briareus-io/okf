@@ -20,8 +20,8 @@
 use crate::model::concept::{Concept, ConceptId};
 use crate::ontology::schema::Ontology;
 use pulldown_cmark::{Event, Parser, Tag};
-use serde_yaml::Value;
 use std::collections::HashSet;
+use yaml_serde::Value;
 
 /// A catalog-qualified reference. Bundle IDs remain case-sensitive, unlike DNS hosts.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -266,7 +266,7 @@ pub fn raw_links(concept: &Concept, ontology: Option<&Ontology>) -> Vec<String> 
     {
         for (key, rule) in &ct.references {
             if let Some(selector) = &rule.selector {
-                let root = serde_yaml::to_value(&concept.frontmatter.map).unwrap_or_default();
+                let root = yaml_serde::to_value(&concept.frontmatter.map).unwrap_or_default();
                 if let Ok(selector) = crate::query::selector::Selector::parse(selector) {
                     raw.extend(selector.select(&root).leaves.into_iter().filter_map(|o| {
                         o.value
@@ -368,7 +368,7 @@ mod tests {
     }
 
     fn concept(id_str: &str, yaml: &str, body: &str) -> Concept {
-        let map: IndexMap<String, Value> = serde_yaml::from_str(yaml).unwrap();
+        let map: IndexMap<String, Value> = yaml_serde::from_str(yaml).unwrap();
         Concept {
             id: id(id_str),
             frontmatter: Frontmatter::from_map(map),

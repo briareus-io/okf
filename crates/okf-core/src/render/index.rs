@@ -256,7 +256,7 @@ pub fn write_indexes(bundle: &Bundle) -> Result<Vec<PathBuf>> {
 fn valid_root_frontmatter(frontmatter: &str) -> bool {
     parse_frontmatter(frontmatter).is_ok_and(|map| {
         map.len() == 1
-            && matches!(map.get("okf_version"), Some(serde_yaml::Value::String(version)) if valid_version(version))
+            && matches!(map.get("okf_version"), Some(yaml_serde::Value::String(version)) if valid_version(version))
     })
 }
 

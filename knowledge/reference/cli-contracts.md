@@ -11,7 +11,7 @@ sources:
 ---
 # CLI globals and record contracts
 
-> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.6.6, OKF spec 0.2). Do not hand-edit; regenerate instead.
+> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.6.7, OKF spec 0.2). Do not hand-edit; regenerate instead.
 
 See the [command index](../commands/index.md) for individual arguments and [command contracts](command-contracts.md) for shared behavior. Skills carry focused generated references with their workflows.
 
@@ -257,6 +257,25 @@ interpretation, and explicit query extensions. Missing and null remain distinct.
     "ontology_digest": "string|null",
     "ontology_path": "path|null",
     "settings": "object"
+  },
+  "lint-baseline": {
+    "bundles": "map<bundle,version> (file capture)",
+    "entries": "integer (file capture)",
+    "path": "path (file capture)",
+    "revision": "commit (Git comparison)"
+  },
+  "lint-comparison": {
+    "classification": "introduced|existing|worsened|improved|resolved",
+    "count": "positive integer",
+    "identity": "{bundle,rule,concept,code,field_path,subject}",
+    "message": "string",
+    "previous_severity": "info|warn|error|null",
+    "severity": "info|warn|error"
+  },
+  "lint-comparison-summary": {
+    "after_bundles": "map<bundle,version>",
+    "before_bundles": "map<bundle,version>",
+    "counts": "map<classification,count>"
   },
   "migration-applied": {
     "report": "object"

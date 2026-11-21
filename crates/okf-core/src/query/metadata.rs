@@ -5,8 +5,8 @@ use crate::{
     query::selector::Selector,
 };
 use serde_json::{Value, json};
-use serde_yaml::Value as Yaml;
 use std::collections::BTreeMap;
+use yaml_serde::Value as Yaml;
 #[derive(Debug, Clone)]
 pub enum Operator {
     Eq(Value),
@@ -170,7 +170,7 @@ impl Condition {
         Ok(matched)
     }
     fn matches_predicate(&self, concept: &Concept) -> Result<bool> {
-        let root = serde_yaml::to_value(&concept.frontmatter.map).unwrap_or_default();
+        let root = yaml_serde::to_value(&concept.frontmatter.map).unwrap_or_default();
         let selected = self.selector.select(&root);
         let present = !selected.leaves.is_empty() || selected.empty_lists > 0;
         match self.operator {
@@ -256,7 +256,7 @@ pub fn project(
     bundle: Option<&str>,
     version: &str,
 ) -> Result<Value> {
-    let root = serde_yaml::to_value(&concept.frontmatter.map).unwrap_or_default();
+    let root = yaml_serde::to_value(&concept.frontmatter.map).unwrap_or_default();
     let mut cells = Vec::new();
     for field in fields {
         let cell = if field.starts_with('$') {
@@ -293,7 +293,7 @@ pub fn facet(
     let mut counts: BTreeMap<String, (Value, usize)> = BTreeMap::new();
     let mut invalid = Vec::new();
     for concept in concepts {
-        let root = serde_yaml::to_value(&concept.frontmatter.map).unwrap_or_default();
+        let root = yaml_serde::to_value(&concept.frontmatter.map).unwrap_or_default();
         let selected = selector.select(&root);
         let mut seen = BTreeMap::new();
         for o in selected.leaves {

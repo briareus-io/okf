@@ -283,7 +283,7 @@ fn edit_rejects_overlapping_source_additions_and_removals_without_writing() {
             // Both exact duplicates and replacement mappings must be rejected.
             for id in ["original", "replacement"] {
                 let source = Source::from_value(
-                    &serde_yaml::from_str(&format!("resource: shared\nkind: file\nid: {id}\n"))
+                    &yaml_serde::from_str(&format!("resource: shared\nkind: file\nid: {id}\n"))
                         .unwrap(),
                 )
                 .unwrap();
@@ -322,7 +322,7 @@ fn edit_allows_source_addition_and_removal_with_different_kinds() {
         "note",
         &edit::EditSpec {
             add_sources: vec![
-                Source::from_value(&serde_yaml::from_str("resource: shared\nkind: url\n").unwrap())
+                Source::from_value(&yaml_serde::from_str("resource: shared\nkind: url\n").unwrap())
                     .unwrap(),
             ],
             remove_sources: vec![edit::SourceSelector {

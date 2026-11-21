@@ -593,6 +593,15 @@ pub struct ArtifactPutArgs {
 pub struct LintArgs {
     /// Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory).
     pub bundle: Option<String>,
+    /// Compare findings with a saved lint baseline.
+    #[arg(long, conflicts_with_all = ["write_baseline", "baseline_ref", "fix"])]
+    pub baseline: Option<std::path::PathBuf>,
+    /// Atomically save all findings from a complete lint run.
+    #[arg(long, conflicts_with_all = ["baseline_ref", "fix"])]
+    pub write_baseline: Option<std::path::PathBuf>,
+    /// Compare with the workspace catalog, lock and bundles at this exact local Git revision.
+    #[arg(long, conflicts_with = "fix")]
+    pub baseline_ref: Option<String>,
     /// Normalize frontmatter order bundle-wide for the enabled frontmatter-order rule.
     #[arg(long)]
     pub fix: bool,

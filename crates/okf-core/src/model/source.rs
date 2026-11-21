@@ -1,6 +1,6 @@
 //! Sources and their typed fingerprints (drives `okf stale` / `okf refresh`).
 use indexmap::IndexMap;
-use serde_yaml::{Mapping, Value};
+use yaml_serde::{Mapping, Value};
 
 /// The kind of a source, which selects how it is fingerprinted and compared.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -179,7 +179,7 @@ fn value_to_string(v: &Value) -> String {
         Value::Bool(b) => b.to_string(),
         Value::Number(n) => n.to_string(),
         Value::Null => String::new(),
-        other => serde_yaml::to_string(other)
+        other => yaml_serde::to_string(other)
             .unwrap_or_default()
             .trim_end()
             .to_string(),
@@ -191,7 +191,7 @@ mod tests {
     use super::*;
 
     fn entry() -> Value {
-        serde_yaml::from_str(
+        yaml_serde::from_str(
             "resource: src/billing/mileage.py\n\
              kind: git-path\n\
              fingerprint:\n  blob_sha: 3f9a1c\n\
@@ -226,7 +226,7 @@ mod tests {
 
     #[test]
     fn unknown_kind_round_trips() {
-        let v: Value = serde_yaml::from_str("resource: x\nkind: sql-query\n").unwrap();
+        let v: Value = yaml_serde::from_str("resource: x\nkind: sql-query\n").unwrap();
         let s = Source::from_value(&v).unwrap();
         assert_eq!(s.kind, SourceKind::Other("sql-query".to_string()));
         assert_eq!(s.to_value(), v);

@@ -6,7 +6,7 @@ use crate::bundle::{catalog::Catalog, loader::Bundle};
 use crate::check::lint::{Finding, Severity};
 use crate::ontology::schema::Ontology;
 use pulldown_cmark::{Event, Parser, Tag};
-use serde_yaml::Value;
+use yaml_serde::Value;
 
 pub const RULE: &str = "invalid-reference";
 
@@ -31,6 +31,7 @@ pub fn run(
                 return;
             }
             findings.push(Finding {
+                comparison_detail: Some(raw.to_owned()),
                 rule: RULE.into(),
                 code: Some("qualified-cli-target".into()),
                 field_path: Some(field_path),
@@ -56,7 +57,7 @@ pub fn run(
             .concept_type()
             .and_then(|name| ontology.and_then(|o| o.concepts.get(name)))
         {
-            let root = serde_yaml::to_value(&concept.frontmatter.map).unwrap_or_default();
+            let root = yaml_serde::to_value(&concept.frontmatter.map).unwrap_or_default();
             for (key, rule) in &ct.references {
                 if let Ok(selector) =
                     crate::graph::relationships::reference_selector(key, rule.selector.as_deref())

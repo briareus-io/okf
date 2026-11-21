@@ -10,7 +10,7 @@
 //! A declared fingerprint that cannot be recomputed blocks publication.
 use std::path::{Path, PathBuf};
 
-use serde_yaml::Value;
+use yaml_serde::Value;
 
 use crate::error::{OkfError, Result};
 use crate::fingerprint::{Engine, Fingerprinter};

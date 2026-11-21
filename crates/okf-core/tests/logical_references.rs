@@ -88,7 +88,7 @@ fn logical_artifacts_and_fingerprints_require_explicit_scope() {
     assert!(resolved.exists);
     assert!(root.ends_with("b"));
     let value =
-        serde_yaml::from_str("resource: okf://Acme.B/data.txt\nkind: bundle-resource\n").unwrap();
+        yaml_serde::from_str("resource: okf://Acme.B/data.txt\nkind: bundle-resource\n").unwrap();
     let source = Source::from_value(&value).unwrap();
     let fs = okf_core::ports::fs::RealFs;
     let git = okf_core::ports::git::RealGit;
