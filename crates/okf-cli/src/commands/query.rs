@@ -248,6 +248,9 @@ pub fn run_search_in_scope(
     } else {
         Vec::new()
     };
+    for field in columns.iter().chain(&projection).chain(&args.target_field) {
+        okf_core::query::metadata::validate_projection_field(field)?;
+    }
     let mut expands = args.expand.clone();
     if !args.no_expand
         && expands.is_empty()
@@ -272,53 +275,39 @@ pub fn run_search_in_scope(
         } else {
             ""
         };
-        output::print_text_line(format_args!("{identity}{}", human_fields.join("\t")))?;
+        let headers: Vec<_> = human_fields
+            .iter()
+            .map(|field| output::table_cell(field))
+            .collect();
+        output::print_text_line(format_args!("{identity}{}", headers.join("\t")))?;
     }
     let plain = !json_output && projection.is_empty() && columns.is_empty();
     if plain && scoped_human {
-        output::print_text_line(format_args!(
-            "BUNDLE\tVERSION\tID\tTYPE\tTRUST\tSTATUS\tTITLE"
-        ))?;
+        output::print_text_line(format_args!("BUNDLE\tVERSION\t{}", output::COMPACT_HEADER))?;
     }
     if plain && !scoped_human {
-        if args.text.is_empty() {
-            output::print_concepts(
-                &page.iter().map(|(_, h)| h.concept).collect::<Vec<_>>(),
-                false,
-            )?;
-        } else {
-            let hits = page
-                .iter()
-                .map(|(_, h)| okf_core::query::search::SearchHit {
-                    concept: h.concept,
-                    score: h.score,
-                    matches: h.matches.clone(),
-                })
-                .collect::<Vec<_>>();
-            output::print_search_hits(&hits, false)?;
-        }
+        let concepts = page.iter().map(|(_, hit)| hit.concept).collect::<Vec<_>>();
+        output::print_concept_table(&concepts, args.no_align)?;
     }
     for (i, hit) in page {
         let (bundle_id, _, version) = &scope[*i];
         if plain {
             if scoped_human {
-                output::print_text_line(format_args!(
-                    "{}\t{}\t{}\t{}\t{}\t{}\t{}",
-                    bundle_id,
-                    version,
-                    hit.concept.id.0,
-                    hit.concept.concept_type().unwrap_or("-"),
-                    hit.concept.trust_tier().as_str(),
-                    hit.concept.effective_status(),
-                    hit.concept.title().unwrap_or("")
+                output::print_text(format_args!(
+                    "{}\t{}\t",
+                    output::table_cell(bundle_id),
+                    output::table_cell(version)
                 ))?;
+                output::print_compact_concept(hit.concept, args.no_align)?;
             }
             continue;
         }
         if scoped_human {
             output::print_text(format_args!(
                 "{}\t{}\t{}\t",
-                bundle_id, version, hit.concept.id.0
+                output::table_cell(bundle_id),
+                output::table_cell(version),
+                output::table_cell(&hit.concept.id.0)
             ))?;
         }
         if !projection.is_empty() {
@@ -448,7 +437,7 @@ fn print_cells(
             } else {
                 values.to_string()
             };
-            let text = text.replace('\n', "\\n").replace('\t', "\\t");
+            let text = output::table_cell(&text);
             if text.chars().count() > 160 {
                 format!("{}…", text.chars().take(159).collect::<String>())
             } else {
@@ -462,6 +451,9 @@ fn print_cells(
 /// `okf show <concept> [bundle] [--outline | --lines START:END]`.
 pub fn run_show(args: &ShowArgs, json: bool) -> Result<i32> {
     let root = resolve_bundle(args.bundle.as_deref())?;
+    for field in &args.project {
+        okf_core::query::metadata::validate_projection_field(field)?;
+    }
     match load_concept(&root, &args.concept)? {
         Some(concept) => {
             if !args.project.is_empty() {
@@ -556,7 +548,11 @@ fn parse_line_range(raw: &str) -> Result<(usize, usize)> {
 }
 
 /// `okf backlinks <concept> [bundle]` — concepts that link to the given concept.
-pub fn run_backlinks(args: &crate::cli::RelationshipArgs, json: bool) -> Result<i32> {
+pub fn run_backlinks(
+    args: &crate::cli::RelationshipArgs,
+    json: bool,
+    no_align: bool,
+) -> Result<i32> {
     if super::filters::requested(&args.filters)
         || args.limit.is_some()
         || args.scan_limit.is_some()
@@ -623,7 +619,11 @@ pub fn run_backlinks(args: &crate::cli::RelationshipArgs, json: bool) -> Result<
     }
     let ids = backlinks_of(&bundle, ontology.as_ref(), &args.concept);
     let concepts: Vec<&Concept> = ids.iter().filter_map(|id| bundle.get(&id.0)).collect();
-    output::print_concepts(&concepts, json)?;
+    if json {
+        output::print_concepts(&concepts, true)?;
+    } else {
+        output::print_concept_table(&concepts, no_align)?;
+    }
     Ok(0)
 }
 
@@ -725,7 +725,7 @@ pub fn run_links(args: &crate::cli::RelationshipArgs, json: bool) -> Result<i32>
         for target in &links {
             output::print_text_line(format_args!(
                 "{}\t{}",
-                target.0,
+                output::table_cell(&target.0),
                 if concept_exists(&root, target) {
                     "exists"
                 } else {

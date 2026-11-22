@@ -80,6 +80,9 @@ pub fn run_schema(_json: bool) -> Result<i32> {
 /// identify typed identities and statuses without imposing metadata schemas on concepts.
 fn output_record_contracts() -> Value {
     json!({
+        "body":{"id":"string","body":"string"},
+        "outline":{"id":"string","trust_tier":"string","headings":"array<{line:integer,level:integer,text:string}>"},
+        "line-range":{"id":"string","trust_tier":"string","start":"integer","end":"integer","lines":"array<{line:integer,text:string}>"},
         "operation-start": {"schema_version":1,"command":"string","stream_version":1},
         "operation-complete": {"schema_version":1,"outcome":"ok|partial|failed","exit_code":"integer","publication":"not-applicable|not-published|committed|recovery-required","commit_reached":"boolean|null (when recovery-required)","completeness":"{examination,matching,delivery,expansion,content: complete|partial|not-applicable; consistency: working-tree|immutable-revision|guarded-baseline}","reasons":"array<diagnostic-code>"},
         "guidance": {"id":"string","content":"full|summary","instructions":"string (full only)","instruction_role":"task-guidance|inspected","context_digest":"string","origin":"object","tier":"mandatory|reference (rules)","selection_reason":"string (explicit context)","omission_reason":"string (summary)","expand_argv":"array<string> (summary in explicit context)"},
@@ -96,20 +99,21 @@ fn output_record_contracts() -> Value {
         "doctor-normalization": {"path":"path","diff":"string","applied":"boolean","links":"array<{from:string,to:string}>"},
         "workflow": {"id":"string","selected":"boolean","content":"full|summary","inputs_complete":"boolean (selected only)"},
         "bundle-resource": {"path":"path","content":"string|null","sha256":"string|null","truncated":"boolean"},
-        "query-filters": {"filters":"object","preset":"string|null","origin":"string"},
-        "relationship-query-summary": {"evidence":"object (local)"},
+        "query-filters": {"filters":"object (relationship filters)","query":"object (primary query preset)","preset":"string|null","origin":"string"},
+        "relationship-query-summary": {"evidence":"object (local)","total_matches":"integer|null","eligible_documents":"integer|null","examined_documents":"integer|null (scoped)","examined_occurrences":"integer (scoped)","matched_occurrences":"integer (scoped)","unresolved_candidates":"integer (scoped)","scan_complete":"boolean (scoped)","delivery_complete":"boolean (scoped)"},
         "catalog-update-plan": {"plan_kind":"initial|update|registration-change","plan_digest":"string","impact_complete":"boolean","impact":"object"},
         "snapshot-context": {"evidence":"array<object>"},
         "baseline": {"schema_version":1,"bundle":"path","base_digest":"opaque string","scope":"{requested:array<string>,examined:array<string>,unavailable:array<string>} (optional; explicit scoped baseline, includes primary)"},
         "drift": {"schema_version":2,"concept":"string","expired":"timestamp|null","sources":"array<{resource:string,kind:string,state:drifted|unrecorded|missing|unavailable|unsupported,code:string,message:string}>"},
-        "diagnostic-summary": {"schema_version":1,"examined":"integer","displayed":"integer","omitted":"integer"},
+        "diagnostic-summary": {"schema_version":1,"examined":"integer","displayed":"integer","omitted":"integer","provenance_only":"integer"},
         "format-file": {"schema_version":1,"path":"path","applied":"boolean","diff":"string|null"},
         "format-summary": {"schema_version":1,"files":"integer","applied":"boolean"},
         "changeset-file": {"path":"path","operation":"create|replace|remove","before_bytes":"integer|null","after_bytes":"integer|null","diff":"string|null"},
         "context-token": {"root":"path","bundle":"string|null","token":"string; opaque stateless receipt, not a credential"},
         "context-check": {"valid":"boolean","root":"path","context_digest":"string","state_digest":"string","operations":"array<string>"},
         "context-stats": {"root":"path","sections":"array<{id,kind,delivered_bytes,mandatory}>","delivered_instruction_bytes":"integer","mandatory_instruction_bytes":"integer","mandatory_budget":"integer|null","budget_exceeded":"boolean; advisory only"},
-        "changeset-summary": {"base_digest":"string","files":"integer","applied":"boolean","publication":"journaled-per-file","scope":"{requested:array<string>,examined:array<string>,unavailable:array<string>} (optional; explicit scoped baseline, includes primary)"},
+        "changeset-dangling-override": {"occurrence":"string"},
+        "changeset-summary": {"allowed_dangling":"integer","base_digest":"string","files":"integer","applied":"boolean","publication":"journaled-per-file","scope":"{requested:array<string>,examined:array<string>,unavailable:array<string>} (optional; explicit scoped baseline, includes primary)"},
         "changeset-recovery": {"paths":"array<path>"},
         "ontology_field_type": {"name":"string","definition":"object","effective":"object"},
         "qualified_identity": {"bundle": "string", "id": "string", "version": "string"},
@@ -205,6 +209,9 @@ fn command_record(full_name: &str, cmd: &ClapCommand) -> Value {
         _ => Value::Null,
     };
     let output = match full_name {
+        "show" => {
+            json!({"stream":stream,"stream_when":{"--body":"body","--outline":"outline","--lines":"line-range","--numbered":"line-range","--project":"projection","otherwise":"concept"}})
+        }
         "docs" => json!({
             "stream": "docs,change",
             "stream_when": {"format=index": "change", "otherwise": "docs"},
@@ -322,20 +329,7 @@ fn arg_record(command: &str, arg: &clap::Arg) -> Value {
         "bool".to_string()
     } else if repeatable {
         "list<string>".to_string()
-    } else if matches!(
-        (command, id),
-        (
-            "search" | "list",
-            "limit"
-                | "offset"
-                | "scan_limit"
-                | "expansion_edges"
-                | "expansion_targets"
-                | "expansion_bytes"
-        ) | ("graph", "depth")
-            | ("artifact show", "max_bytes")
-            | ("affected", "depth")
-    ) {
+    } else if arg.get_value_parser().type_id() == std::any::TypeId::of::<usize>() {
         "int".to_string()
     } else if id == "bundle"
         || matches!(
@@ -466,7 +460,7 @@ fn arg_record(command: &str, arg: &clap::Arg) -> Value {
 /// Static per-command metadata clap cannot model: (group, mutates, output stream).
 fn meta(name: &str) -> (&'static str, bool, &'static str) {
     match name {
-        "schema" => ("meta", false, "schema"),
+        "schema" => ("meta", false, "schema,command"),
         "version" => ("meta", false, "version"),
         "catalog" => ("meta", false, "bundle-registration,effective-settings"),
         "catalog sync" => ("meta", true, "catalog-sync"),
@@ -487,17 +481,25 @@ fn meta(name: &str) -> (&'static str, bool, &'static str) {
         "list" | "search" => (
             "query",
             false,
-            "concept,concept-identity,scope,projection,query-summary,facet,facet-excluded,relationship,related-concept,expansion-summary,warning",
+            "query-filters,concept,concept-identity,scope,projection,query-summary,facet,facet-excluded,relationship,related-concept,expansion-summary,warning",
         ),
-        "show" => ("query", false, "concept,projection"),
+        "show" => ("query", false, "concept,projection,body,outline,line-range"),
         "browse" => ("query", false, "index"),
         "backlinks" => (
             "query",
             false,
-            "concept,relationship,scope,bundle-backlink,bundle-edge",
+            "concept,relationship,scope,bundle-backlink,bundle-edge,query-filters,relationship-query-summary",
         ),
-        "links" => ("query", false, "link,relationship,scope,bundle-edge"),
-        "graph" => ("query", false, "graph,scope,bundle-node,bundle-edge"),
+        "links" => (
+            "query",
+            false,
+            "link,relationship,scope,bundle-edge,query-filters,relationship-query-summary",
+        ),
+        "graph" => (
+            "query",
+            false,
+            "graph,scope,bundle-node,bundle-edge,query-filters,relationship-query-summary",
+        ),
         "resolve" => ("query", false, "resolved,scope,bundle-edge"),
         "artifact list" => ("query", false, "artifact"),
         "artifact resolve" => ("query", false, "artifact-resolution"),
@@ -509,9 +511,17 @@ fn meta(name: &str) -> (&'static str, bool, &'static str) {
         "ontology field-type list" | "ontology field-type show" => {
             ("query", false, "ontology_field_type")
         }
-        "changeset plan" => ("query", false, "changeset-file,changeset-summary"),
+        "changeset plan" => (
+            "query",
+            false,
+            "changeset-file,changeset-dangling-override,changeset-summary",
+        ),
         "changeset digest" => ("query", false, "baseline"),
-        "changeset apply" => ("mutate", true, "changeset-file,changeset-summary"),
+        "changeset apply" => (
+            "mutate",
+            true,
+            "changeset-file,changeset-dangling-override,changeset-summary",
+        ),
         "changeset recover" => ("mutate", true, "changeset-recovery"),
 
         "scan" => ("check", false, "scan"),
@@ -522,7 +532,7 @@ fn meta(name: &str) -> (&'static str, bool, &'static str) {
             true,
             "finding,scope,fix,lint-baseline,lint-comparison,lint-comparison-summary",
         ),
-        "stale" => ("check", false, "drift"),
+        "stale" => ("check", false, "drift,diagnostic-summary"),
         "affected" => ("check", false, "affected,scope,bundle-affected"),
         "diff" => ("check", false, "diff"),
         "stats" => ("check", false, "stats"),

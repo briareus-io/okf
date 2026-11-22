@@ -488,13 +488,7 @@ pub fn validate_settings(settings: &BundleSettings) -> Result<()> {
     }
     for view in settings.views.values() {
         for field in &view.columns {
-            if field.starts_with('$') {
-                if !matches!(field.as_str(), "$id" | "$bundle" | "$version") {
-                    return Err(OkfError::Usage(format!("unknown computed field {field:?}")));
-                }
-            } else {
-                crate::query::selector::Selector::parse(field)?;
-            }
+            crate::query::metadata::validate_projection_field(field)?;
         }
     }
     for field in settings

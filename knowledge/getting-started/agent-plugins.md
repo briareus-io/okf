@@ -54,8 +54,7 @@ The skills are namespaced by the plugin in both agents:
 | Reorganize the tree | `/okf:reorganize` | `$okf:reorganize` |
 
 The skills drive the `okf` CLI, so install the binary too (`cargo install --path crates/okf-cli`,
-or `cargo xtask install`). Each skill carries a generated `references/cli.md` containing only its
-workflow's commands and reads it when exact flags or output shapes are needed. If the installed
+or `cargo xtask install`). Each skill links directly to command pages for frequent tasks. Its generated `references/cli.md` indexes the remaining workflow commands alongside those shortcuts. The plugin bundles one reference per command and links to individual record shapes. If the installed
 binary version differs from the generated reference, command-specific `--help` is authoritative.
 Run `cargo xtask skills` and `cargo xtask docs --check` in CI to validate authored command examples,
 reference coverage, and generated documentation.

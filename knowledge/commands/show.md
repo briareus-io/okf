@@ -30,11 +30,11 @@ have structured `--json` representations.
 | `--lines <value>` | string | no | Show only an inclusive 1-based document line range, `START:END` (or one line, `N`) |
 | `--numbered` | bool | no | Print document line numbers (including frontmatter); excludes the display header (default: `false`) |
 | `--body` | bool | no | Print only the raw Markdown body, without frontmatter or display headers (default: `false`) |
-| `--project <value>` | list<string> | no | Explicit metadata projection selector (repeatable) |
+| `--project <value>` | list<string> | no | Explicit metadata projection selector (repeatable). Computed fields: $id, $bundle, $version, $trust_tier, $effective_status |
 
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 
-Output stream: `concept,projection`.
+Output stream: `concept,projection,body,outline,line-range`.
 
 Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--context`, `--guidance`, `--json`, `--revision`, `--selection`, `--workspace-revision`.
 

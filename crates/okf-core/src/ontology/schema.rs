@@ -170,20 +170,23 @@ impl FieldType {
     /// Parse a primitive keyword. Returns `None` for names that must resolve via
     /// `field_types`.
     pub fn from_keyword(s: &str) -> Option<Self> {
-        Some(match s {
-            "string" => Self::String,
-            "text" => Self::Text,
-            "int" => Self::Int,
-            "bool" => Self::Bool,
-            "date" => Self::Date,
-            "datetime" => Self::Datetime,
-            "uri" => Self::Uri,
-            "enum" => Self::Enum,
-            "list" => Self::List,
-            "object" => Self::Object,
-            _ => return None,
-        })
+        Self::BUILT_INS
+            .iter()
+            .copied()
+            .find(|ty| ty.as_keyword() == s)
     }
+    pub const BUILT_INS: [Self; 10] = [
+        Self::String,
+        Self::Text,
+        Self::Int,
+        Self::Bool,
+        Self::Date,
+        Self::Datetime,
+        Self::Uri,
+        Self::Enum,
+        Self::List,
+        Self::Object,
+    ];
 
     pub fn as_keyword(self) -> &'static str {
         match self {

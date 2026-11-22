@@ -30,7 +30,7 @@ See the [complete CLI reference](index.md) for operation schemas and guarantees.
 
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 
-Output stream: `changeset-file,changeset-summary`.
+Output stream: `changeset-file,changeset-dangling-override,changeset-summary`.
 
 Supported global options: `--bundle-id`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--scope-bundle`, `--selection`.
 

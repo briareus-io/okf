@@ -9,11 +9,13 @@ description: Reconcile OKF concepts after source or concept changes using lifecy
 
 Read and follow the [shared OKF protocol](../../references/bundle-context.md) before CLI-dependent
 work. It defines compatibility checks, bundle context, scope, output evidence, validation profiles,
-and authoring conventions. Use `references/cli.md` for exact command syntax as needed.
+and authoring conventions.
+
+[Find affected concepts](../../references/commands/affected.md) · [Edit metadata or prose](../../references/commands/edit.md) · [Refresh a source fingerprint](../../references/commands/refresh.md).
+See the [command index](references/cli.md) for other operations.
 
 Prefer `OKF_BUNDLE` for a workflow. Fully qualified examples include `okf diff <git-ref> <bundle>`
-and `okf affected <bundle> --changed <resource>`. Before using an unfamiliar command or flag, read
-its entry in `references/cli.md`. If the installed version differs or rejects documented syntax, use
+and `okf affected <bundle> --changed <resource>`. If the installed version differs or rejects documented syntax, use
 that command's `--help` output as the runtime authority.
 
 ## Detect and classify
@@ -51,7 +53,7 @@ shared source-health definitions.
 
 1. Resolve bundle identity and the requested consumer scope before affected analysis; use detailed
    semantic occurrences for nested relationships and retain unknown consumers outside scope. Inspect the concept with targeted `okf show` reads and the changed evidence. For a path-valued
-   source, use `okf artifact resolve <resource> <bundle> --from <concept-id>` and bounded `okf
+   source, use `okf artifact resolve <resource> <bundle>` with `--from <concept-id>` only for document-relative references and bounded `okf
    artifact show`; use `okf show` when it resolves to a concept. Use `okf links <concept-id>
    <bundle> --details --json` when the concept's direct outbound relationships may have changed.
    Compare occurrence paths, kinds, inverse labels and attributes, not just deduplicated targets.
@@ -126,7 +128,7 @@ above; do not treat a short edit as presentation-only merely because it changes 
 
 `references/` is optional; Markdown files are concepts and other files are artifacts. Keep declaring
 context on artifact reads. For repository-relative fingerprints, external source access, or
-truncation, use the artifact sections of `references/cli.md`. Existing authorization to inspect a
+truncation, use [bounded artifact reads](../../references/commands/artifact-show.md). Existing authorization to inspect a
 source counts; do not bypass bundle containment. Reading code does not authorize execution.
 
 For an authorized artifact copy or authored schema, use `okf artifact put

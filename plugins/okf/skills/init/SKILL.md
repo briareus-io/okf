@@ -9,7 +9,10 @@ description: Start OKF v0.2 bundles and local multi-bundle catalogs, configure p
 
 Read and follow the [shared OKF protocol](../../references/bundle-context.md) before CLI-dependent
 work. It defines compatibility checks, bundle context, scope, output evidence, validation profiles,
-and authoring conventions. Use `references/cli.md` for exact command syntax as needed.
+and authoring conventions.
+
+[Create a bundle](../../references/commands/init.md) · [Scaffold a concept](../../references/commands/add.md) · [Define a reusable type](../../references/commands/ontology-field-type-add.md).
+See the [command index](references/cli.md) for other operations.
 
 Use the CLI for concept/artifact writes and checks; author manifest/catalog configuration with
 scoped file edits following the setup reference. Use the domain, scope, and modeling choices already supplied;
@@ -19,8 +22,7 @@ materially change the requested bundle.
 ## CLI and bundle access
 
 In multi-step work, set `OKF_BUNDLE` once. One fully qualified example is `okf add notes/hello
-<bundle> --type Note`. Before using an unfamiliar command or flag, read its entry in
-`references/cli.md`. If the installed version differs or rejects documented syntax, use that
+<bundle> --type Note`. If the installed version differs or rejects documented syntax, use that
 command's `--help` output as the runtime authority.
 
 Inspect bundle content through `okf browse`, `okf search`, `okf list`, and targeted `okf show`. For
@@ -73,7 +75,7 @@ the consuming harness.
    <actor>` to add; the CLI supplies the timestamp. Never label agent-authored material
    `human:<id>`.
 4. Only for a requested computation, use exact `Attested Computation` with `okf add <path> <bundle>
-   --attested --runtime <runtime>`. Read the add/computation sections of `references/cli.md` for
+   --attested --runtime <runtime>`. Read [concept authoring](../../references/commands/add.md) and [computation checks](../../references/commands/computation-check.md) for
    parameters, inline/file forms, and contract resources. Inspect with `okf computation check
    <concept-id> <bundle>`; this does not execute or attest a run.
 5. Add portable Markdown links for relationships. Ontology references may supplement them.
@@ -104,8 +106,8 @@ Measure delivered instruction bytes with `bundle context --stats` before broaden
 `references/` is optional: Markdown files there are concepts; other files are artifacts. Copy only
 material within the authorized scope and preserve its provenance. Use `okf artifact list <bundle>`
 to inventory its default `references/` directory, or add `--directory <directory>` for another
-directory. Resolve paths with `okf artifact resolve <resource> <bundle> --from <concept-id>`;
-consult the artifact sections of `references/cli.md` for bounded reads and external-source handling.
+directory. Resolve paths with `okf artifact resolve <resource> <bundle>` with `--from <concept-id>` only for document-relative references;
+consult [bounded artifact reads](../../references/commands/artifact-show.md) for bounded reads and external-source handling.
 Inspection never authorizes execution.
 
 For an authorized artifact copy or authored schema, use `okf artifact put

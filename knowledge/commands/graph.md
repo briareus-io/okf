@@ -58,6 +58,6 @@ inherit these exploratory filters.
 
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 
-Output stream: `graph,scope,bundle-node,bundle-edge`.
+Output stream: `graph,scope,bundle-node,bundle-edge,query-filters,relationship-query-summary`.
 
 Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--selection`, `--workspace-revision`.

@@ -60,13 +60,14 @@ partial scan or unavailable endpoint cannot establish that no blockers exist.
 | `--related-filter <value>` | list<string> | no | — |
 | `--preset <value>` | string | no | — |
 | `--clear-filter <value>` | list<string> | no | — |
-| `--limit <value>` | string | no | — |
-| `--offset <value>` | string | no |  (default: `0`) |
-| `--scan-limit <value>` | string | no | — |
+| `--limit <value>` | int | no | — |
+| `--offset <value>` | int | no |  (default: `0`) |
+| `--scan-limit <value>` | int | no | — |
 | `--full-scan` | bool | no |  (default: `false`) |
+| `--no-align` | bool | no | Render concept tables with tab-separated cells and no padding (default: `false`) |
 
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 
-Output stream: `concept,relationship,scope,bundle-backlink,bundle-edge`.
+Output stream: `concept,relationship,scope,bundle-backlink,bundle-edge,query-filters,relationship-query-summary`.
 
 Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--selection`, `--workspace-revision`.

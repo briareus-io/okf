@@ -12,8 +12,17 @@ outside the bundle. No routine fingerprints or verification records are needed f
 ## Initialize and declare local rules
 
 ```sh
+set -e
 okf init planning
-okf bundle context planning --operation 'ontology apply' --operation 'changeset plan' --operation 'changeset apply' --operation list --operation links --operation validate --operation lint --json
+# jq extracts the single token only after a successful, complete context request.
+load_context() {
+  okf bundle context planning "$@" --token --json > context.ndjson
+  cat context.ndjson
+  jq -ers 'select(.[-1].kind == "operation-complete" and .[-1].outcome == "ok")
+    | map(select(.kind == "context-token")) | select(length == 1) | .[0].token' \
+    context.ndjson > context-token.json
+}
+load_context --operation 'ontology apply'
 cat > operational-ontology.yaml <<'YAML'
 concepts:
   Milestone:
@@ -33,7 +42,7 @@ concepts:
       depends_on: {target: Task, cardinality: '0..n'}
       resolves: {target: Defect, cardinality: '0..n'}
 YAML
-okf ontology apply planning --from @operational-ontology.yaml
+okf ontology apply planning --from @operational-ontology.yaml --context @context-token.json
 ```
 
 `state` is an application field. It does not replace OKF's `status` lifecycle. Here, omitted
@@ -78,14 +87,16 @@ operations:
       depends_on: [/tasks/T1.md]
     body: Run the recovery scenario after T1 is complete.
 YAML
-okf changeset plan planning --from @initial-records.yaml --json --guidance off > plan.ndjson
+# Reload guidance after the ontology change. Review the returned instructions before planning.
+load_context --operation 'changeset plan' --operation 'changeset apply' --operation list --operation links --operation validate --operation lint
+okf changeset plan planning --context @context-token.json --from @initial-records.yaml --json --guidance off > plan.ndjson
 ```
 
 Check the process exit and completion record, then review the diffs and `base_digest` in the
 `changeset-summary`. Apply the same reviewed input with that exact digest:
 
 ```sh
-okf changeset apply planning --from @initial-records.yaml --expect '<reviewed base_digest>'
+okf changeset apply planning --context @context-token.json --from @initial-records.yaml --expect '<reviewed base_digest>'
 okf validate planning --profile bundle
 okf lint planning --fail-on never
 okf links /tasks/T2 planning --details

@@ -123,7 +123,7 @@ baseline file. JSON includes `lint-comparison` records for all classifications a
 | `--write-baseline <value>` | string | no | Atomically save all findings from a complete lint run |
 | `--baseline-ref <value>` | string | no | Compare with the workspace catalog, lock and bundles at this exact local Git revision |
 | `--fix` | bool | no | Normalize frontmatter order bundle-wide for the enabled frontmatter-order rule (default: `false`) |
-| `--fail-on <value>` | string | no | Severity threshold that makes the run fail (exit 1): never|info|warn|error|any (default: `error`) |
+| `--fail-on <value>` | string | no | Severity threshold that makes the run fail (exit 1): never\|info\|warn\|error\|any (default: `error`) |
 
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 

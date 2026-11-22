@@ -12,7 +12,10 @@ edits and moves for temporary records while keeping authored record IDs separate
 
 Read and follow the [shared OKF protocol](../../references/bundle-context.md) before CLI-dependent
 work. It defines compatibility checks, bundle context, scope, output evidence, validation profiles,
-and authoring conventions. Use `references/cli.md` for exact command syntax as needed.
+and authoring conventions.
+
+[Check incoming references](../../references/commands/backlinks.md) · [Preview a move set](../../references/commands/changeset-plan.md) · [Publish a reviewed move set](../../references/commands/changeset-apply.md).
+See the [command index](references/cli.md) for other operations.
 
 A concept id is its bundle-relative Markdown path. Use `okf mv`; it rewrites inbound body links and
 internal standard source resources. Link rebasing legitimately edits referring documents, so a
@@ -58,8 +61,7 @@ backlinks <concept-id> <bundle>`, and `okf links <concept-id> <bundle> --json`.
 6. After each batch, compare direct outbound links and backlinks. Use `okf graph <bundle> --root
    <concept-id> --direction both --depth <N> --format mermaid` only when a wider neighborhood is
    useful. Run `okf validate <bundle> --profile bundle` and advisory `okf lint <bundle> --fail-on never` against the
-   baseline. Resolve artifact paths with `okf artifact resolve <resource> <bundle> --from
-   <concept-id>` and distinguish missing, blocked, and scope results. Apply reviewed declaring-field
+   baseline. Resolve artifact paths with `okf artifact resolve <resource> <bundle>` with `--from <concept-id>` only for document-relative references and distinguish missing, blocked, and scope results. Apply reviewed declaring-field
    corrections with `okf edit <concept-id> <bundle> --set "resource=<new-path>"`; consult the edit
    reference for source mappings and body edits.
 7. Regenerate indexes with `okf docs <bundle> --format index` only when their bodies are generated

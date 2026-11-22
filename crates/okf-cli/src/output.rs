@@ -283,6 +283,35 @@ pub fn print_text_line(args: std::fmt::Arguments<'_>) -> Result<()> {
     })
 }
 
+pub const COMPACT_HEADER: &str = "ID\tTYPE\tTRUST\tSTATUS\tTITLE";
+
+pub fn table_cell(value: &str) -> String {
+    let mut cell = String::with_capacity(value.len());
+    for ch in value.chars() {
+        match ch {
+            '\t' => cell.push_str("\\t"),
+            '\n' => cell.push_str("\\n"),
+            '\r' => cell.push_str("\\r"),
+            ch if ch.is_control() => cell.extend(ch.escape_default()),
+            ch => cell.push(ch),
+        }
+    }
+    cell
+}
+
+pub fn print_compact_concept(c: &Concept, mark_missing: bool) -> Result<()> {
+    let cells = [
+        &c.id.0,
+        c.concept_type()
+            .unwrap_or(if mark_missing { "—" } else { "-" }),
+        c.trust_tier().as_str(),
+        c.effective_status(),
+        c.title().unwrap_or(if mark_missing { "—" } else { "" }),
+    ]
+    .map(table_cell);
+    print_text_line(format_args!("{}", cells.join("\t")))
+}
+
 /// Print a list of concepts as either NDJSON `concept` records or a human table.
 pub fn print_concepts(concepts: &[&Concept], json: bool) -> Result<()> {
     if json {
@@ -292,8 +321,20 @@ pub fn print_concepts(concepts: &[&Concept], json: bool) -> Result<()> {
         return Ok(());
     }
 
+    print_concept_table(concepts, false)
+}
+
+pub fn print_concept_table(concepts: &[&Concept], no_align: bool) -> Result<()> {
     if concepts.is_empty() {
         print_text_line(format_args!("(no concepts)"))?;
+        return Ok(());
+    }
+
+    if no_align {
+        print_text_line(format_args!("{COMPACT_HEADER}"))?;
+        for concept in concepts {
+            print_compact_concept(concept, true)?;
+        }
         return Ok(());
     }
 

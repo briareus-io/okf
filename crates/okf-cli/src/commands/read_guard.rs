@@ -12,7 +12,7 @@ pub fn guards_command(command: &Command) -> bool {
         | Command::Search(_)
         | Command::Show(_)
         | Command::Browse(_)
-        | Command::Backlinks(_)
+        | Command::Backlinks { .. }
         | Command::Links(_)
         | Command::Graph(_)
         | Command::Resolve(_)

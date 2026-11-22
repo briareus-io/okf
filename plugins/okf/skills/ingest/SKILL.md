@@ -9,7 +9,10 @@ description: Research a repository or directory and author grounded OKF v0.2 con
 
 Read and follow the [shared OKF protocol](../../references/bundle-context.md) before CLI-dependent
 work. It defines compatibility checks, bundle context, scope, output evidence, validation profiles,
-and authoring conventions. Use `references/cli.md` for exact command syntax as needed.
+and authoring conventions.
+
+[Scan a repository](../../references/commands/source-scan.md) · [Create a sourced concept](../../references/commands/add.md) · [Check the resulting bundle](../../references/commands/validate.md).
+See the [command index](references/cli.md) for other operations.
 
 Use `okf source-scan <directory>` when an inventory is needed, scoped to the relevant source
 directory. Use normal code-search tools on that external source, but query existing bundle content
@@ -18,8 +21,7 @@ through the CLI and retrieve only targeted slices.
 ## CLI and output rules
 
 Prefer `OKF_BUNDLE` during multi-step work; one explicit form is `okf edit <concept-id> <bundle>
---add-source resource=<path>`. Before using an unfamiliar command or flag, read its entry in
-`references/cli.md`. If the installed version differs or rejects documented syntax, use that
+--add-source resource=<path>`. If the installed version differs or rejects documented syntax, use that
 command's `--help` output as the runtime authority.
 
 Producer rubric:
@@ -69,7 +71,7 @@ Producer rubric:
    `okf links <concept-id> <bundle> --json` so normalized targets and missing concepts are visible
    without traversing the whole graph.
 6. Only for a requested computation, use exact `Attested Computation` with `okf add <path> <bundle>
-   --attested --runtime <runtime>`. Read the add/computation sections of `references/cli.md` for
+   --attested --runtime <runtime>`. Read [concept authoring](../../references/commands/add.md) and [computation checks](../../references/commands/computation-check.md) for
    parameters, inline/file forms, and contract resources. Inspect with `okf computation check
    <concept-id> <bundle>`; this does not execute or attest a run.
 7. Run `okf validate <bundle> --profile bundle`, advisory `okf lint <bundle> --fail-on never`, and use `okf docs
@@ -85,9 +87,8 @@ policies using the shared source-health rules.
 
 `references/` is an optional location for authorized copies; Markdown files are concepts and other
 files are artifacts. Preserve the external origin. Repository-relative fingerprint paths and
-bundle/document-relative artifact paths use different roots: read the artifact resolution notes in
-`references/cli.md` before choosing `sources[].resource` and `kind`. Use `okf artifact resolve
-<resource> <bundle> --from <concept-id>` and bounded `okf artifact show` for bundle artifacts.
+bundle/document-relative artifact paths use different roots: read [resource path resolution](../../references/commands/artifact-resolve.md) before choosing `sources[].resource` and `kind`. Use `okf artifact resolve
+<resource> <bundle>` with `--from <concept-id>` only for document-relative references and bounded `okf artifact show` for bundle artifacts.
 Inspect authorized external repository sources with normal source tools; do not change provenance or
 copy them merely to bypass a blocked artifact read. Inspection is not permission to execute code.
 

@@ -33,8 +33,7 @@ okf search --bundle-id acme.product --scope-bundle acme.finance --type Procedure
 
 Read `query-summary`, `scope`, `relationship`, `related-concept`, `expansion-summary`, and `warning`
 records by kind. Do not treat every NDJSON line as a primary concept. Join related payloads using
-qualified bundle/concept/version identity, not an unqualified ID. Projection adds records; it does
-not promise to remove all legacy metadata from the stream or reduce scan cost.
+qualified bundle/concept/version identity, not an unqualified ID. An explicit projection replaces each primary concept payload with a `projection` record. Scope, summaries, warnings, expansions, and operation envelopes can still accompany the rows. Projection leaves the scan cost unchanged.
 
 ## Authored IDs and machine consumers
 

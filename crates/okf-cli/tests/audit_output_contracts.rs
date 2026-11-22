@@ -205,3 +205,102 @@ fn catalog_lint_accepts_reserved_and_artifact_links_without_creating_concepts() 
         "{broken:?}"
     );
 }
+
+#[test]
+fn schema_covers_optional_relationship_diagnostic_and_changeset_payloads() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    for (path, body) in [("old.md", "Target"), ("ref.md", "[old](old.md)")] {
+        std::fs::write(
+            root.join(path),
+            format!("---\ntype: Note\ntitle: Example\n---\n{body}\n"),
+        )
+        .unwrap();
+    }
+    let schema = run(root, &["schema"]);
+    let contract = |name: &str| schema.iter().find(|r| r["name"] == name).unwrap();
+    let check = |name: &str, rows: &[Value], required: &[&str]| {
+        let advertised: Vec<_> = contract(name)["output"]["stream"]
+            .as_str()
+            .unwrap()
+            .split(',')
+            .collect();
+        for kind in required {
+            assert!(
+                rows.iter().any(|r| r["kind"] == *kind),
+                "{name} did not emit {kind}"
+            );
+            assert!(
+                advertised.contains(kind),
+                "{name} omitted {kind} from schema"
+            );
+        }
+    };
+    check("schema", &schema, &["schema", "command"]);
+    for (name, id) in [("links", "ref"), ("backlinks", "old")] {
+        let rows = run(root, &[name, id, "--limit", "1", "--json"]);
+        check(
+            name,
+            &rows,
+            &["query-filters", "relationship-query-summary"],
+        );
+        for arg in ["limit", "offset", "scan-limit"] {
+            let args = contract(name)["args"].as_array().unwrap();
+            assert_eq!(
+                args.iter().find(|a| a["name"] == arg).unwrap()["type"],
+                "int"
+            );
+        }
+    }
+    check(
+        "stale",
+        &run(root, &["stale", "--summary", "--json"]),
+        &["diagnostic-summary"],
+    );
+    let change = "version: 1\noperations:\n- op: remove\n  path: old\n  allow_dangling: true\n";
+    for action in ["plan", "apply"] {
+        let rows = run(root, &["changeset", action, "--from", change, "--json"]);
+        check(
+            &format!("changeset {action}"),
+            &rows,
+            &["changeset-dangling-override", "changeset-summary"],
+        );
+        let summary = rows
+            .iter()
+            .find(|r| r["kind"] == "changeset-summary")
+            .unwrap();
+        assert_eq!(summary["allowed_dangling"], 1);
+        assert_eq!(
+            schema[0]["output_records"]["changeset-summary"]["allowed_dangling"],
+            "integer"
+        );
+    }
+}
+
+#[test]
+fn verification_reads_typed_sources_from_bundle_root_and_relative_links_from_document() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    for (dir, text) in [
+        ("references", "source of record"),
+        ("notes/references", "decoy"),
+    ] {
+        std::fs::create_dir_all(root.join(dir)).unwrap();
+        std::fs::write(root.join(dir).join("spec.txt"), text).unwrap();
+    }
+    std::fs::write(root.join("notes/service.md"), "---\ntype: Note\nsources:\n- kind: file\n  resource: references/spec.txt\n---\n[local](references/spec.txt)\n").unwrap();
+    for (context, expected) in [
+        (vec![], "source of record"),
+        (vec!["--from", "notes/service"], "decoy"),
+    ] {
+        let mut args = vec!["artifact", "show", "references/spec.txt", "--json"];
+        args.extend(context);
+        let rows = run(root, &args);
+        assert_eq!(
+            rows.iter()
+                .find(|r| r["kind"] == "artifact-content")
+                .unwrap()["text"],
+            expected
+        );
+    }
+}

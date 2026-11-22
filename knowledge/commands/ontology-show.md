@@ -25,7 +25,7 @@ inherited counterparts. Each selected bundle uses its own effective ontology con
 
 | Argument | Type | Required | Description |
 |----------|------|----------|-------------|
-| `<name>` | positional | yes | Concept type name |
+| `<name>` | positional | yes | Name of the definition to inspect |
 | `<bundle>` | positional | no | Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory) |
 
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.

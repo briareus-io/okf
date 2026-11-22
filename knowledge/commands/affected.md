@@ -39,7 +39,7 @@ namespace for every changed input. `--depth` requires `--transitive`.
 | `--changed-base <value>` | string | no | Interpret changed paths relative to the bundle, repository, or invocation directory (default: `bundle`) |
 | `--transitive` | bool | no | Follow the cascade past direct dependents (default: `false`) |
 | `--depth <value>` | int | no | Cap hops with --transitive |
-| `--fail-on <value>` | string | no | Fail (exit 1) on any affected concept: never (default) | info | warn | error | any (default: `never`) |
+| `--fail-on <value>` | string | no | Fail (exit 1) on any affected concept: never (default) \| info \| warn \| error \| any (default: `never`) |
 
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 

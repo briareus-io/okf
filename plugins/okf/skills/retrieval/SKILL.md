@@ -9,11 +9,14 @@ description: Answer questions from OKF bundles using scoped structured queries, 
 
 Read and follow the [shared OKF protocol](../../references/bundle-context.md) before CLI-dependent
 work. It defines compatibility checks, bundle context, scope, output evidence, validation profiles,
-and authoring conventions. Use `references/cli.md` for exact command syntax as needed.
+and authoring conventions.
+
+[Search and page across bundles](../../references/commands/search.md) · [Read a body or numbered lines](../../references/commands/show.md) · [Trace incoming links](../../references/commands/backlinks.md).
+See the [command index](references/cli.md) for other operations.
 
 Query the bundle via the CLI rather than bulk-reading it. Use `OKF_BUNDLE` for multi-step work;
 explicit examples are `okf show <concept-id> <bundle>` and `okf links <concept-id> <bundle> --json`.
-Before using an unfamiliar command or flag, read its entry in `references/cli.md`. If the installed
+If the installed
 version differs or rejects documented syntax, use that command's `--help` output as the runtime
 authority.
 
@@ -106,14 +109,12 @@ inspect-only and reports `execution: not-run`; never describe that as a passing 
 
 `references/` is an optional convention, not required. Markdown files beneath it are ordinary
 concepts; non-Markdown files are opaque artifacts. Path-valued fields may be URLs, bundle-relative,
-or document-relative. Resolve with `okf artifact resolve <resource> <bundle> --from <concept-id>`
+or document-relative. Resolve with `okf artifact resolve <resource> <bundle>` with `--from <concept-id>` only for document-relative references
 and report `concept`, `artifact`, `reserved`, `support`, `external`, `scope`, `missing`, and `blocked`
-distinctly. Use `okf show` for concepts and bounded `okf artifact show <resource> <bundle> --from
-<concept-id> --lines <START:END> --max-bytes <N> --json` for artifacts. Never force SQL/Python
+distinctly. Use `okf show` for concepts and bounded `okf artifact show <resource> <bundle> --lines <START:END> --max-bytes <N> --json` for artifacts. Use the same path base for both commands. Never force SQL/Python
 through `okf show`.
 
-For path namespaces, external sources, and truncated reads, consult the artifact sections of
-`references/cli.md` when needed. Artifact reads stay inside the resolved target bundle and requested scope; existing user
+For path namespaces, external sources, and truncated reads, consult [bounded artifact reads](../../references/commands/artifact-show.md) when needed. Artifact reads stay inside the resolved target bundle and requested scope; existing user
 authorization to inspect a named external source also counts. Reading code never authorizes
 execution.
 
@@ -124,7 +125,7 @@ statement of what could not be established from the material inspected. Do not m
 
 For facets, paging, projection, expansion, or nested relationship conditions, read
 [query planning](references/query-planning.md). Its examples explain scan completeness and
-same-record correlation; use `references/cli.md` for exact selector and flag syntax.
+same-record correlation; use [search arguments](../../references/commands/search.md) for exact selector and flag syntax.
 
 When a source has `bundle_ref`, distinguish its requested snapshot from the actual resolved
 content and any separately labeled candidate. Open evidence using its returned bundle and revision.

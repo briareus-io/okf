@@ -13,7 +13,7 @@
 //! here instead: use `cargo xtask install` (not bare `cargo install`) to keep references current.
 //!
 //! "Schema-derived docs" = shared globals/record contracts in the knowledge bundle,
-//! focused per-skill references
+//! shared plugin command pages and record shapes, per-skill indexes
 //! (`plugins/okf/skills/*/references/cli.md`), and the `## Arguments` section of every command
 //! concept (`knowledge/commands/*.md`). All three surfaces are generated from
 //! `okf schema --json`, so this is the single command that keeps them in lockstep with the CLI.
@@ -61,7 +61,7 @@ fn main() {
         }
         Some("install") => {
             eprintln!(
-                "OKF CLI/plugin 0.6.7 adds lint baselines, partial CI settings overrides, and ontology lifecycle diagnostics. The plugin requires CLI >=0.6.7, <0.7.0. Review releases/0.6.7.md and knowledge/reference/migrations/0.6.0.md before installing."
+                "OKF CLI/plugin 0.6.8 adds compact query tables, computed projections, and task-specific skill references. The plugin requires CLI >=0.6.8, <0.7.0. Review releases/0.6.8.md and knowledge/reference/migrations/0.6.0.md before installing."
             );
             if local_signing::enabled() {
                 let install_root = local_signing::install_root(&root);
@@ -126,14 +126,26 @@ fn run_docs(check: bool) {
     // Collect (path, desired-content) for every generated artifact.
     let mut artifacts: Vec<(PathBuf, String)> = Vec::new();
 
-    // Shared records live once in the bundle; individual command pages own argument tables.
-    // Keep each skill's subset local so the plugin remains portable.
-    let contracts = cli_reference(header, &[], None)
-        .replace("# okf CLI — complete argument reference", "# CLI globals and record contracts")
-        .replace(
-            "This complete reference is for developers and general CLI lookup. Skills carry smaller generated subsets so they do not load unrelated commands.",
-            "See the [command index](../commands/index.md) for individual arguments and [command contracts](command-contracts.md) for shared behavior. Skills carry focused generated references with their workflows.",
-        );
+    // The plugin ships shared command and record pages. Each skill indexes its workflow subset.
+    let contracts = shared_contracts(header);
+    let plugin_refs = root.join("plugins/okf/references");
+    let global_args = args_table(&serde_json::json!({"args": header["global_args"]}));
+    artifacts.push((
+        plugin_refs.join("globals.md"),
+        format!("# Global CLI arguments\n\n{global_args}\n\n[Bundle selection, scope, and completion](bundle-context.md)\n"),
+    ));
+    let shapes = header["output_records"]
+        .as_object()
+        .expect("record contracts");
+    for (kind, shape) in shapes {
+        artifacts.push((
+            plugin_refs.join("records").join(format!("{kind}.md")),
+            format!(
+                "# {kind}\n\n```json\n{}\n```\n",
+                serde_json::to_string_pretty(shape).unwrap()
+            ),
+        ));
+    }
     artifacts.push((
         root.join("knowledge/reference/cli-contracts.md"),
         format!("---\ntype: Reference\naudience: user\ntitle: CLI globals and record contracts\ndescription: Generated global arguments and extension record shapes.\nsources:\n- resource: xtask/src/main.rs\n  kind: git-path\n- resource: crates/okf-cli/src/commands/schema.rs\n  kind: git-path\n---\n{contracts}"),
@@ -147,7 +159,7 @@ fn run_docs(check: bool) {
             .unwrap_or_else(|error| panic!("{error}"));
         artifacts.push((
             skill.join("references/cli.md"),
-            cli_reference(header, &selected, Some(name)),
+            skill_index(name, &selected),
         ));
     }
 
@@ -218,6 +230,50 @@ fn run_docs(check: bool) {
             globals,
             command_guidance(cmd["name"].as_str().unwrap_or("")),
         );
+        let name = cmd["name"].as_str().unwrap();
+        let example = command_example(name);
+        let record_links = cmd["output"]["stream"]
+            .as_str()
+            .unwrap()
+            .split(',')
+            .filter(|kind| shapes.contains_key(*kind))
+            .map(|kind| format!("[{kind}](../records/{kind}.md)"))
+            .collect::<Vec<_>>();
+        let mut card = format!(
+            "# okf {name}\n\n{}\n\n```sh\nokf {name} {example}\n```\n\n",
+            cmd["summary"].as_str().unwrap_or("")
+        );
+        if let Some(modes) = cmd["output"]["stream_when"].as_object() {
+            card.push_str("| JSON mode | Payload |\n|---|---|\n");
+            for (mode, kind) in modes {
+                let _ = writeln!(card, "| `{mode}` | `{}` |", kind.as_str().unwrap());
+            }
+            card.push('\n');
+        }
+        let _ = writeln!(
+            card,
+            "{}\n\nOutput stream: `{}`.\n",
+            args_table(cmd),
+            cmd["output"]["stream"].as_str().unwrap()
+        );
+        if !cmd["stream_contract"].is_null() {
+            card.push_str("NDJSON starts with [operation-start](../records/operation-start.md) and ends with [operation-complete](../records/operation-complete.md). Check the trailer and process exit.\n\n");
+        }
+        if name == "ontology field-type update" {
+            card.push_str("Read the [current field type](ontology-field-type-show.md). Copy its authored definition into `money-proposed.yaml`, preserve its base or extends and other constraints, then change the intended bound.\n\n");
+        }
+        if !record_links.is_empty() {
+            let _ = writeln!(card, "Record shapes: {}.\n", record_links.join(", "));
+        }
+        let _ = writeln!(
+            card,
+            "[Global options](../globals.md) supported here: {globals}.\n\n{}",
+            command_guidance(name)
+        );
+        artifacts.push((
+            plugin_refs.join("commands").join(format!("{stem}.md")),
+            card,
+        ));
         artifacts.push((path, replace_section(&body, "Arguments", &block)));
     }
 
@@ -423,46 +479,17 @@ fn args_table(cmd: &Value) -> String {
             flag_display(a),
             arg_type(a),
             req,
-            arg_desc(a)
+            arg_desc(a).replace('|', "\\|")
         ));
     }
     rows.join("\n")
 }
 
-fn cli_reference(header: &Value, commands: &[&Value], skill: Option<&str>) -> String {
-    let mut out = String::new();
-    match skill {
-        Some(name) => _ = writeln!(out, "# okf CLI — {name} command reference\n"),
-        None => out.push_str("# okf CLI — complete argument reference\n\n"),
-    }
-    let _ = write!(
-        out,
-        "> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool {}, OKF spec {}). \
-         Do not hand-edit; regenerate instead.\n\n",
-        header["tool_version"].as_str().unwrap_or("?"),
-        header["okf_spec"]
-            .as_array()
-            .map(|a| a
-                .iter()
-                .filter_map(Value::as_str)
-                .collect::<Vec<_>>()
-                .join(", "))
-            .unwrap_or_default()
+fn shared_contracts(header: &Value) -> String {
+    let mut out = format!(
+        "# CLI globals and record contracts\n\nGenerated from `okf schema` for CLI {}. See the [command index](../commands/index.md) for individual arguments and [command contracts](command-contracts.md) for shared behavior.\n\n",
+        header["tool_version"].as_str().unwrap()
     );
-    if let Some(name) = skill {
-        let _ = write!(
-            out,
-            "This focused reference contains only commands selected for the `{name}` workflow. \
-             First pass the skill CLI compatibility preflight. Consult this reference when exact arguments \
-             or output shapes are needed. For a compatible CLI that rejects documented \
-             syntax, use that command's `--help` output as the runtime authority.\n\n"
-        );
-    } else {
-        out.push_str(
-            "This complete reference is for developers and general CLI lookup. Skills carry \
-             smaller generated subsets so they do not load unrelated commands.\n\n",
-        );
-    }
     out.push_str(
         "Commands with a human form accept global `--json` for NDJSON; `schema` is always \
          NDJSON. Most bundle-aware commands take an optional trailing `bundle` path or a separate \
@@ -489,83 +516,94 @@ fn cli_reference(header: &Value, commands: &[&Value], skill: Option<&str>) -> St
         not authorize traversal. Explicit historical inspection never acquires objects or accepts a new lock. \
         Scope and effective settings are interpretation context, not authored concept metadata.\n\n");
     if let Some(contracts) = header["output_records"].as_object() {
-        let streams: std::collections::BTreeSet<&str> = commands
-            .iter()
-            .filter_map(|command| command["output"]["stream"].as_str())
-            .flat_map(|stream| stream.split(','))
-            .collect();
-        let selected: serde_json::Map<String, Value> = contracts
-            .iter()
-            .filter(|(name, _)| {
-                skill.is_none()
-                    || streams.contains(name.as_str())
-                    || matches!(
-                        name.as_str(),
-                        "qualified_identity" | "scope" | "effective-settings"
-                    )
-            })
-            .map(|(name, shape)| (name.clone(), shape.clone()))
-            .collect();
-        if !selected.is_empty() {
-            out.push_str("## Extension record contracts\n\nAuthored concept metadata remains open. These computed records describe scope, identity, \
-                interpretation, and explicit query extensions. Missing and null remain distinct.\n\n```json\n");
-            out.push_str(
-                &serde_json::to_string_pretty(&selected).expect("record contracts serialize"),
-            );
-            out.push_str("\n```\n\n");
-        }
+        out.push_str("## Extension record contracts\n\n```json\n");
+        out.push_str(&serde_json::to_string_pretty(contracts).unwrap());
+        out.push_str("\n```\n");
     }
+    out
+}
 
-    let mut groups: Vec<&str> = GROUP_ORDER.to_vec();
-    for c in commands {
-        let g = c["group"].as_str().unwrap_or("");
-        if !groups.contains(&g) {
-            groups.push(g);
-        }
-    }
-    for g in groups {
-        let mut in_group: Vec<&&Value> = commands.iter().filter(|c| c["group"] == g).collect();
-        if in_group.is_empty() {
+fn skill_index(skill: &str, commands: &[&Value]) -> String {
+    let mut out = format!("# {skill} command index\n");
+    for group in GROUP_ORDER {
+        let mut selected = commands.iter().filter(|c| c["group"] == *group).peekable();
+        if selected.peek().is_none() {
             continue;
         }
-        in_group.sort_by_key(|c| c["name"].as_str().unwrap_or(""));
-        let _ = writeln!(out, "## {g}\n");
-        for c in in_group {
-            let mutates = if !c["mutates_when"].is_null() {
-                " · _conditionally mutates_"
-            } else if c["mutates"].as_bool().unwrap_or(false) {
-                " · _mutates_"
-            } else {
-                ""
-            };
-            let _ = writeln!(out, "### `okf {}`{mutates}\n", c["name"].as_str().unwrap());
-            if let Some(s) = c["summary"].as_str()
-                && !s.is_empty()
-            {
-                let _ = writeln!(out, "{}.\n", s.trim_end_matches('.'));
-            }
-            out.push_str(&args_table(c));
+        let _ = writeln!(out, "\n## {group}\n");
+        for cmd in selected {
+            let name = cmd["name"].as_str().unwrap();
             let _ = writeln!(
                 out,
-                "\n\nOutput stream: `{}`.\n",
-                c["output"]["stream"].as_str().unwrap_or("")
+                "- [{name}](../../../references/commands/{}.md)",
+                name.replace(' ', "-")
             );
-            if let Some(globals) = c["supported_globals"].as_object() {
-                let names = globals
-                    .iter()
-                    .filter(|(_, enabled)| enabled.as_bool() == Some(true))
-                    .map(|(name, _)| format!("`--{name}`"))
-                    .collect::<Vec<_>>();
-                let _ = writeln!(out, "Supported global options: {}.\n", names.join(", "));
-            }
-            let notes = command_guidance(c["name"].as_str().unwrap_or(""));
-            if !notes.is_empty() {
-                out.push_str(notes);
-                out.push_str("\n\n");
-            }
         }
     }
-    format!("{}\n", out.trim_end())
+    out
+}
+
+fn command_example(name: &str) -> &'static str {
+    match name {
+        "ontology add" => "Invoice knowledge --field 'stage:enum:draft|paid' --dry-run",
+        "ontology field-type add" => "money knowledge --from '{base: int, min: 0}' --dry-run",
+        "ontology field-type update" => {
+            "money knowledge --from money-proposed.yaml --dry-run --check-dependent-bundles"
+        }
+        "ontology update" => "Invoice knowledge --field 'paid:bool' --dry-run",
+        "ontology remove" => "Invoice knowledge --dry-run",
+        "ontology show" => "Invoice knowledge --json",
+        "ontology field-type show" => "money knowledge --json",
+        "ontology field-type remove" => "money knowledge --dry-run",
+        "ontology apply" => {
+            "knowledge --from '{field_types: {money: {base: int, min: 0}}}' --dry-run"
+        }
+        "show" => "policies/review knowledge --lines 1:5 --json",
+        "search" => {
+            "--bundle-id acme.a --scope-bundle acme.b --type Policy --sort id --full-scan --limit 10 --json"
+        }
+        "list" => "knowledge --limit 10 --json",
+        "catalog" | "version" | "schema" => "--json",
+        "catalog sync" => "--check",
+        "catalog update" => "--plan update-plan.json",
+        "artifact put" => "references/schema.json @schema.json knowledge --create-only",
+        "artifact show" | "artifact resolve" => "references/schema.json knowledge",
+        "bundle resource show" => ".okf-bundle/workflows/check-documentation.md knowledge",
+        "bundle context" => "knowledge --settings-detail compact --json",
+        "init" => "knowledge --title 'Product knowledge'",
+        "format" => "--bundle knowledge --check",
+        "links" | "backlinks" | "refresh" => "policies/review knowledge",
+        "resolve" => "review.md knowledge --from policies/index",
+        "verify" => "policies/review knowledge --by human:reviewer",
+        "source-scan" => "src",
+        "affected" => "knowledge --changed policies/review",
+        "diff" => "HEAD knowledge",
+        "computation check" => "computations/report knowledge",
+        "changeset plan" => "knowledge --from @changes.yaml",
+        "changeset apply" => "knowledge --from @changes.yaml --dry-run",
+        "add" => "policies/review knowledge --type Policy --title Review --dry-run",
+        "edit" => "policies/review knowledge --set 'title=Review' --dry-run",
+        "mv" => "policies/old policies/review knowledge",
+        "rm" => "policies/obsolete knowledge",
+        "validate" => "knowledge --profile bundle",
+        "docs" => "knowledge --format md",
+        "graph"
+        | "stats"
+        | "scan"
+        | "lint"
+        | "doctor"
+        | "stale"
+        | "browse"
+        | "bundle select"
+        | "bundle validate"
+        | "bundle resource list"
+        | "changeset digest"
+        | "changeset recover"
+        | "artifact list"
+        | "ontology list"
+        | "ontology field-type list" => "knowledge",
+        _ => panic!("missing command example for {name}"),
+    }
 }
 
 /// Curated usage semantics alongside schema-derived arguments. Keep these notes focused on
@@ -699,7 +737,7 @@ fn command_guidance(name: &str) -> &'static str {
             Structured-only search has no text-match evidence. `--in title,description` narrows \
             the default fields; adding `frontmatter` broadens them. Empty results exit successfully \
             and establish only that this query found no matches. Check query-summary and warning records: \
-            incomplete scans cannot establish absence, exact totals, or globally ordered pages. \
+            after a complete scan, repeat with the returned `next_offset` while `has_more` is true. Keep scope, filters, sort, revisions and interpretation consistent across pages. Incomplete scans cannot establish absence, exact totals, or globally ordered pages. \
             --limit does not reduce scan work; offset requests rescan without shared query caches. \
             Separate nested filters may match different list records; inspect concrete occurrences \
             before attributing their combined conditions to one relationship. Expansion completeness \
@@ -826,7 +864,7 @@ fn command_guidance(name: &str) -> &'static str {
             `--dry-run` validates the proposed ontology without publishing the sidecar; coordination state may be created."
         }
         "ontology apply" => {
-            "`--from` accepts `field_types` and `concepts` maps, merging named \
+            "`--from` accepts a change document (inline or `@ontology-changes.yaml`). Omit the sidecar version header. Supply `field_types` and `concepts` maps, merging named \
             declarations and preserving omitted ones. Top-level `remove` has `field_types` and \
             `concepts` lists; per-concept `remove` has `fields`, `references`, and `relationships` \
             lists. Conflicting operations fail. The complete result validates before a single write. \
@@ -930,6 +968,19 @@ fn run_skill_checks() {
     let mut errors = Vec::new();
     let dirs = skill_dirs(&root);
 
+    for cmd in &commands {
+        let name = cmd["name"].as_str().unwrap();
+        let page = root
+            .join("plugins/okf/references/commands")
+            .join(format!("{}.md", name.replace(' ', "-")));
+        validate_command(
+            &format!("okf {name} {}", command_example(name)),
+            &commands,
+            &rel(&root, &page),
+            &mut errors,
+        );
+        check_reference_links(&page, &root.join("plugins/okf"), &mut errors);
+    }
     for dir in &dirs {
         let path = dir.join("SKILL.md");
         let body = std::fs::read_to_string(&path).expect("read skill");
@@ -980,10 +1031,14 @@ fn run_skill_checks() {
                 "{rel_path}: must load the shared bundle context protocol"
             ));
         }
-        if !body.contains("`references/cli.md`") {
+        if !body.contains("](references/cli.md)") || !body.contains("](../../references/commands/")
+        {
             errors.push(format!(
-                "{rel_path}: must route exact CLI lookup to `references/cli.md`"
+                "{rel_path}: link the skill index and task-specific command pages"
             ));
+        }
+        for doc in [&path, &dir.join("references/cli.md")] {
+            check_reference_links(doc, &root.join("plugins/okf"), &mut errors);
         }
         if dir.join("okf-cli-reference.md").exists() {
             errors.push(format!(
@@ -1044,6 +1099,30 @@ fn run_skill_checks() {
     }
 }
 
+fn check_reference_links(doc: &Path, plugin: &Path, errors: &mut Vec<String>) {
+    let Ok(body) = std::fs::read_to_string(doc) else {
+        errors.push(format!("missing {}", doc.display()));
+        return;
+    };
+    for suffix in body.split("](").skip(1) {
+        let Some((target, _)) = suffix.split_once(')') else {
+            continue;
+        };
+        let target = target.split('#').next().unwrap_or("");
+        if target.ends_with(".md")
+            && !target.contains("://")
+            && !doc
+                .parent()
+                .unwrap()
+                .join(target)
+                .canonicalize()
+                .is_ok_and(|p| p.starts_with(plugin) && p.is_file())
+        {
+            errors.push(format!("{}: invalid plugin link {target}", doc.display()));
+        }
+    }
+}
+
 /// Check teaching across explicitly linked authored resources rather than requiring
 /// the same operational prose to be copied into every skill entrypoint.
 fn linked_skill_material(path: &Path, plugin: &Path) -> String {
@@ -1057,6 +1136,7 @@ fn linked_skill_material(path: &Path, plugin: &Path) -> String {
             return;
         };
         if !path.starts_with(plugin)
+            || path.starts_with(plugin.join("references/commands"))
             || path.file_name().is_some_and(|n| n == "cli.md")
             || !seen.insert(path.clone())
         {
@@ -1436,6 +1516,13 @@ mod tests {
         })
     }
 
+    #[test]
+    fn argument_tables_preserve_literal_pipes_in_field_syntax() {
+        let command = json!({"args": [{"name":"field","help":"Format: `stage:enum:open|closed`"}]});
+        let table = args_table(&command);
+        assert!(table.contains(r"`stage:enum:open\|closed`"));
+    }
+
     fn backlinks() -> Value {
         json!({
             "kind": "command",
@@ -1582,12 +1669,9 @@ mod tests {
         }]);
         let commands = [&show, &add];
         let selected = commands_for_skill("retrieval", &scenarios, &commands).unwrap();
-        let header = json!({"tool_version": "0.3.2", "okf_spec": ["0.2"]});
-        let reference = cli_reference(&header, &selected, Some("retrieval"));
-
-        assert!(reference.contains("# okf CLI — retrieval command reference"));
-        assert!(reference.contains("### `okf show`"));
-        assert!(!reference.contains("### `okf add`"));
+        let reference = skill_index("retrieval", &selected);
+        assert!(reference.contains("[show](../../../references/commands/show.md)"));
+        assert!(!reference.contains("/add.md"));
     }
 
     #[test]

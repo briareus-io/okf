@@ -9,7 +9,10 @@ description: Migrate documents or prior OKF material into one or more OKF v0.2 b
 
 Read and follow the [shared OKF protocol](../../references/bundle-context.md) before CLI-dependent
 work. It defines compatibility checks, bundle context, scope, output evidence, validation profiles,
-and authoring conventions. Use `references/cli.md` for exact command syntax as needed.
+and authoring conventions.
+
+[Inventory source documents](../../references/commands/source-scan.md) · [Create a concept](../../references/commands/add.md) · [Preview coordinated changes](../../references/commands/changeset-plan.md).
+See the [command index](references/cli.md) for other operations.
 
 Preserve meaning and unknown data. The CLI handles writes and validation; classification,
 granularity, attribution, and unresolved legacy semantics require judgment.
@@ -18,8 +21,7 @@ granularity, attribution, and unresolved legacy semantics require judgment.
 
 Use `OKF_BUNDLE` for one path-selected destination; for catalog migrations, pass the explicit
 `--bundle-id` on each mutation and never combine it with a bundle path. A path-selected mutation
-is `okf add <path> <bundle> --type <Type>`. Before using an unfamiliar command or flag, read its entry in
-`references/cli.md`. If the installed version differs or rejects documented syntax, use that
+is `okf add <path> <bundle> --type <Type>`. If the installed version differs or rejects documented syntax, use that
 command's `--help` output as the runtime authority.
 
 Conformance requires parseable frontmatter, a non-empty `type`, and valid reserved files. `title`,
@@ -119,9 +121,8 @@ policies using the shared source-health rules.
 
 `references/` is optional; its Markdown files are concepts and other files are artifacts. Keep
 original provenance and mirror material only within the requested scope. Use `okf artifact resolve
-<resource> <bundle> --from <concept-id>` for internal resources. Before recording repository paths
-or reading external sources, consult the path-namespace and artifact-read guidance in
-`references/cli.md`; a fingerprint path need not be an artifact path. Inspection never authorizes
+<resource> <bundle>` with `--from <concept-id>` only for document-relative internal resources. Before recording repository paths
+or reading external sources, consult [resource path resolution](../../references/commands/artifact-resolve.md) and [bounded reads](../../references/commands/artifact-show.md); a fingerprint path need not be an artifact path. Inspection never authorizes
 execution.
 
 For an authorized artifact copy or authored schema, use `okf artifact put

@@ -25,7 +25,7 @@ See the [bundle customization guide](../guides/customize-a-bundle.md) and
 | `--all` | bool | no |  (default: `false`) |
 | `--settings-detail <value>` | string | no | Settings projection; full preserves the complete JSON contract, compact shows relevant values (default: `full`) |
 | `--stats` | bool | no | Show delivered instruction bytes per section and totals (not estimated tokens) (default: `false`) |
-| `--guidance-budget <value>` | string | no | Advisory byte budget for delivered mandatory instructions; never truncates instructions |
+| `--guidance-budget <value>` | int | no | Advisory byte budget for delivered mandatory instructions; never truncates instructions |
 | `--token` | bool | no | Issue a stateless context token after complete applicable instruction delivery (default: `false`) |
 | `--check-token <value>` | string | no | Check a token without executing an operation; optional --operation checks coverage too |
 | `--inputs <value>` | string | no | JSON input object or @file; values remain typed data |

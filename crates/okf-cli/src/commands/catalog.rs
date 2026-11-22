@@ -39,7 +39,7 @@ pub fn bundle_slot(command: &mut Command) -> Option<&mut Option<String>> {
         Command::Search(a) => &mut a.bundle,
         Command::Show(a) => &mut a.bundle,
         Command::Browse(a) => &mut a.bundle,
-        Command::Backlinks(a) | Command::Links(a) => &mut a.bundle,
+        Command::Backlinks { args: a, .. } | Command::Links(a) => &mut a.bundle,
         Command::Graph(a) => &mut a.bundle,
         Command::Resolve(a) => &mut a.bundle,
         Command::Scan(a) | Command::Stats(a) => &mut a.bundle,
@@ -99,11 +99,11 @@ fn print_edge(edge: &Edge, json_output: bool) -> Result<()> {
 fn edge_text(edge: &Edge) -> String {
     let mut text = format!(
         "{}\t{}\t{}\t{}\t{}\n",
-        edge.source.key(),
-        edge.resource,
-        edge.target.as_ref().map_or_else(|| "?".into(), Node::key),
+        output::table_cell(&edge.source.key()),
+        output::table_cell(&edge.resource),
+        output::table_cell(&edge.target.as_ref().map_or_else(|| "?".into(), Node::key)),
         edge.status,
-        edge.evidence
+        output::table_cell(&edge.evidence)
     );
     if let Some(snapshot) = &edge.snapshot {
         let _ = writeln!(
@@ -199,8 +199,8 @@ pub fn run_catalog(json_output: bool) -> Result<i32> {
         } else {
             output::print_text_line(format_args!(
                 "{}\t{}\t{}",
-                entry.id,
-                entry.root.display(),
+                output::table_cell(&entry.id),
+                output::table_cell(&entry.root.to_string_lossy()),
                 if entry.available {
                     "available"
                 } else {
@@ -581,7 +581,7 @@ pub fn prepare(cli: &mut Cli) -> Result<Option<i32>> {
                 .collect::<Vec<_>>();
             return super::query::run_search_in_scope(args, cli.json, &roots).map(Some);
         }
-        let graph = if let Command::Links(a) | Command::Backlinks(a) = &cli.command {
+        let graph = if let Command::Links(a) | Command::Backlinks { args: a, .. } = &cli.command {
             let bounded = super::filters::requested(&a.filters)
                 || a.limit.is_some()
                 || a.scan_limit.is_some()
@@ -646,11 +646,11 @@ fn filter_scoped(cli: &mut Cli, context: &Context, graph: &CatalogGraph) -> Resu
     use std::collections::{BTreeMap, BTreeSet, VecDeque};
     let (args, operation) = match &cli.command {
         Command::Links(a) => (&a.filters, "links"),
-        Command::Backlinks(a) => (&a.filters, "backlinks"),
+        Command::Backlinks { args: a, .. } => (&a.filters, "backlinks"),
         Command::Graph(a) => (&a.filters, "graph"),
         _ => return Ok(graph.clone()),
     };
-    let pagination = matches!(&cli.command,Command::Links(a)|Command::Backlinks(a) if a.limit.is_some()||a.scan_limit.is_some()||a.full_scan);
+    let pagination = matches!(&cli.command,Command::Links(a)|Command::Backlinks { args: a, .. } if a.limit.is_some()||a.scan_limit.is_some()||a.full_scan);
     if !super::filters::requested(args) && !pagination {
         return Ok(graph.clone());
     }
@@ -699,7 +699,7 @@ fn filter_scoped(cli: &mut Cli, context: &Context, graph: &CatalogGraph) -> Resu
     let mut matched_occurrences = 0usize;
     let mut observed_matches = 0usize;
     match &mut cli.command {
-        Command::Links(a) | Command::Backlinks(a) => {
+        Command::Links(a) | Command::Backlinks { args: a, .. } => {
             a.details |= preset_details;
             if a.limit == Some(0) || a.scan_limit == Some(0) {
                 return Err(OkfError::Usage("query limits must be positive".into()));
@@ -860,7 +860,7 @@ fn run_scoped(cli: &Cli, context: &Context, graph: &CatalogGraph) -> Result<i32>
             }
             Ok(0)
         }
-        Command::Backlinks(a) => {
+        Command::Backlinks { args: a, .. } => {
             let target = graph.target(context, &a.concept);
             let nodes: std::collections::BTreeSet<_> = graph
                 .edges

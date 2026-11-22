@@ -249,6 +249,33 @@ impl Condition {
         })
     }
 }
+enum ComputedField {
+    Id,
+    Bundle,
+    Version,
+    TrustTier,
+    EffectiveStatus,
+}
+impl ComputedField {
+    fn parse(field: &str) -> Result<Self> {
+        match field {
+            "$id" => Ok(Self::Id),
+            "$bundle" => Ok(Self::Bundle),
+            "$version" => Ok(Self::Version),
+            "$trust_tier" => Ok(Self::TrustTier),
+            "$effective_status" => Ok(Self::EffectiveStatus),
+            _ => Err(OkfError::Usage(format!("unknown computed field {field:?}"))),
+        }
+    }
+}
+pub fn validate_projection_field(field: &str) -> Result<()> {
+    if field.starts_with('$') {
+        ComputedField::parse(field)?;
+    } else {
+        Selector::parse(field)?;
+    }
+    Ok(())
+}
 /// Missing is represented separately from authored null; computed identity never overwrites metadata.
 pub fn project(
     concept: &Concept,
@@ -260,11 +287,12 @@ pub fn project(
     let mut cells = Vec::new();
     for field in fields {
         let cell = if field.starts_with('$') {
-            let value = match field.as_str() {
-                "$id" => json!(concept.id.0),
-                "$bundle" => json!(bundle),
-                "$version" => json!(version),
-                _ => return Err(OkfError::Usage(format!("unknown computed field {field:?}"))),
+            let value = match ComputedField::parse(field)? {
+                ComputedField::Id => json!(concept.id.0),
+                ComputedField::Bundle => json!(bundle),
+                ComputedField::Version => json!(version),
+                ComputedField::TrustTier => json!(concept.trust_tier().as_str()),
+                ComputedField::EffectiveStatus => json!(concept.effective_status()),
             };
             json!({"field":field,"present":true,"value":value})
         } else {

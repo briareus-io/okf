@@ -9,9 +9,9 @@ sources:
 ---
 # Develop and document OKF
 
-`cargo xtask install` builds and installs the 0.6.7 CLI.
+`cargo xtask install` builds and installs the 0.6.8 CLI.
 Review the [migration guide](../reference/migrations/0.6.0.md) and
-[0.6.7 release notes](https://github.com/briareus-io/okf/blob/v0.6.7/releases/0.6.7.md) before running it over
+[0.6.8 release notes](https://github.com/briareus-io/okf/blob/v0.6.8/releases/0.6.8.md) before running it over
 an existing installation.
 
 ```sh
@@ -49,8 +49,7 @@ Requires a recent stable Rust. `git` on `PATH` is needed only for git-based sour
 
 `okf schema` supplies command arguments, supported globals, write capability, and output contracts.
 `cargo xtask docs` updates the shared [CLI contracts](../reference/cli-contracts.md),
-the Arguments section of every [command](../commands/index.md), and the focused CLI reference
-packaged with each skill. Edit `xtask/src/main.rs` for shared usage notes; keep task guidance in this bundle.
+the Arguments section of every [command](../commands/index.md), and the plugin’s shared command pages, individual record shapes, and skill-specific indexes. Edit `xtask/src/main.rs` for shared usage notes; keep task guidance in this bundle.
 `xtask/skill-scenarios.json` selects each skill's reference subset.
 
 ```sh

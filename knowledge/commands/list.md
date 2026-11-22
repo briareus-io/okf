@@ -55,7 +55,8 @@ Primary query filters and presets remain separate from expansion filtering.
 | `--offset <value>` | int | no | Start page at this nonnegative offset; requires a positive limit |
 | `--scan-limit <value>` | int | no | Maximum examined documents across scope (positive) |
 | `--full-scan` | bool | no | Examine the entire selected scope without a document scan budget (default: `false`) |
-| `--project <value>` | list<string> | no | Explicit metadata projection selector (repeatable) |
+| `--project <value>` | list<string> | no | Explicit metadata projection selector (repeatable). Computed fields: $id, $bundle, $version, $trust_tier, $effective_status |
+| `--no-align` | bool | no | Render concept tables with tab-separated cells and no padding (default: `false`) |
 | `--columns <value>` | list<string> | no | Human output column selector (repeatable) |
 | `--view <value>` | string | no | Named bundle display view |
 | `--expand <value>` | list<string> | no | Expand selected outbound relationship rule (repeatable) |
@@ -67,7 +68,7 @@ Primary query filters and presets remain separate from expansion filtering.
 
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 
-Output stream: `concept,concept-identity,scope,projection,query-summary,facet,facet-excluded,relationship,related-concept,expansion-summary,warning`.
+Output stream: `query-filters,concept,concept-identity,scope,projection,query-summary,facet,facet-excluded,relationship,related-concept,expansion-summary,warning`.
 
 Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--selection`, `--workspace-revision`.
 

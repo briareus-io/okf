@@ -19,7 +19,7 @@ Removes a concept type from the ontology.
 
 | Argument | Type | Required | Description |
 |----------|------|----------|-------------|
-| `<name>` | positional | yes | Concept type name to remove |
+| `<name>` | positional | yes | Name of the definition to remove |
 | `<bundle>` | positional | no | Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory) |
 | `--dry-run` | bool | no | Validate and preview the change without writing (default: `false`) |
 | `--check-dependent-bundles` | bool | no | Examine every registered consumer of a shared ontology sidecar (default: `false`) |

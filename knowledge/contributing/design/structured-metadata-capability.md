@@ -556,7 +556,7 @@ ID                      STABLE-ID  DESCRIPTION                         TAGS
 /procedures/onboarding   PROC-017   Account creation and access review   security, production
 ```
 
-Nested selectors use dot notation. `$id` and `$bundle` name computed values; bracket quoting
+Nested selectors use dot notation. `$id`, `$bundle`, `$version`, `$trust_tier`, and `$effective_status` name computed projection values; bracket quoting
 addresses literal custom keys. Missing human cells show `—`; list values retain order and
 cell truncation is visible. Object cells use bounded compact JSON, with newlines and table
 delimiters escaped. Named views and explicit `--columns` will support `list`, `search`, and

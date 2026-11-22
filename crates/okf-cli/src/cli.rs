@@ -67,7 +67,13 @@ pub enum Command {
     /// Show a directory's index.md, synthesizing it when absent.
     Browse(BrowseArgs),
     /// Concepts that link to a given concept.
-    Backlinks(RelationshipArgs),
+    Backlinks {
+        #[command(flatten)]
+        args: RelationshipArgs,
+        /// Render concept tables with tab-separated cells and no padding.
+        #[arg(long)]
+        no_align: bool,
+    },
     /// List the direct concept links defined by one concept.
     Links(RelationshipArgs),
     /// Render the link graph (or a bounded rooted neighborhood) as mermaid/dot/graphml.
@@ -396,9 +402,12 @@ pub struct SearchArgs {
     /// Examine the entire selected scope without a document scan budget.
     #[arg(long, conflicts_with = "scan_limit")]
     pub full_scan: bool,
-    /// Explicit metadata projection selector (repeatable).
+    /// Explicit metadata projection selector (repeatable). Computed fields: $id, $bundle, $version, $trust_tier, $effective_status.
     #[arg(long)]
     pub project: Vec<String>,
+    /// Render concept tables with tab-separated cells and no padding.
+    #[arg(long)]
+    pub no_align: bool,
     /// Human output column selector (repeatable).
     #[arg(long = "columns", alias = "column", value_delimiter = ',')]
     pub column: Vec<String>,
@@ -477,7 +486,7 @@ pub struct ShowArgs {
     /// Print only the raw Markdown body, without frontmatter or display headers.
     #[arg(long, conflicts_with_all = ["outline", "lines", "numbered"])]
     pub body: bool,
-    /// Explicit metadata projection selector (repeatable).
+    /// Explicit metadata projection selector (repeatable). Computed fields: $id, $bundle, $version, $trust_tier, $effective_status.
     #[arg(long, conflicts_with_all = ["body", "outline", "lines", "numbered"])]
     pub project: Vec<String>,
 }
@@ -963,7 +972,7 @@ pub struct DocsArgs {
 
 #[derive(Debug, Args)]
 pub struct OntShowArgs {
-    /// Concept type name.
+    /// Name of the definition to inspect.
     pub name: String,
     /// Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory).
     pub bundle: Option<String>,
@@ -971,7 +980,7 @@ pub struct OntShowArgs {
 
 #[derive(Debug, Args)]
 pub struct OntRemoveArgs {
-    /// Concept type name to remove.
+    /// Name of the definition to remove.
     pub name: String,
     /// Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory).
     pub bundle: Option<String>,
@@ -1318,6 +1327,29 @@ impl DocsFormatArg {
             Self::Graphml => "graphml",
             Self::Obsidian => "obsidian",
             Self::Index => "index",
+        }
+    }
+}
+
+#[cfg(test)]
+mod documentation_examples {
+    #[test]
+    fn every_plugin_command_example_parses() {
+        let pages = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../plugins/okf/references/commands");
+        for entry in std::fs::read_dir(pages).unwrap() {
+            let page = std::fs::read_to_string(entry.unwrap().path()).unwrap();
+            let example = page
+                .split_once("```sh\n")
+                .unwrap()
+                .1
+                .lines()
+                .next()
+                .unwrap();
+            let words = shlex::split(example).unwrap();
+            super::command_tree()
+                .try_get_matches_from(words)
+                .unwrap_or_else(|error| panic!("{example}: {error}"));
         }
     }
 }

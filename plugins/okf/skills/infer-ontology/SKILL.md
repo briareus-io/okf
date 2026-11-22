@@ -9,11 +9,13 @@ description: Infer an optional advisory ontology.yaml from observed OKF concepts
 
 Read and follow the [shared OKF protocol](../../references/bundle-context.md) before CLI-dependent
 work. It defines compatibility checks, bundle context, scope, output evidence, validation profiles,
-and authoring conventions. Use `references/cli.md` for exact command syntax as needed.
+and authoring conventions.
+
+[Inventory observed types](../../references/commands/list.md) · [Inspect an existing definition](../../references/commands/ontology-field-type-show.md) · [Preview inferred rules](../../references/commands/ontology-apply.md).
+See the [command index](references/cli.md) for other operations.
 
 Query bundle content through the CLI, using outlines and line slices for large concepts. Prefer
-`OKF_BUNDLE`; one explicit form is `okf ontology add <name> <bundle>`. Before using an unfamiliar
-command or flag, read its entry in `references/cli.md`. If the installed version differs or rejects
+`OKF_BUNDLE`; one explicit form is `okf ontology add <name> <bundle>`. If the installed version differs or rejects
 documented syntax, use that command's `--help` output as the runtime authority.
 
 Use the ontology skill's [structured authoring reference](../ontology/references/structured-authoring.md)
@@ -55,8 +57,7 @@ when applying inferred rules; keep the inference here grounded in observed evide
    them. Preserve existing deliberate constraints unless their change is authorized.
 
 If custom fields point to supporting resources, `references/` is optional: Markdown targets are
-concepts and other files are artifacts. Use `okf artifact resolve <resource> <bundle> --from
-<concept-id>` and consult the artifact sections of `references/cli.md` only when retrieval is
+concepts and other files are artifacts. Use `okf artifact resolve <resource> <bundle>` with `--from <concept-id>` only for document-relative references and consult [bounded artifact reads](../../references/commands/artifact-show.md) only when retrieval is
 needed. Reading a resource never authorizes execution.
 
 Report exact types, built-in fields/contracts excluded from inference, custom rules with evidence,

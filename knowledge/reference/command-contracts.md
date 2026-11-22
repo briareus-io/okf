@@ -52,6 +52,17 @@ Computed `$id` and authored metadata `id` are separate projection selectors. Exi
 unknown metadata remains preserved. Columns affect human display; they do not silently
 remove fields from JSON output.
 
+Use `$trust_tier` and `$effective_status` in columns, views, or projections to read
+the same derived values as the default table. For example, `--columns '$id,status,$effective_status'`
+shows both the authored status and the lifecycle value, which defaults to `stable` for blank or absent status.
+
+`list`, `search`, and `backlinks` accept `--no-align` for human concept tables. Cells are
+separated by tabs. Missing values display as `—`, empty strings occupy empty cells, and
+embedded tabs, newlines, and carriage returns display as `\t`, `\n`, and `\r`.
+Default compact columns retain long values in full. Selected display columns retain their
+160-character display limit. Use JSON projections when literal markers and missing values
+must be distinguished. Scoped query tables retain their bundle and version columns.
+
 ### Selection and scope
 
 A trailing bundle argument selects a directory. `--bundle-id` selects a registered

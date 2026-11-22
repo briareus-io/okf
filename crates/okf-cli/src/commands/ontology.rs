@@ -34,7 +34,11 @@ pub fn run_list(args: &BundleArgs, json: bool) -> Result<i32> {
             output::print_line(&concept_type_record(name, ct, &ontology))?;
         } else {
             let desc = ct.description.as_deref().unwrap_or("");
-            output::print_text_line(format_args!("{name}\t{desc}"))?;
+            output::print_text_line(format_args!(
+                "{}\t{}",
+                output::table_cell(name),
+                output::table_cell(desc)
+            ))?;
         }
     }
     Ok(0)
@@ -221,12 +225,15 @@ pub fn run_field_type(cmd: &OntFieldTypeCmd, json: bool) -> Result<i32> {
                 )?;
             } else {
                 output::print_text_line(format_args!(
-                    "{name}\t{}",
-                    definition
-                        .extends
-                        .as_deref()
-                        .or(definition.base.as_deref())
-                        .unwrap_or("")
+                    "{}\t{}",
+                    output::table_cell(name),
+                    output::table_cell(
+                        definition
+                            .extends
+                            .as_deref()
+                            .or(definition.base.as_deref())
+                            .unwrap_or("")
+                    )
                 ))?;
             }
         }

@@ -9,7 +9,10 @@ description: Author and maintain optional local ontology rules, reusable nested 
 
 Read and follow the [shared OKF protocol](../../references/bundle-context.md) before CLI-dependent
 work. It defines compatibility checks, bundle context, scope, output evidence, validation profiles,
-and authoring conventions. Use `references/cli.md` for exact command syntax as needed.
+and authoring conventions.
+
+[Inspect a concept type](../../references/commands/ontology-show.md) · [Inspect a reusable type](../../references/commands/ontology-field-type-show.md) · [Define concept fields](../../references/commands/ontology-add.md) · [Add a reusable type](../../references/commands/ontology-field-type-add.md) · [Preview a tighter constraint](../../references/commands/ontology-field-type-update.md).
+See the [command index](references/cli.md) for other operations.
 
 `ontology.yaml` is a spec-external sidecar. It is neither required for an OKF bundle nor a type
 registry. Unknown types can be core-conformant. Ontology findings are advisory unless an explicit
@@ -20,8 +23,7 @@ Prefer `OKF_BUNDLE`; explicit forms are `okf ontology show <name> <bundle>` and 
 `okf ontology field-type add <name> <bundle> --from definition.yaml` and the corresponding
 field-type update/remove commands; selector-based references and relationships use
 `--ref-yaml` and `--relationship-yaml`. Use `--from` for type definitions and `okf ontology apply`
-for dependent bulk changes. Before using an unfamiliar command or flag, read its entry in
-`references/cli.md`. If the
+for dependent bulk changes. If the
 installed version differs or rejects documented syntax, use that command's `--help` output as the
 runtime authority.
 
@@ -61,8 +63,7 @@ the reference before choosing other types or cardinalities.
    never` for ontology/spec recommendations. Report results in separate groups.
 
 If custom fields point to supporting resources, `references/` is optional: Markdown targets are
-concepts and other files are artifacts. Use `okf artifact resolve <resource> <bundle> --from
-<concept-id>` and consult the artifact sections of `references/cli.md` only when retrieval is
+concepts and other files are artifacts. Use `okf artifact resolve <resource> <bundle>` with `--from <concept-id>` only for document-relative references and consult [bounded artifact reads](../../references/commands/artifact-show.md) only when retrieval is
 needed. Reading a resource never authorizes execution.
 
 Report sidecar changes, portable versus custom fields, exact computation treatment, and advisory
@@ -76,6 +77,8 @@ the effective definition with the ontology show command before changing a shared
 unknown named types, and composition cycles are configuration errors. Repeat inherited fields
 that a replacement must retain. Structured declaration flags and bulk apply author nested definitions; scalar flags retain their existing grammar.
 
+Use the built-in field types `string`, `text`, `int`, `bool`, `date`, `datetime`, `uri`,
+`enum`, `list`, and `object`, or a name declared under `field_types`.
 Recursive checks use YAML types without coercion. Root metadata remains open; object closure
 applies only to `additional_properties: false` on a custom object. Required fields reject missing,
 null, blank strings, and empty lists. Unknown extension constraints remain preserved and must be

@@ -156,7 +156,7 @@ pub(crate) fn command_name(command: &crate::cli::Command) -> String {
         Command::Search(_) => "search".into(),
         Command::Show(_) => "show".into(),
         Command::Browse(_) => "browse".into(),
-        Command::Backlinks(_) => "backlinks".into(),
+        Command::Backlinks { .. } => "backlinks".into(),
         Command::Links(_) => "links".into(),
         Command::Graph(_) => "graph".into(),
         Command::Resolve(_) => "resolve".into(),

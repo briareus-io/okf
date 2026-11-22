@@ -1567,3 +1567,97 @@ fn scoped_lint_honors_named_bundle_rule_settings() {
         assert!(!records.iter().any(|row| row["rule"] == "index-coverage"));
     }
 }
+
+#[test]
+fn compact_concept_tables_and_computed_views() {
+    let d = tempfile::tempdir().unwrap();
+    let root = d.path();
+    let title = "x".repeat(200);
+    write(
+        root,
+        "a.md",
+        &format!(
+            "---\ntitle: \"{title}\\tend\"\nstatus: ''\nverified: [{{by: 'human:jane', at: '2026-11-01T10:00:00Z'}}]\n---\n[b](b.md)\n"
+        ),
+    );
+    write(root, "b.md", "---\ntype: Topic\n---\n");
+    write(
+        root,
+        "okf-bundle.yaml",
+        "manifest_version: 1\nsettings:\n  views:\n    summary:\n      columns: ['$trust_tier', '$effective_status']\n",
+    );
+    for args in [vec!["list"], vec!["search"], vec!["backlinks", "b"]] {
+        let mut args = args;
+        args.push("--no-align");
+        let output = run(root, &args);
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(output.status.success());
+        assert!(
+            text.contains(&format!("/a\t—\thuman-reviewed\tstable\t{title}\\tend")),
+            "{text}"
+        );
+    }
+    let view = run(root, &["list", "--view", "summary"]);
+    assert!(
+        String::from_utf8(view.stdout)
+            .unwrap()
+            .contains("human-reviewed\tstable")
+    );
+    let projected = query(
+        root,
+        &[
+            "show",
+            "a",
+            "--project",
+            "$trust_tier",
+            "--project",
+            "$effective_status",
+            "--json",
+        ],
+    );
+    let fields = &record(&projected, "projection")["fields"];
+    assert_eq!(fields[0]["value"], "human-reviewed");
+    assert_eq!(fields[1]["value"], "stable");
+    let bad = run(
+        root,
+        &["list", "--type", "Missing", "--columns", "$unknown"],
+    );
+    assert_eq!(bad.status.code(), Some(2));
+    assert!(bad.stdout.is_empty());
+}
+
+#[test]
+fn unknown_ontology_type_reports_canonical_names_and_hint() {
+    let d = tempfile::tempdir().unwrap();
+    write(
+        d.path(),
+        "ontology.yaml",
+        "okf_ontology: '0.1'\nconcepts:\n  Item:\n    fields:\n      count: {type: integer}\n",
+    );
+    let output = run(d.path(), &["lint"]);
+    let message = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        message.contains("string, text, int, bool, date, datetime, uri, enum, list, object"),
+        "{message}"
+    );
+    assert!(message.contains("did you mean int?"));
+}
+
+#[test]
+fn scoped_compact_tables_preserve_identity_and_cell_boundaries() {
+    let d = catalog();
+    write(d.path(), "b/one.md", "---\ntitle: \"Beta\\titem\"\n---\n");
+    let out = run(d.path(), &["list", "--catalog-scope", "--no-align"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let text = String::from_utf8(out.stdout).unwrap();
+    let row = text
+        .lines()
+        .find(|row| row.starts_with("acme.b\t"))
+        .unwrap();
+    assert_eq!(row.split('\t').count(), 7);
+    assert!(row.ends_with("/one\t—\tunverified\tstable\tBeta\\titem"));
+}

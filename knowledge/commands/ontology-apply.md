@@ -40,4 +40,4 @@ Output stream: `change`.
 
 Supported global options: `--bundle-id`, `--catalog`, `--context`, `--guidance`, `--json`, `--selection`.
 
-`--from` accepts `field_types` and `concepts` maps, merging named declarations and preserving omitted ones. Top-level `remove` has `field_types` and `concepts` lists; per-concept `remove` has `fields`, `references`, and `relationships` lists. Conflicting operations fail. The complete result validates before a single write. Use `--dry-run` for a preview; null and omission do not request deletion.
+`--from` accepts a change document (inline or `@ontology-changes.yaml`). Omit the sidecar version header. Supply `field_types` and `concepts` maps, merging named declarations and preserving omitted ones. Top-level `remove` has `field_types` and `concepts` lists; per-concept `remove` has `fields`, `references`, and `relationships` lists. Conflicting operations fail. The complete result validates before a single write. Use `--dry-run` for a preview; null and omission do not request deletion.

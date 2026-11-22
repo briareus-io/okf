@@ -9,7 +9,10 @@ description: Diagnose and repair an existing OKF knowledge base for v0.2 using o
 
 Read and follow the [shared OKF protocol](../../references/bundle-context.md) before CLI-dependent
 work. It defines compatibility checks, bundle context, scope, output evidence, validation profiles,
-and authoring conventions. Use `references/cli.md` for exact command syntax as needed.
+and authoring conventions.
+
+[Diagnose a bundle](../../references/commands/doctor.md) · [Check document conformance](../../references/commands/validate.md) · [Inspect advisory findings](../../references/commands/lint.md).
+See the [command index](references/cli.md) for other operations.
 
 `okf doctor` is the deterministic compatibility authority. Do not reimplement its inventory or
 checks in prompt logic. Bring the bundle to target-ready state when repairs are mechanical; stop at

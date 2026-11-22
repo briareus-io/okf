@@ -11,9 +11,7 @@ sources:
 ---
 # CLI globals and record contracts
 
-> **Generated** by `cargo xtask docs` from `okf schema --json` and curated usage notes (tool 0.6.7, OKF spec 0.2). Do not hand-edit; regenerate instead.
-
-See the [command index](../commands/index.md) for individual arguments and [command contracts](command-contracts.md) for shared behavior. Skills carry focused generated references with their workflows.
+Generated from `okf schema` for CLI 0.6.8. See the [command index](../commands/index.md) for individual arguments and [command contracts](command-contracts.md) for shared behavior.
 
 Commands with a human form accept global `--json` for NDJSON; `schema` is always NDJSON. Most bundle-aware commands take an optional trailing `bundle` path or a separate `--bundle-id` selector; `format` uses `--bundle <path>` and an optional concept ID positional. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Catalog registration alone does not extend examination scope. Meta commands have no bundle, and `source-scan` takes an explicit arbitrary directory.
 
@@ -42,9 +40,6 @@ Scope and effective settings are interpretation context, not authored concept me
 
 ## Extension record contracts
 
-Authored concept metadata remains open. These computed records describe scope, identity,
-interpretation, and explicit query extensions. Missing and null remain distinct.
-
 ```json
 {
   "baseline": {
@@ -52,6 +47,10 @@ interpretation, and explicit query extensions. Missing and null remain distinct.
     "bundle": "path",
     "schema_version": 1,
     "scope": "{requested:array<string>,examined:array<string>,unavailable:array<string>} (optional; explicit scoped baseline, includes primary)"
+  },
+  "body": {
+    "body": "string",
+    "id": "string"
   },
   "bundle-affected": {
     "bundle": "string",
@@ -117,6 +116,9 @@ interpretation, and explicit query extensions. Missing and null remain distinct.
     "plan_digest": "string",
     "plan_kind": "initial|update|registration-change"
   },
+  "changeset-dangling-override": {
+    "occurrence": "string"
+  },
   "changeset-file": {
     "after_bytes": "integer|null",
     "before_bytes": "integer|null",
@@ -128,6 +130,7 @@ interpretation, and explicit query extensions. Missing and null remain distinct.
     "paths": "array<path>"
   },
   "changeset-summary": {
+    "allowed_dangling": "integer",
     "applied": "boolean",
     "base_digest": "string",
     "files": "integer",
@@ -178,6 +181,7 @@ interpretation, and explicit query extensions. Missing and null remain distinct.
     "displayed": "integer",
     "examined": "integer",
     "omitted": "integer",
+    "provenance_only": "integer",
     "schema_version": 1
   },
   "doctor-normalization": {
@@ -258,6 +262,13 @@ interpretation, and explicit query extensions. Missing and null remain distinct.
     "ontology_path": "path|null",
     "settings": "object"
   },
+  "line-range": {
+    "end": "integer",
+    "id": "string",
+    "lines": "array<{line:integer,text:string}>",
+    "start": "integer",
+    "trust_tier": "string"
+  },
   "lint-baseline": {
     "bundles": "map<bundle,version> (file capture)",
     "entries": "integer (file capture)",
@@ -303,6 +314,11 @@ interpretation, and explicit query extensions. Missing and null remain distinct.
     "schema_version": 1,
     "stream_version": 1
   },
+  "outline": {
+    "headings": "array<{line:integer,level:integer,text:string}>",
+    "id": "string",
+    "trust_tier": "string"
+  },
   "projection": {
     "bundle": "string|null",
     "fields": "array<{field:string,present:boolean,value?:any,occurrences?:array<{path:string,value:any}>,empty_lists?:integer}>",
@@ -316,9 +332,10 @@ interpretation, and explicit query extensions. Missing and null remain distinct.
     "version": "string"
   },
   "query-filters": {
-    "filters": "object",
+    "filters": "object (relationship filters)",
     "origin": "string",
-    "preset": "string|null"
+    "preset": "string|null",
+    "query": "object (primary query preset)"
   },
   "query-summary": {
     "examined_documents": "integer",
@@ -355,7 +372,15 @@ interpretation, and explicit query extensions. Missing and null remain distinct.
     "version": "string"
   },
   "relationship-query-summary": {
-    "evidence": "object (local)"
+    "delivery_complete": "boolean (scoped)",
+    "eligible_documents": "integer|null",
+    "evidence": "object (local)",
+    "examined_documents": "integer|null (scoped)",
+    "examined_occurrences": "integer (scoped)",
+    "matched_occurrences": "integer (scoped)",
+    "scan_complete": "boolean (scoped)",
+    "total_matches": "integer|null",
+    "unresolved_candidates": "integer (scoped)"
   },
   "scope": {
     "examined": "array<{id:string,root:path,version:string,interpretation:interpretation-settings}>",

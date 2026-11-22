@@ -71,8 +71,10 @@ pub fn resolve_type_name(
 
     // Must be a field_types entry.
     let def = ontology.field_types.get(name).ok_or_else(|| {
+        let keywords = FieldType::BUILT_INS.map(FieldType::as_keyword).join(", ");
+        let hint = match name { "integer" => "; did you mean int?", "boolean" => "; did you mean bool?", _ => "" };
         OkfError::Usage(format!(
-            "unknown field type {name:?}: not a primitive and not defined under field_types"
+            "unknown field type {name:?}: not a primitive and not defined under field_types; built-in types: {keywords}{hint}"
         ))
     })?;
 

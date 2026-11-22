@@ -9,7 +9,10 @@ description: Review OKF concepts against their declared sources and append docum
 
 Read and follow the [shared OKF protocol](../../references/bundle-context.md) before CLI-dependent
 work. It defines compatibility checks, bundle context, scope, output evidence, validation profiles,
-and authoring conventions. Use `references/cli.md` for exact command syntax as needed.
+and authoring conventions.
+
+[Inspect the document](../../references/commands/show.md) · [Check source freshness](../../references/commands/stale.md) · [Record the review](../../references/commands/verify.md).
+See the [command index](references/cli.md) for other operations.
 
 `okf verify` records that a document was checked against its sources or resource. It does not
 execute an Attested Computation and is never a substitute for a deterministic run attestation.
@@ -17,7 +20,7 @@ execute an Attested Computation and is never a substitute for a deterministic ru
 ## CLI and review scope
 
 Prefer `OKF_BUNDLE`; the fully qualified write is `okf verify <concept-id> <bundle> --by <actor>`.
-Before using an unfamiliar command or flag, read its entry in `references/cli.md`. If the installed
+If the installed
 version differs or rejects documented syntax, use that command's `--help` output as the runtime
 authority.
 
@@ -40,9 +43,12 @@ authority.
    and linked concepts. For sliced reads, track sections/claims covered and continue through the
    remaining document. Do not append document-wide verification after reviewing only selected
    sections.
-3. Resolve internal sources with document context. Use `okf artifact resolve <resource> <bundle>
-   --from <concept-id>` and bounded `okf artifact show` for opaque files; use `okf show` for
-   concepts, using the resolved bundle/snapshot identity rather than assuming the declaring bundle. A `scope`, `missing`, or `blocked` result needs an explicit review decision and may
+3. Choose the source path base before reading evidence. For `file`, `line-range`, and
+   `markdown-heading` sources, run `okf artifact resolve <resource> <bundle>` and bounded
+   `okf artifact show <resource> <bundle>` without `--from` so the path resolves against the selected bundle root.
+   For kind-less document-relative references, pass `--from <concept-id>` on both commands.
+   Inspect `git-path` and `git-commit` sources in their declared repository context.
+   For concepts, use `okf show` with the resolved bundle and snapshot identity. A `scope`, `missing`, or `blocked` result needs an explicit review decision and may
    prevent verification. Consult the artifact reference for external source access and truncation. A
    request to check named external sources supplies read authorization within that scope;
    inaccessible evidence remains a review gap. Inspection never authorizes code execution.

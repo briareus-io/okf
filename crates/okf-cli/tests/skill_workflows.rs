@@ -1003,3 +1003,76 @@ fn skill_behavior_scenarios() {
     }
     assert_eq!(seen.len(), 11);
 }
+
+#[test]
+fn generated_examples_match_show_and_ontology_runtime_contracts() {
+    let fixture = tempfile::tempdir().unwrap();
+    let root = fixture.path();
+    fs::create_dir_all(root.join("knowledge/policies")).unwrap();
+    let ontology = "okf_ontology: '0.1'\nconcepts: {}\n";
+    fs::write(root.join("knowledge/ontology.yaml"), ontology).unwrap();
+    fs::write(
+        root.join("knowledge/policies/review.md"),
+        "---\ntype: Policy\ntitle: Review\n---\nHello\n",
+    )
+    .unwrap();
+
+    for (page, expected) in [
+        (
+            include_str!("../../../plugins/okf/references/commands/ontology-apply.md"),
+            "min: 0",
+        ),
+        (
+            include_str!("../../../plugins/okf/references/commands/ontology-field-type-add.md"),
+            "min: 0",
+        ),
+        (
+            include_str!("../../../plugins/okf/references/commands/ontology-add.md"),
+            "type: enum",
+        ),
+        (
+            include_str!("../../../plugins/okf/references/commands/show.md"),
+            "\"kind\":\"line-range\"",
+        ),
+    ] {
+        let command = page
+            .split_once("```sh\n")
+            .unwrap()
+            .1
+            .lines()
+            .next()
+            .unwrap();
+        let args = shlex::split(command).unwrap();
+        assert_eq!(args[0], "okf");
+        let output = Command::new(env!("CARGO_BIN_EXE_okf"))
+            .current_dir(root)
+            .args(&args[1..])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains(expected));
+    }
+    assert_eq!(
+        fs::read_to_string(root.join("knowledge/ontology.yaml")).unwrap(),
+        ontology
+    );
+
+    let schema = run(root, &["schema", "--json"]);
+    let show = schema.iter().find(|r| r["name"] == "show").unwrap();
+    for (flag, value) in [
+        ("--body", None),
+        ("--lines", Some("1:2")),
+        ("--numbered", None),
+        ("--outline", None),
+        ("--project", Some("$id")),
+    ] {
+        let mut args = vec!["show", "policies/review", "knowledge", "--json", flag];
+        args.extend(value);
+        let rows = run(root, &args);
+        assert_eq!(rows[0]["kind"], show["output"]["stream_when"][flag]);
+    }
+}

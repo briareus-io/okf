@@ -18,7 +18,7 @@ See the [bundle customization guide](../guides/customize-a-bundle.md) and
 |----------|------|----------|-------------|
 | `<resource>` | positional | yes | — |
 | `<bundle>` | positional | no | — |
-| `--max-bytes <value>` | string | no |  (default: `65536`) |
+| `--max-bytes <value>` | int | no |  (default: `65536`) |
 | `--lines <value>` | string | no | — |
 
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.

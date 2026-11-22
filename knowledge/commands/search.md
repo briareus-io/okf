@@ -86,7 +86,8 @@ Primary query filters and presets remain separate from expansion filtering.
 | `--offset <value>` | int | no | Start page at this nonnegative offset; requires a positive limit |
 | `--scan-limit <value>` | int | no | Maximum examined documents across scope (positive) |
 | `--full-scan` | bool | no | Examine the entire selected scope without a document scan budget (default: `false`) |
-| `--project <value>` | list<string> | no | Explicit metadata projection selector (repeatable) |
+| `--project <value>` | list<string> | no | Explicit metadata projection selector (repeatable). Computed fields: $id, $bundle, $version, $trust_tier, $effective_status |
+| `--no-align` | bool | no | Render concept tables with tab-separated cells and no padding (default: `false`) |
 | `--columns <value>` | list<string> | no | Human output column selector (repeatable) |
 | `--view <value>` | string | no | Named bundle display view |
 | `--expand <value>` | list<string> | no | Expand selected outbound relationship rule (repeatable) |
@@ -98,8 +99,8 @@ Primary query filters and presets remain separate from expansion filtering.
 
 Global `--json` requests NDJSON. The optional trailing `bundle` positional is a path; `--bundle-id` selects a catalog identity. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Selection and examination scope are separate.
 
-Output stream: `concept,concept-identity,scope,projection,query-summary,facet,facet-excluded,relationship,related-concept,expansion-summary,warning`.
+Output stream: `query-filters,concept,concept-identity,scope,projection,query-summary,facet,facet-excluded,relationship,related-concept,expansion-summary,warning`.
 
 Supported global options: `--bundle-id`, `--bundle-revision`, `--catalog`, `--catalog-scope`, `--context`, `--guidance`, `--json`, `--revision`, `--scope-bundle`, `--selection`, `--workspace-revision`.
 
-The positional argument is the bundle, never query text. Text requires `--text`; structured filters work without it. No filters means inventory. Text-search JSON adds `search.score` and bounded `search.matches` to metadata records, not full bodies. Structured-only search has no text-match evidence. `--in title,description` narrows the default fields; adding `frontmatter` broadens them. Empty results exit successfully and establish only that this query found no matches. Check query-summary and warning records: incomplete scans cannot establish absence, exact totals, or globally ordered pages. --limit does not reduce scan work; offset requests rescan without shared query caches. Separate nested filters may match different list records; inspect concrete occurrences before attributing their combined conditions to one relationship. Expansion completeness and facet truncation are independent of primary scan completeness.
+The positional argument is the bundle, never query text. Text requires `--text`; structured filters work without it. No filters means inventory. Text-search JSON adds `search.score` and bounded `search.matches` to metadata records, not full bodies. Structured-only search has no text-match evidence. `--in title,description` narrows the default fields; adding `frontmatter` broadens them. Empty results exit successfully and establish only that this query found no matches. Check query-summary and warning records: after a complete scan, repeat with the returned `next_offset` while `has_more` is true. Keep scope, filters, sort, revisions and interpretation consistent across pages. Incomplete scans cannot establish absence, exact totals, or globally ordered pages. --limit does not reduce scan work; offset requests rescan without shared query caches. Separate nested filters may match different list records; inspect concrete occurrences before attributing their combined conditions to one relationship. Expansion completeness and facet truncation are independent of primary scan completeness.

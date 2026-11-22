@@ -26,6 +26,6 @@ _No arguments._
 
 This command is always NDJSON; `--json` is accepted but unnecessary.
 
-Output stream: `schema`.
+Output stream: `schema,command`.
 
 Supported global options: `--json`.

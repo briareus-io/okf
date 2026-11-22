@@ -1,8 +1,7 @@
 # Shared OKF operating protocol
 
 Read this protocol before CLI-dependent work with any OKF skill. It owns the common operating rules;
-the invoking skill owns task-specific decisions. Read its generated `references/cli.md` only for
-commands needed by the task. Shared rules do not authorize extra work.
+the invoking skill owns task-specific decisions. Follow its task links for exact invocations. Its command index lists additional operations. Shared rules do not authorize extra work.
 
 ## Compatibility and bundle selection
 

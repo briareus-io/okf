@@ -36,13 +36,13 @@ previews without publishing the sidecar, though coordination state may be create
 | `<name>` | positional | yes | Concept type name |
 | `<bundle>` | positional | no | Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory) |
 | `--description <value>` | string | no | Description of the concept type |
-| `--field <value>` | list<string> | no | A typed field, `key:type[:required][:v1|v2|...]` (repeatable) |
-| `--ref <value>` | list<string> | no | A reference rule, `key:Target[|Target2]:cardinality` (repeatable) |
+| `--field <value>` | list<string> | no | A typed field, `key:type[:required][:v1\|v2\|...]` (repeatable) |
+| `--ref <value>` | list<string> | no | A reference rule, `key:Target[\|Target2]:cardinality` (repeatable) |
 | `--remove-field <value>` | list<string> | no | Remove a typed field (update only; repeatable) |
 | `--remove-ref <value>` | list<string> | no | Remove a reference rule (update only; repeatable) |
-| `--field-yaml <value>` | list<string> | no | A complete field declaration, key=YAML|@file|- (repeatable) |
-| `--ref-yaml <value>` | list<string> | no | A complete reference declaration, key=YAML|@file|- (repeatable) |
-| `--relationship-yaml <value>` | list<string> | no | A complete relationship declaration, key=YAML|@file|- (repeatable) |
+| `--field-yaml <value>` | list<string> | no | A complete field declaration, key=YAML\|@file\|- (repeatable) |
+| `--ref-yaml <value>` | list<string> | no | A complete reference declaration, key=YAML\|@file\|- (repeatable) |
+| `--relationship-yaml <value>` | list<string> | no | A complete relationship declaration, key=YAML\|@file\|- (repeatable) |
 | `--remove-relationship <value>` | list<string> | no | Remove a relationship (update only; repeatable) |
 | `--from <value>` | string | no | Merge a concept-type definition from inline YAML, @file, a file path, or stdin (-) |
 | `--dry-run` | bool | no | Validate and preview the change without writing (default: `false`) |
