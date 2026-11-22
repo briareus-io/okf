@@ -47,6 +47,9 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum Command {
     // ---- META ----
+    /// Manage private local feedback, aggregate reports, and reviewed exports.
+    #[command(subcommand)]
+    Learn(crate::learn::LearnCmd),
     /// Print machine-readable CLI metadata (all commands, args, output shapes) as NDJSON.
     Schema,
     /// List effective catalog registrations, locations, and availability.
@@ -1170,11 +1173,11 @@ pub fn supports_revision(name: &str) -> bool {
     )
 }
 pub fn supports_bundle(name: &str) -> bool {
-    !matches!(name, "schema" | "catalog" | "version" | "source-scan")
+    !name.starts_with("learn ") && !matches!(name, "schema" | "catalog" | "version" | "source-scan")
 }
 
 pub fn supports_catalog(name: &str) -> bool {
-    !matches!(name, "schema" | "version" | "source-scan")
+    !name.starts_with("learn ") && !matches!(name, "schema" | "version" | "source-scan")
 }
 pub fn supports_guidance(name: &str) -> bool {
     supports_bundle(name) && name != "bundle select" && !name.starts_with("catalog")

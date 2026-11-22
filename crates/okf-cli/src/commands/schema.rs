@@ -116,6 +116,7 @@ fn output_record_contracts() -> Value {
         "changeset-summary": {"allowed_dangling":"integer","base_digest":"string","files":"integer","applied":"boolean","publication":"journaled-per-file","scope":"{requested:array<string>,examined:array<string>,unavailable:array<string>} (optional; explicit scoped baseline, includes primary)"},
         "changeset-recovery": {"paths":"array<path>"},
         "ontology_field_type": {"name":"string","definition":"object","effective":"object"},
+        "feedback": {"action":"learn subcommand", "data":{"enable|disable|purge":"{enabled:boolean}","status":"{directory:path,enabled:boolean,drafts:integer,bytes:integer}","report":"{enabled:boolean,patterns:array<{version,command,pattern,affected,invocations}>}","draft":"{file:path,text:string}","export":"{destination:path,text:string,confirmation:string} or {exported:path}" }},
         "qualified_identity": {"bundle": "string", "id": "string", "version": "string"},
         "scope": {"requested": "array<string>", "examined": "array<{id:string,root:path,version:string,interpretation:interpretation-settings}>", "unavailable": "array<string>", "snapshot_examined": "array<qualified_identity> (optional)"},
         "interpretation-settings": {"bundle": "string|null", "ontology_path": "path|null", "ontology_digest": "string|null", "settings": "object"},
@@ -290,9 +291,15 @@ fn effects(name: &str) -> Value {
     );
     json!({
         "authored_bundle_writes":authored,
+        "local_feedback_writes":match name {
+            "learn enable" | "learn disable" | "learn purge" | "learn draft" => json!(true),
+            "lint" | "validate" | "mv" | "changeset apply" | "ontology apply" => json!({"when":"local consent and a qualifying result"}),
+            _ => json!(false),
+        },
         "coordination_metadata_writes":mutation_coordination || read_coordination,
         "temporary_staging_writes":if name == "changeset digest" {json!(false)} else {json!(mutation_coordination)},
         "external_output_file_writes":match name {
+            "learn export" => json!({"when":{"confirm":"present"}}),
             "lint" => json!({"when":{"write-baseline":"present"}}),
             "doctor" => json!({"when":{"migration-plan":"present"}}),
             "catalog update" => json!({"when":"candidate plan or acceptance report publication"}),
@@ -461,6 +468,7 @@ fn arg_record(command: &str, arg: &clap::Arg) -> Value {
 fn meta(name: &str) -> (&'static str, bool, &'static str) {
     match name {
         "schema" => ("meta", false, "schema,command"),
+        n if n.starts_with("learn ") => ("meta", false, "feedback"),
         "version" => ("meta", false, "version"),
         "catalog" => ("meta", false, "bundle-registration,effective-settings"),
         "catalog sync" => ("meta", true, "catalog-sync"),

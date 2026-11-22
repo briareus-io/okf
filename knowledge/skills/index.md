@@ -12,3 +12,4 @@ Choose by task: [init](init.md) for a new bundle, [migrate](migrate.md) for auth
 - [okf:retrieval skill](retrieval.md) — Answers from a bundle through progressive disclosure, source lineage, bounded artifact retrieval, and explicit lifecycle, verification, and runtime caveats.
 - [okf:review-verify skill](review-verify.md) — Reviews concepts against declared evidence and appends document-level verified events with the real reviewer actor, never as a substitute for runtime attestation.
 - [okf:update skill](update.md) — Separately triages lifecycle expiry, standard source evidence, fingerprint drift, and content changes, then reconciles concepts without overstating refresh.
+- [okf:feedback skill](feedback.md) — Capture synthetic feature requests, defects, guidance gaps, and workflow lessons.

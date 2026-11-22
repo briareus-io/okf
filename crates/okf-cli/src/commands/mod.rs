@@ -23,6 +23,24 @@ use okf_core::error::Result;
 
 /// Dispatch a parsed CLI invocation to its command handler, returning an exit code.
 pub fn run(mut cli: Cli) -> Result<i32> {
+    if let Command::Learn(command) = &cli.command {
+        if cli.bundle_id.is_some()
+            || cli.catalog.is_some()
+            || cli.selection.is_some()
+            || !cli.scope_bundle.is_empty()
+            || cli.catalog_scope
+            || !cli.context.is_empty()
+            || cli.guidance.is_some()
+            || cli.revision.is_some()
+            || cli.workspace_revision.is_some()
+            || !cli.bundle_revision.is_empty()
+        {
+            return Err(okf_core::error::OkfError::usage(
+                "learn accepts only the --json global option",
+            ));
+        }
+        return crate::learn::run(command, cli.json);
+    }
     let _command_registry = okf_core::bundle::manifest::command_registry(bundle::command_names());
     let command_name = crate::exit::command_name(&cli.command);
     if !cli.context.is_empty() && !crate::cli::supports_context(&command_name) {
@@ -271,6 +289,7 @@ pub fn run(mut cli: Cli) -> Result<i32> {
     }
     let json = cli.json;
     match &cli.command {
+        Command::Learn(_) => unreachable!("handled before bundle selection"),
         // META
         Command::Schema => schema::run_schema(json),
         Command::Catalog(a) => catalog::run_catalog_command(a, &cli),

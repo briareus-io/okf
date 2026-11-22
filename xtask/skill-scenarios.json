@@ -570,5 +570,29 @@
       "incomplete or unenforced checks when present",
       "effective context digest and incomplete guidance when material"
     ]
+  },
+  {
+    "skill": "feedback",
+    "expected_commands": [
+      "okf learn draft feature-request"
+    ],
+    "reference_commands": [
+      "learn enable",
+      "learn disable",
+      "learn status",
+      "learn report",
+      "learn purge",
+      "learn draft",
+      "learn export"
+    ],
+    "prohibited_claims": [
+      "upload the draft automatically"
+    ],
+    "mutation_boundary": "Managed local state and user-approved local export.",
+    "report_contains": [
+      "generic goal",
+      "synthetic scenario",
+      "desired outcome"
+    ]
   }
 ]

@@ -170,6 +170,9 @@ pub(super) fn lint_in(
         Vec::new()
     };
 
+    if findings.iter().any(|f| f.rule == "broken-link") {
+        crate::learn::signal(crate::learn::Pattern::BrokenLink);
+    }
     if json {
         for f in &findings {
             emit(

@@ -7,3 +7,4 @@ These designs explain architecture, invariants, trade-offs, compatibility bounda
 - [Structured metadata capability](structured-metadata-capability.md) — Selectors, modeling, relationships and authoring.
 - [Bundle manifest and guidance](bundle-manifest.md) — Portable settings, agent guidance, and catalog configuration.
 - [Remote bundles and locked catalog dependencies](remote-bundles.md) — Git acquisition, logical references, reviewed updates, and managed read-only access.
+- [Local authoring feedback](local-feedback.md) — Consent, aggregate outcomes, synthetic drafts, and reviewed local export.

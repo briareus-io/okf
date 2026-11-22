@@ -43,7 +43,12 @@ pub fn run() -> i32 {
             return report(&err);
         }
     }
-    let code = match commands::run(cli) {
+    let family = crate::learn::Family::for_command(&cli.command);
+    let result = commands::run(cli);
+    if let Some(family) = family {
+        crate::learn::observe(family, &result);
+    }
+    let code = match result {
         Ok(code) => code,
         Err(err) if crate::output::is_closed_stdout(&err) => return 0,
         Err(err) => {
@@ -151,6 +156,7 @@ pub(crate) fn command_name(command: &crate::cli::Command) -> String {
             }
         }
         .into(),
+        Command::Learn(sub) => format!("learn {}", sub.name()),
         Command::Version => "version".into(),
         Command::List(_) => "list".into(),
         Command::Search(_) => "search".into(),

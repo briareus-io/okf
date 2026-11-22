@@ -12,20 +12,20 @@ inspect workflow context and artifacts, and trace source impact.
 
 ## Install
 
-**CLI/plugin 0.6.8 upgrade:** read the [migration guide](knowledge/reference/migrations/0.6.0.md)
+**CLI/plugin 0.6.9 upgrade:** read the [migration guide](knowledge/reference/migrations/0.6.0.md)
 before updating an existing installation or automation. Install CLI and plugin together;
-the 0.6.8 plugin supports stable CLI versions `>=0.6.8, <0.7.0`. The document format remains OKF v0.2.
-Read the [0.6.8 release notes](releases/0.6.8.md) for changes and upgrade guidance.
-Version 0.6.8 adds compact query tables, computed trust and status projections, and task-specific command references.
+the 0.6.9 plugin supports stable CLI versions `>=0.6.8, <0.7.0`. The document format remains OKF v0.2.
+Read the [0.6.9 release notes](releases/0.6.9.md) for changes and upgrade guidance.
+Version 0.6.9 adds opt-in local feedback, synthetic drafting, and reviewed local export.
 
 For a published release, download its matching installer, inspect it, then run it. If this
 checkout's version has not been published yet, use the source-build instructions below:
 
 ```sh
 curl --fail --location --proto '=https' --proto-redir '=https' \
-  https://github.com/briareus-io/okf/releases/download/v0.6.8/install.sh -o install.sh
+  https://github.com/briareus-io/okf/releases/download/v0.6.9/install.sh -o install.sh
 # Review install.sh before running it.
-sh install.sh 0.6.8
+sh install.sh 0.6.9
 export PATH="$HOME/.local/bin:$PATH"
 okf version
 ```
@@ -54,3 +54,6 @@ okf validate mybundle
 - [CLI commands](knowledge/commands/index.md) and [shared reference](knowledge/reference/index.md).
 - [Agent workflows](knowledge/skills/index.md): choose the skill for your task.
 - [Contributing](knowledge/contributing/index.md): development, architecture, decisions, and releases.
+
+Capture private authoring feedback with the feedback skill or `okf learn draft feature-request`.
+[Local feedback design and storage](knowledge/contributing/design/local-feedback.md)

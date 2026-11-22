@@ -31,6 +31,13 @@ fn main() {
     let task = args.first().map(String::as_str);
     let check = args.iter().any(|a| a == "--check");
     let root = repo_root();
+    if matches!(task, Some("build" | "install" | "docs")) && !check {
+        let (destination, template) = feedback_template(&root);
+        if std::fs::read_to_string(&destination).ok().as_ref() != Some(&template) {
+            std::fs::write(destination, template)
+                .expect("sync standalone CLI template before compilation");
+        }
+    }
     match task {
         Some("docs") => run_docs(check),
         Some("skills") => {
@@ -61,7 +68,7 @@ fn main() {
         }
         Some("install") => {
             eprintln!(
-                "OKF CLI/plugin 0.6.8 adds compact query tables, computed projections, and task-specific skill references. The plugin requires CLI >=0.6.8, <0.7.0. Review releases/0.6.8.md and knowledge/reference/migrations/0.6.0.md before installing."
+                "OKF CLI/plugin 0.6.9 adds private local feedback, synthetic drafting, and reviewed export. The plugin requires CLI >=0.6.8, <0.7.0. Review releases/0.6.9.md and knowledge/reference/migrations/0.6.0.md before installing."
             );
             if local_signing::enabled() {
                 let install_root = local_signing::install_root(&root);
@@ -113,6 +120,14 @@ fn cargo(root: &Path, args: &[&str]) {
     }
 }
 
+fn feedback_template(root: &Path) -> (PathBuf, String) {
+    (
+        root.join("crates/okf-cli/templates/feedback.md"),
+        std::fs::read_to_string(root.join("plugins/okf/skills/feedback/assets/template.md"))
+            .expect("read canonical feedback template"),
+    )
+}
+
 fn run_docs(check: bool) {
     let root = repo_root();
     let records = schema_records(&root);
@@ -126,6 +141,7 @@ fn run_docs(check: bool) {
     // Collect (path, desired-content) for every generated artifact.
     let mut artifacts: Vec<(PathBuf, String)> = Vec::new();
 
+    artifacts.push(feedback_template(&root));
     // The plugin ships shared command and record pages. Each skill indexes its workflow subset.
     let contracts = shared_contracts(header);
     let plugin_refs = root.join("plugins/okf/references");
@@ -563,6 +579,11 @@ fn command_example(name: &str) -> &'static str {
             "--bundle-id acme.a --scope-bundle acme.b --type Policy --sort id --full-scan --limit 10 --json"
         }
         "list" => "knowledge --limit 10 --json",
+        "learn draft" => "feature-request",
+        "learn export" => "draft-AbCd12.md --output feedback.md",
+        "learn enable" | "learn disable" | "learn purge" | "learn status" | "learn report" => {
+            "--json"
+        }
         "catalog" | "version" | "schema" => "--json",
         "catalog sync" => "--check",
         "catalog update" => "--plan update-plan.json",
@@ -610,6 +631,25 @@ fn command_example(name: &str) -> &'static str {
 /// observable behavior that cannot be inferred from the argument table.
 fn command_guidance(name: &str) -> &'static str {
     match name {
+        "learn enable" => {
+            "Type enable at the terminal prompt to begin counting qualifying outcomes across checkouts."
+        }
+        "learn disable" => "Disabling collection preserves existing aggregates and drafts.",
+        "learn purge" => {
+            "Purge removes managed drafts and counts. Copies previously exported to user-selected destinations remain there."
+        }
+        "learn status" => {
+            "The directory is per OS user. Status works before the first draft or opt-in."
+        }
+        "learn report" => {
+            "Each row counts affected invocations within a command family and CLI version. Contention can cause a missed sample."
+        }
+        "learn draft" => {
+            "Choose a feedback kind even when collection is off. Use invented data and exclude actual identifiers and usage counts."
+        }
+        "learn export" => {
+            "Preview the complete text and destination first. Pass the returned digest only after review. The destination must be a new file."
+        }
         "bundle select" => {
             "Resolve an existing bundle root and its identity/access policy without reading transactional bundle contents. \
             Selection remains available with a pending recovery journal. Retain the returned token and pass it with \

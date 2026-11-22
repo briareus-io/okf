@@ -531,6 +531,7 @@ pub fn prepare(cli: &mut Cli) -> Result<Option<i32>> {
             .map(|e| e.source.key())
             .collect::<std::collections::BTreeSet<_>>();
         if !consumers.is_empty() {
+            crate::learn::signal(crate::learn::Pattern::ScopedReferrers);
             return Err(OkfError::Policy(format!(
                 "cross-bundle references require explicit reconciliation before this mutation: {}",
                 consumers.into_iter().collect::<Vec<_>>().join(", ")
@@ -1350,6 +1351,9 @@ pub(super) fn run_lint_scoped(
         });
         failed |= meets_threshold(&findings, fail_on);
         for finding in findings {
+            if finding.rule == "broken-link" {
+                crate::learn::signal(crate::learn::Pattern::BrokenLink);
+            }
             if json_output {
                 emit(
                     &json!({"kind":"finding","rule":finding.rule,"code":finding.code,"field_path":finding.field_path,"severity":finding.severity.as_str(),"concept":finding.concept,"bundle":examined.id,"message":finding.message}),

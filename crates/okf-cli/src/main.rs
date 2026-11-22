@@ -10,6 +10,7 @@
 mod cli;
 mod commands;
 mod exit;
+mod learn;
 mod output;
 mod structured;
 

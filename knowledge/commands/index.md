@@ -77,3 +77,13 @@ Start with a task below. Each page owns its exact arguments and supported global
 
 - [okf catalog sync](catalog-sync.md) — Materialize an accepted lock or check local correspondence offline.
 - [okf catalog update](catalog-update.md) — Plan and explicitly apply a reviewed dependency update.
+
+## Local feedback
+
+- [okf learn enable](learn-enable.md) — Enable fixed-outcome counting after interactive consent.
+- [okf learn disable](learn-disable.md) — Stop counting and retain managed feedback.
+- [okf learn status](learn-status.md) — Inspect the private state location, consent, draft count, and data size.
+- [okf learn report](learn-report.md) — Rank affected invocations within each command and CLI version.
+- [okf learn purge](learn-purge.md) — Delete managed counts and drafts and disable collection.
+- [okf learn draft](learn-draft.md) — Create a synthetic Markdown draft with collection on or off.
+- [okf learn export](learn-export.md) — Preview a local destination and draft, then confirm the exact copy.

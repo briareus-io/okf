@@ -627,6 +627,9 @@ fn finish(
         Some(ontology),
         severity,
     )?;
+    if !findings.is_empty() {
+        crate::learn::signal(crate::learn::Pattern::DeclarationFinding);
+    }
     let mut change = json!({
         "kind": "change",
         "op": format!("ontology-{op}"),
