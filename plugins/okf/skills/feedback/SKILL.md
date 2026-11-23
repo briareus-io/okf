@@ -24,6 +24,11 @@ Read a local report only when requested. Use a fixed pattern ID when relevant an
 counts out of drafts. Use `okf learn draft feature-request` for a successful but cumbersome
 workflow. Edit only the created draft, using the sanitized account.
 
+Before finishing, apply the template’s acceptance scenario check. Read the draft as a
+maintainer who has never seen the session. Include enough detail for them to investigate
+the defect, evaluate the request, or act on the guidance gap or lesson. State what
+remains unknown when evidence is missing.
+
 Export only on request to a user-selected destination. Show the full preview and destination
 to the user and wait for approval before passing the returned confirmation digest.
 Keep the draft local. Never post, upload, or open an external issue for this workflow.
