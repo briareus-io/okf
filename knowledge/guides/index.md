@@ -7,16 +7,19 @@ meaning and command references for exact arguments.
 
 - [Tour this live knowledge bundle](tour-the-bundle.md) — Explore metadata, relationships, artifacts, and source impact in the manual itself.
 - [Find and read knowledge](find-and-read-knowledge.md) — Navigate, search, inspect evidence, and follow relationships.
+- [Save and run a query](save-and-run-queries.md) — Follow a recurring chain of links and relationships and read fields or sections from the matches.
 - [Performance and bounded reads](bounded-reads.md) — Choose scan, output, and expansion limits without mistaking partial reads for absence.
 
 ## Model, customize, and author
 
 - [Model and edit structured knowledge](model-your-knowledge.md) — Define metadata, apply a guarded patch, and query a declared relationship.
+- [Query structured records and their relationships](query-structured-records.md) — Follow policy and team references in a nested procedure and inspect matching obligations.
 - [Customize a bundle](customize-a-bundle.md) — Add portable settings, guidance, workflows, and support resources.
 - [Reorganize a bundle](reorganize-a-bundle.md) — Preview, apply, and verify a coordinated move, retarget, and removal.
 
 ## Maintain and automate
 
+- [Capture local authoring feedback](capture-local-feedback.md) — Draft a fictional report and export a reviewed copy.
 - [Maintain source-backed knowledge](maintain-source-backed-knowledge.md) — Find impacted concepts and reconcile claims against current sources.
 - [Automate with JSON](automate-with-json.md) — Accept structured results using process exit, operation completion, and scope evidence.
 - [Check results and recover writes](../reference/troubleshooting.md) — Choose validation checks and recover interrupted publication.

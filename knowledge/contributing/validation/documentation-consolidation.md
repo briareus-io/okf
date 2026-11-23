@@ -17,6 +17,7 @@ event or source baseline was fabricated during migration.
 | `docs/consistent-command-contracts.md` | [reference/command-contracts](../../reference/command-contracts.md) |
 | `docs/command-contracts-validation.md` | [reference/troubleshooting](../../reference/troubleshooting.md) |
 | `docs/command-performance.md` | [guides/bounded-reads](../../guides/bounded-reads.md) |
+| `knowledge/contributing/design/saved-queries.md` | [Save and run a query](../../guides/save-and-run-queries.md) |
 | `docs/multi-bundle-capability.md` | [contributing/design/multi-bundle-capability](../design/multi-bundle-capability.md) |
 | `docs/structured-metadata-capability.md` | [contributing/design/structured-metadata-capability](../design/structured-metadata-capability.md) |
 | `docs/capability-validation.md` | [contributing/validation/capability-validation](capability-validation.md) |
@@ -45,6 +46,19 @@ The 25 `types/` concepts were removed; Rust API documentation owns implementatio
 References to them became inline type names where their context remains useful.
 The README now links into installation, guides and reference rather than duplicating them.
 Command IDs and skill IDs remain stable. Old decision IDs are recorded above rather than retained as duplicate stubs.
+
+## Writing worked examples
+
+Show the ontology, concept documents, and configuration under their own filenames, using
+their native formats. In a guide that creates a fixture, put **File: `relative/path`**
+immediately above the file’s fenced block. Give each CLI operation its own command block and
+explain the expected result beside it. A short output excerpt can show exactly which ID,
+field, or status to look for. Keep temporary-directory setup, receipt substitution, and test
+assertions in the documentation check.
+
+The [bundle tour](../../guides/tour-the-bundle.md) exercises the manual’s real settings, typed
+relationships, and provenance. Use disposable bundles for examples that change authored content
+or accept dependencies. Remote-dependency examples run against a local Git fixture in tests.
 
 ## Validation
 

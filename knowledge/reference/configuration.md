@@ -41,6 +41,11 @@ Manifest schema versions are independent of CLI versions. Supported schema versi
 machine-discoverable; malformed or unsupported manifests fail rather than disappearing from
 interpretation. Inspect effective values and their origins with `okf bundle context <bundle>`.
 
+Use `settings.query_presets` to name filters for individual operations and
+`settings.saved_queries` to name a sequence of reads. A saved query may start from an existing
+list/search preset. See [saved queries](../guides/save-and-run-queries.md) for a mixed-direction
+example with the corresponding ontology and manifest.
+
 Selection follows explicit bundle path or `--bundle-id`, `OKF_BUNDLE`, a containing bundle,
 configured default, an unambiguous sole catalog entry, then the legacy uncataloged working-directory
 fallback. Path and ID selectors cannot be combined. `OKF_BUNDLE` always means a path. Use explicit

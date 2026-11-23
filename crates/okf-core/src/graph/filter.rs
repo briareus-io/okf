@@ -234,6 +234,7 @@ pub fn load_bundle_limited(
     if !failures.is_empty() {
         return Err(OkfError::yaml_files(failures));
     }
+    concepts.sort_by(|a, b| a.id.0.cmp(&b.id.0));
     Ok((
         Bundle {
             root: root.to_path_buf(),

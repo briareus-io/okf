@@ -10,7 +10,7 @@ sources:
 ---
 # okf learn status
 
-Inspect the private state location, consent, draft count, and data size. See the [local feedback capability](../contributing/design/local-feedback.md).
+Inspect the private state location, consent, draft count, and data size. See the [feedback guide](../guides/capture-local-feedback.md).
 
 ## Arguments
 

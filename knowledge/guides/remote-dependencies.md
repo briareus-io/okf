@@ -15,8 +15,15 @@ description: >-
 # Consume remote bundles
 
 A Git catalog registration describes an upstream bundle. A committed YAML lock records the accepted
-revision. Ordinary reads resolve available accepted content; they never fetch or follow a branch to
-newer content. The consumer catalog owns bundle IDs and access policy.
+revision. Ordinary reads resolve that revision from local storage. In this example an application
+bundle needs a shared product definition. You need an existing application bundle in `knowledge/`
+and read access to a Git repository containing a bundle at `bundles/products`. Substitute your
+repository URL, branch, and bundle path in the catalog. Run each command from the directory
+containing the catalog.
+
+## Declare the dependency
+
+**File: `okf-catalog.yaml`**
 
 ```yaml
 catalog_version: 2
@@ -27,7 +34,7 @@ bundles:
   acme.products:
     location:
       type: git
-      url: https://github.com/acme/shared-knowledge.git
+      url: ssh://git@code.example.org/shared-knowledge.git
       ref: refs/heads/main
       path: bundles/products
     access: read-only
@@ -47,40 +54,72 @@ examination scope is separate and must be explicit.
 
 ## Plan, review, and accept
 
-```text
-okf catalog update --bundle-id acme.products --scope-bundle example.application --plan /tmp/products-update.yaml
-okf catalog update --apply /tmp/products-update.yaml
+Resolve the branch to an exact candidate and save a reviewable plan. Include the application
+bundle so the plan can examine its references.
+
+```sh
+okf catalog update --bundle-id acme.products --scope-bundle example.application --plan products-update.yaml
+```
+
+Open `products-update.yaml`. Review the candidate commit, compatibility, consumer scope, and
+changes to concepts, ontology, manifests, instructions, and scripts. The first plan has no
+previous accepted revision to compare. Planning can contact the upstream and leaves the
+accepted lock unchanged.
+
+After reviewing and accepting the candidate, apply that specific plan.
+
+```sh
+okf catalog update --apply products-update.yaml
+```
+
+The lock now records the reviewed commit. Apply checks for changes to the plan inputs and
+uses the candidate identified during planning. Incomplete impact requires an explicit
+`--allow-incomplete-impact` acknowledgment; compatibility, integrity, and stale-plan errors
+still prevent application. Acceptance leaves source fingerprints, authored references and
+verification history under the control of their own workflows.
+
+Materialize the locked revision for reading.
+
+```sh
 okf catalog sync --bundle-id acme.products
+```
+
+The consumer can now read the local managed snapshot. Check it offline before using it as
+evidence.
+
+```sh
 okf catalog sync --check --bundle-id acme.products
 ```
 
-Planning may access the upstream to obtain an exact candidate; it does not change the accepted
-lock. Review changed concepts, ontology, manifests, instruction files, scripts, compatibility, and
-examined consumer scope. Apply accepts the reviewed commit without re-resolving the branch.
-Changed plan inputs or unavailable required evidence prevent application. A plan without consumer
-examination reports incomplete impact; applying it requires an explicit
-`--allow-incomplete-impact` acknowledgment. This cannot bypass compatibility, integrity, or stale-plan
-failures. An initial acquisition
-has no old snapshot; this differs from a failed comparison against a required old revision.
-
-Sync materializes the accepted commit. A missing lock requires initial planning and acceptance,
-not an implicit branch-tip choice. Offline `sync --check` checks local correspondence and integrity;
-it cannot establish credential validity or remote reachability. Authentication remains with the
-existing Git credential mechanism, and credentials must not appear in catalog URLs or reports.
-
-Acceptance does not rewrite references, refresh fingerprints, verify concepts, or execute upstream
-workflows. Reconcile affected local knowledge through separately selected authoring work.
+A successful check confirms local correspondence and integrity. Remote reachability and
+credential validity require a separate online operation. Supply credentials through the
+existing Git mechanism and keep secrets out of catalog URLs.
 
 ## Reference a bundle independently of its checkout path
 
+If the upstream has a concept in `products/widget.md`, add an application note that links
+to its catalog identity.
+
+**File: `knowledge/notes/widget.md`**
+
 ```markdown
+---
+type: Note
+title: Widget dependency
+---
 See the [product definition](okf://acme.products/products/widget.md).
 ```
 
-The authority is a registered bundle ID, and the remaining path is relative to its bundle root. The
-selected catalog and lock choose actual bytes. The URI is not globally resolvable or independently
-pinned. Ordinary relative paths and HTTPS URLs retain their meanings; no heuristic rewrites them
-into cache paths.
+Resolve the outgoing link with the upstream in examination scope.
+
+```sh
+okf links notes/widget --bundle-id example.application --scope-bundle acme.products --details --json
+```
+
+The target should identify `acme.products`, its widget concept, and the accepted version.
+A logical URI uses a registered bundle ID and a bundle-relative path. The consumer catalog
+and lock select the actual bytes. Ordinary Markdown viewers may require a relative or web
+link. Existing paths and HTTPS URLs retain their usual meanings.
 
 A source may also declare `bundle_ref.snapshot` when its claim requires a particular observation.
 A conflict with the accepted lock remains visible; available content is not automatically an

@@ -119,6 +119,25 @@ is authorized; generated index writes replace the bodies they cover.
 
 ## Relationship queries and source evidence
 
+When a task calls for a recurring relationship read, inspect the primary bundle’s
+`settings.saved_queries` in the context for operation `query`. Use a definition whose start,
+hop directions, and predicates match the question. A concept start takes an ID and a
+list/search preset start takes none. CLI filters narrow the final concepts. Read a named
+subsection with `--section '["Operations","Recovery"]'` on `query` or `show`; the array
+contains the full path from the outermost heading. Use `--outline` to discover that path.
+[Query flags](commands/query.md) · [Section reads](commands/show.md) · [Worked query](../skills/retrieval/references/query-planning.md#run-a-saved-read-chain)
+
+For a saved chain that crosses bundle boundaries, select the bundle that owns the definition
+with `--bundle-id`. Include each additional bundle needed for the answer with `--scope-bundle`.
+For an outgoing hop this can be the bundle containing the target. For an incoming hop include
+the bundles that may author the matching references. A catalog registration alone leaves those
+concepts unexamined. Preserve bundle, concept ID, and version when reporting the endpoints.
+
+Use the stage counts, unresolved endpoints, section warnings, summary, and completion record
+to judge the result. A complete local outgoing query can examine just the reached documents.
+For whole-bundle inventories, validation, impact analysis, and mutation guards, use the
+workflow’s inventory or integrity command. A section supports claims within the text it returns.
+
 Use explicit named presets when useful; the first release has no automatic semantic filter defaults. Report effective predicates and completeness. Relationship kind means the authored kind in both directions; inverse-kind refers to the configured inverse. Related-concept predicates apply to the other endpoint. Keep edge predicates correlated to one relationship occurrence and distinguish graph traversal filtering from hiding display edges.
 
 Never apply narrowing presets to integrity checks, deletion/move dependency checks, or update-impact reports. Source absence is not established by a partial scan. Logical `okf://<bundle-id>/<path>` references resolve using the selected catalog and accepted lock, without acquisition. A logical reference is not independently pinned and does not override a conflicting `bundle_ref.snapshot` expectation.

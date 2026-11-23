@@ -55,6 +55,10 @@ YAML/file inputs and bulk apply for dependent schemas; use concept `--set-yaml`,
 or RFC 6902 patches for frontmatter. Review dry-run and actual diffs, preserve source lineage,
 and retain meaningful-change verification consequences. Model validation does not attest claims.
 
+Use a saved query to locate candidate concepts and `show --section` to read a named passage
+before editing. Use `affected` to trace the consumers of a changed source. A saved query
+examines only the relationships its author selected.
+
 ## Presentation-only updates
 
 For requested quoting cleanup or prose wrapping, use [format](../commands/format.md), previewing

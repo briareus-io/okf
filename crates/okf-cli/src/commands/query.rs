@@ -78,32 +78,14 @@ pub fn run_search_in_scope(
             "expansion filters require --expand or an expansion-enabled view".into(),
         ));
     }
-    let filter = SearchFilter {
-        type_: args.type_.clone(),
-        tag: args.tag.clone(),
-        text: args.text.clone(),
-        match_mode: match args.match_mode {
-            SearchMatchArg::Phrase => TextMatchMode::Phrase,
-            SearchMatchArg::All => TextMatchMode::All,
-            SearchMatchArg::Any => TextMatchMode::Any,
-            SearchMatchArg::Literal => TextMatchMode::Literal,
-        },
-        fields: args
-            .in_
-            .iter()
-            .map(|f| match f {
-                SearchFieldArg::Id => SearchField::Id,
-                SearchFieldArg::Title => SearchField::Title,
-                SearchFieldArg::Description => SearchField::Description,
-                SearchFieldArg::Body => SearchField::Body,
-                SearchFieldArg::Frontmatter => SearchField::Frontmatter,
-            })
-            .collect(),
-        sort: match args.sort {
-            SearchSortArg::Id => SearchSort::Id,
-            SearchSortArg::Relevance => SearchSort::Relevance,
-        },
-    };
+    let filter = cli_filter(
+        &args.type_,
+        &args.tag,
+        &args.text,
+        args.match_mode,
+        &args.in_,
+        args.sort,
+    );
     let conditions = args
         .facet_filter
         .iter()
@@ -402,7 +384,7 @@ fn query_warning(
         ))
     }
 }
-fn print_cells(
+pub(super) fn print_cells(
     concept: &Concept,
     fields: &[String],
     bundle: Option<&str>,
@@ -474,6 +456,9 @@ pub fn run_show(args: &ShowArgs, json: bool) -> Result<i32> {
                         "working-tree",
                     )?;
                 }
+            } else if let Some(path) = &args.section {
+                let record = output::section_record(&concept, &path.0)?;
+                output::print_section(&record, json)?;
             } else if args.body {
                 if json {
                     output::mark_content_complete();
@@ -946,7 +931,7 @@ pub fn run_resolve(args: &ResolveArgs, json: bool) -> Result<i32> {
 }
 
 /// Parse `--field key=value` arguments.
-fn parse_field_filters(raw: &[String]) -> Result<Vec<(String, String)>> {
+pub(super) fn parse_field_filters(raw: &[String]) -> Result<Vec<(String, String)>> {
     raw.iter()
         .map(|f| match f.split_once('=') {
             Some((k, v)) if !k.trim().is_empty() => Ok((k.trim().to_string(), v.to_string())),
@@ -958,7 +943,7 @@ fn parse_field_filters(raw: &[String]) -> Result<Vec<(String, String)>> {
 }
 
 /// Whether a concept's frontmatter `key` holds (or, for a sequence, contains) `value`.
-fn field_matches(concept: &Concept, key: &str, value: &str) -> bool {
+pub(super) fn field_matches(concept: &Concept, key: &str, value: &str) -> bool {
     let Some(val) = concept.frontmatter.get(key) else {
         return false;
     };
@@ -1312,4 +1297,39 @@ fn emit_expansion(
         )?;
     }
     Ok(())
+}
+
+pub(super) fn cli_filter(
+    type_: &Option<String>,
+    tag: &Option<String>,
+    text: &[String],
+    mode: SearchMatchArg,
+    fields: &[SearchFieldArg],
+    sort: SearchSortArg,
+) -> SearchFilter {
+    SearchFilter {
+        type_: type_.clone(),
+        tag: tag.clone(),
+        text: text.to_vec(),
+        match_mode: match mode {
+            SearchMatchArg::Phrase => TextMatchMode::Phrase,
+            SearchMatchArg::All => TextMatchMode::All,
+            SearchMatchArg::Any => TextMatchMode::Any,
+            SearchMatchArg::Literal => TextMatchMode::Literal,
+        },
+        fields: fields
+            .iter()
+            .map(|f| match f {
+                SearchFieldArg::Id => SearchField::Id,
+                SearchFieldArg::Title => SearchField::Title,
+                SearchFieldArg::Description => SearchField::Description,
+                SearchFieldArg::Body => SearchField::Body,
+                SearchFieldArg::Frontmatter => SearchField::Frontmatter,
+            })
+            .collect(),
+        sort: match sort {
+            SearchSortArg::Id => SearchSort::Id,
+            SearchSortArg::Relevance => SearchSort::Relevance,
+        },
+    }
 }

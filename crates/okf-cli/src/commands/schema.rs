@@ -82,6 +82,8 @@ fn output_record_contracts() -> Value {
     json!({
         "body":{"id":"string","body":"string"},
         "outline":{"id":"string","trust_tier":"string","headings":"array<{line:integer,level:integer,text:string}>"},
+        "section":{"id":"string","path":"array<string>","start":"integer","end":"integer","text":"string"},
+        "saved-query-summary":{"name":"string","strategy":"outgoing|scope","stages":"array","examination":"object","unresolved":"integer","observed_matches":"integer","matching_complete":"boolean","delivery_complete":"boolean","section_errors":"integer"},
         "line-range":{"id":"string","trust_tier":"string","start":"integer","end":"integer","lines":"array<{line:integer,text:string}>"},
         "operation-start": {"schema_version":1,"command":"string","stream_version":1},
         "operation-complete": {"schema_version":1,"outcome":"ok|partial|failed","exit_code":"integer","publication":"not-applicable|not-published|committed|recovery-required","commit_reached":"boolean|null (when recovery-required)","completeness":"{examination,matching,delivery,expansion,content: complete|partial|not-applicable; consistency: working-tree|immutable-revision|guarded-baseline}","reasons":"array<diagnostic-code>"},
@@ -211,7 +213,7 @@ fn command_record(full_name: &str, cmd: &ClapCommand) -> Value {
     };
     let output = match full_name {
         "show" => {
-            json!({"stream":stream,"stream_when":{"--body":"body","--outline":"outline","--lines":"line-range","--numbered":"line-range","--project":"projection","otherwise":"concept"}})
+            json!({"stream":stream,"stream_when":{"--section":"section","--body":"body","--outline":"outline","--lines":"line-range","--numbered":"line-range","--project":"projection","otherwise":"concept"}})
         }
         "docs" => json!({
             "stream": "docs,change",
@@ -263,6 +265,7 @@ fn effects(name: &str) -> Value {
     let read_coordination = matches!(
         name,
         "list"
+            | "query"
             | "search"
             | "show"
             | "browse"
@@ -419,7 +422,7 @@ fn arg_record(command: &str, arg: &clap::Arg) -> Value {
         || (id == "from"
             && (command.starts_with("ontology ") || command.starts_with("changeset ")));
     let requires: &[&str] = match (command, id) {
-        ("search" | "list", "offset") => &["limit"],
+        ("search" | "list" | "query", "offset") => &["limit"],
         ("graph", "depth") => &["root"],
         ("edit", "all") => &["replace"],
         _ => &[],
@@ -491,7 +494,16 @@ fn meta(name: &str) -> (&'static str, bool, &'static str) {
             false,
             "query-filters,concept,concept-identity,scope,projection,query-summary,facet,facet-excluded,relationship,related-concept,expansion-summary,warning",
         ),
-        "show" => ("query", false, "concept,projection,body,outline,line-range"),
+        "query" => (
+            "query",
+            false,
+            "scope,concept-identity,concept,projection,body,outline,section,warning,saved-query-summary",
+        ),
+        "show" => (
+            "query",
+            false,
+            "concept,projection,body,outline,line-range,section",
+        ),
         "browse" => ("query", false, "index"),
         "backlinks" => (
             "query",

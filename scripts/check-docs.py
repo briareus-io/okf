@@ -5,9 +5,11 @@ import json
 import os
 from pathlib import Path
 import re
+import runpy
 import shlex
 import subprocess
 import tempfile
+from doc_examples import run_guide
 from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +24,10 @@ def run(*args, expected=0, cwd=ROOT):
     if result.returncode != expected:
         raise AssertionError(f"{args}: exit {result.returncode}\n{result.stdout}\n{result.stderr}")
     return result.stdout
+
+
+def run_cli(args, directory):
+    return run(*args, cwd=directory)
 
 
 def records(*args, cwd=ROOT):
@@ -75,65 +81,139 @@ def blocks(page):
     return re.findall(r"^```sh\n(.*?)^```", (BUNDLE / page).read_text(), re.M | re.S)
 
 
-def shell_example(script, demo_root):
-    # Execute the published snippet, substituting only its disposable root and binary.
-    script = script.replace("demo_root=$(mktemp -d)", "demo_root=" + shlex.quote(str(demo_root)))
-    script = re.sub(r"^okf\b", shlex.quote(str(BINARY)), script, flags=re.M)
-    script = script.replace('["okf",', '[' + json.dumps(str(BINARY)) + ',')
-    result = subprocess.run(["bash", "-eu", "-c", script], cwd=ROOT, env=ENV,
-                            text=True, capture_output=True)
-    assert result.returncode == 0, result.stdout + result.stderr
-    return result.stdout
+def check_structured_guide(directory):
+    outputs = run_guide(BUNDLE / "guides/query-structured-records.md", directory, run_cli)
+    rows = [json.loads(line) for args, text in outputs if "--json" in args
+            for line in text.splitlines()]
+    assert any(row.get("kind") == "projection" and row["id"] == "/procedures/onboarding" for row in rows)
+    assert any(row.get("kind") == "related-concept" and row["id"] == "/teams/platform" for row in rows)
+    assert any(row.get("kind") == "facet" for row in rows)
+
+
+def check_remote_guide(directory):
+    # Exercise Git transport against an isolated local upstream; never contact the sample host.
+    upstream = directory / "upstream"
+    upstream.mkdir(parents=True)
+    consumer = directory / "consumer"
+    run("init", consumer / "knowledge")
+    run("init", upstream / "bundles/products")
+    run("add", "products/widget", upstream / "bundles/products", "--type", "Product", "--title", "Widget")
+    for args in [["init", "-q", "-b", "main"], ["add", "."],
+                 ["-c", "user.name=Guide", "-c", "user.email=guide@example.invalid",
+                  "-c", "commit.gpgsign=false", "commit", "-qm", "Product bundle"]]:
+        subprocess.run(["git", *args], cwd=upstream, check=True)
+    env = {**ENV, "OKF_CACHE_DIR": str(directory / "cache"), "OKF_GUIDE_UPSTREAM": str(upstream),
+           "GIT_SSH_VARIANT": "ssh",
+           "GIT_SSH_COMMAND": """sh -c 'exec git-upload-pack "$OKF_GUIDE_UPSTREAM"' --"""}
+
+    def remote(args, cwd):
+        completed = subprocess.run([str(BINARY), *args], cwd=cwd, env=env, capture_output=True,
+                                   text=True, check=True)
+        return completed.stdout
+
+    outputs = run_guide(BUNDLE / "guides/remote-dependencies.md", consumer, remote)
+    edges = [json.loads(line) for args, text in outputs if args[0] == "links"
+             for line in text.splitlines()]
+    widget = next(row for row in edges if row.get("kind") == "bundle-edge")
+    assert widget["target"]["bundle"] == "acme.products" and widget["target"]["id"] == "/products/widget"
+    assert widget["status"] == "resolved" and widget["target"]["version"].startswith("git:")
+
+
+def run_customization_step(args, cwd):
+    text = run_cli(args, cwd)
+    if "--token" in args:
+        rows = [json.loads(line) for line in text.splitlines()]
+        assert rows[-1]["kind"] == "operation-complete" and rows[-1]["exit_code"] == 0
+        receipt = next(row["token"] for row in rows if row["kind"] == "context-token")
+        (cwd / "context-token.json").write_text(receipt)
+    return text
+
+
+def check_feedback_guide(directory):
+    directory.mkdir()
+    env = {**ENV, "OKF_FEEDBACK_DIR": str(directory / "store")}
+    draft, preview, confirm, *patterns = blocks("guides/capture-local-feedback.md")
+
+    def feedback(command):
+        cli, *args = shlex.split(command)
+        assert cli == "okf"
+        result = subprocess.run([str(BINARY), *args, "--json"], cwd=directory, env=env,
+                                capture_output=True, text=True, check=True)
+        rows = [json.loads(line) for line in result.stdout.splitlines()]
+        assert rows[-1]["kind"] == "operation-complete" and rows[-1]["outcome"] == "ok"
+        return next(row["data"] for row in rows if row.get("kind") == "feedback")
+
+    managed = Path(feedback(draft)["file"])
+    destination = directory / "reviewed-feedback.md"
+    reviewed = feedback(preview.replace("draft-AbCd12.md", managed.name))
+    assert Path(reviewed["destination"]) == destination.resolve() and not destination.exists()
+    assert reviewed["text"] == managed.read_text()
+    feedback(confirm.replace("draft-AbCd12.md", managed.name)
+             .replace("DIGEST_FROM_REVIEWED_PREVIEW", reviewed["confirmation"]))
+    assert destination.read_bytes() == managed.read_bytes()
+    for command in patterns:
+        feedback(command)
 
 
 def check_examples():
     with tempfile.TemporaryDirectory(prefix="okf-docs-") as tmp:
         tmp = Path(tmp)
         model_root = tmp / "model"
-        model_root.mkdir()
-        shell_example("\n".join(blocks("guides/model-your-knowledge.md")), model_root)
+        model = run_guide(BUNDLE / "guides/model-your-knowledge.md", model_root,
+                          run_cli)
+        assert (model_root / "guide.yaml").read_text() == (BUNDLE / "references/authoring/guide.yaml").read_text()
+        assert json.loads((model_root / "concept-patch.json").read_text()) == json.loads(
+            (BUNDLE / "references/authoring/concept-patch.json").read_text())
         concept = model_root / "bundle/guides/example.md"
         rows = records("show", "guides/example", model_root / "bundle")
         authored = next(row for row in rows if row.get("id") == "/guides/example")
         assert authored["audience"] == "contributor" and "authoring" in authored["tags"]
         assert authored["uses"] == ["/commands/check"], authored
-        assert "/guides/example" in json.dumps(records("backlinks", "commands/check", model_root / "bundle", "--details"))
+        assert any(args[0] == "backlinks" and "/guides/example" in output for args, output in model)
         before = concept.read_bytes()
-        run("edit", "guides/example", model_root / "bundle", "--patch",
-            "@knowledge/references/authoring/concept-patch.json", expected=2)
+        run("edit", "guides/example", "bundle", "--patch", "@concept-patch.json", cwd=model_root, expected=2)
         assert concept.read_bytes() == before, "A failed guarded patch changed the concept"
 
         move_root = tmp / "move"
-        move_root.mkdir()
-        setup, apply = blocks("guides/reorganize-a-bundle.md")
-        plan_text = shell_example(setup, move_root)
-        plan = [json.loads(line) for line in plan_text.splitlines() if line.startswith("{")]
-        assert plan[-1]["outcome"] == "ok"
-        digest = next(row["base_digest"] for row in plan if row.get("kind") == "changeset-summary")
         bundle = move_root / "bundle"
-        assert (bundle / "plans/current.md").exists(), "Preview published the move"
-        apply = "demo_root=" + shlex.quote(str(move_root)) + "\n" + apply
-        shell_example(apply.replace("REPLACE_WITH_REVIEWED_BASE_DIGEST", digest), move_root)
+        digest = None
+
+        def exercise_move(args, directory):
+            nonlocal digest
+            if args[:2] == ["changeset", "apply"]:
+                assert digest and args[-2:] == ["--expect", "REVIEWED_BASE_DIGEST"]
+                args = [*args[:-1], digest]
+            output = run(*args, cwd=directory)
+            if args[:2] == ["changeset", "plan"]:
+                plan = [json.loads(line) for line in output.splitlines()]
+                assert plan[-1]["outcome"] == "ok"
+                digest = next(row["base_digest"] for row in plan if row.get("kind") == "changeset-summary")
+                assert (bundle / "plans/current.md").exists(), "Preview published the move"
+            return output
+
+        run_guide(BUNDLE / "guides/reorganize-a-bundle.md", move_root, exercise_move)
+        assert (move_root / "reorganize.yaml").read_text() == (BUNDLE / "references/changesets/reorganize.yaml").read_text()
         assert (bundle / "plans/revised.md").exists()
         assert not (bundle / "plans/current.md").exists()
         assert not (bundle / "plans/obsolete.md").exists()
         assert "../plans/revised.md" in (bundle / "notes/consumer.md").read_text()
 
         # The quickstart must work independently of this repository's default bundle.
-        quick = blocks("getting-started/first-bundle.md")[0].replace("mybundle", shlex.quote(str(tmp / "first")))
-        shell_example(quick, tmp)
+        run_guide(BUNDLE / "getting-started/first-bundle.md", tmp, run_cli)
 
         maintenance = tmp / "maintenance"
-        maintenance.mkdir()
-        shell_example("\n".join(blocks("guides/maintain-source-backed-knowledge.md")), maintenance)
+        steps = run_guide(BUNDLE / "guides/maintain-source-backed-knowledge.md", maintenance,
+                          run_cli)
+        assert any(args[0] == "affected" and "/notes/service" in output for args, output in steps)
+        assert any(args[:2] == ["artifact", "show"] and "retry_limit=3" in output for args, output in steps)
+        assert any(args[0] == "show" and "The service retries twice." in output for args, output in steps)
         maintained = records("show", "notes/service", maintenance / "bundle")
         authored = next(row for row in maintained if row.get("id") == "/notes/service")
         assert authored["sources"] == [{"resource": "references/service.txt", "kind": "file"}], authored
         assert "three times" in run("show", "notes/service", maintenance / "bundle", "--body")
 
         customization = tmp / "customization"
-        customization.mkdir()
-        shell_example("\n".join(blocks("guides/customize-a-bundle.md")), customization)
+        run_guide(BUNDLE / "guides/customize-a-bundle.md", customization, run_customization_step)
         custom_bundle = customization / "bundle"
         missing = records("bundle", "context", custom_bundle, "--workflow", "import-specification", cwd=customization)
         missing_workflow = next(row for row in missing if row.get("kind") == "workflow")
@@ -161,8 +241,12 @@ def check_examples():
         run("validate", custom_bundle, expected=1, cwd=customization)
 
         catalog = tmp / "catalog"
-        catalog.mkdir()
-        shell_example("\n".join(blocks("guides/work-with-multiple-bundles.md")), catalog)
+        steps = run_guide(BUNDLE / "guides/work-with-multiple-bundles.md", catalog, run_cli)
+        saved = next(output for args, output in steps if args[0] == "query")
+        endpoints = [row for row in map(json.loads, saved.splitlines()) if row.get("kind") == "projection"]
+        assert [(row["bundle"], row["id"]) for row in endpoints] == [("demo.policy", "/policies/retention")]
+        assert endpoints[0]["fields"][0]["occurrences"][0]["value"] == "Retention rule"
+        check_remote_guide(tmp / "remote")
         selected = records("search", "--bundle-id", "demo.product", "--text", "retention", cwd=catalog)
         scoped = records("search", "--bundle-id", "demo.product", "--scope-bundle", "demo.policy", "--text", "retention", cwd=catalog)
         assert next(row for row in selected if row.get("kind") == "query-summary")["total_matches"] == 1
@@ -170,40 +254,54 @@ def check_examples():
         back = records("backlinks", "demo.policy:/policies/retention", "--bundle-id", "demo.product", "--scope-bundle", "demo.policy", "--details", cwd=catalog)
         assert "/notes/overview" in json.dumps(back), back
 
-        for guide in ["find-and-read-knowledge", "bounded-reads", "tour-the-bundle"]:
-            shell_example("\n".join(blocks(f"guides/{guide}.md")), tmp)
+        for guide in ["bounded-reads", "tour-the-bundle"]:
+            run_guide(BUNDLE / f"guides/{guide}.md", ROOT, run_cli)
 
-        relationships = tmp / "relationships"
-        blockers = records("backlinks", "features/export", relationships, "--preset", "blocking-defects", cwd=relationships)
-        assert [row["id"] for row in blockers if row.get("trust_tier") is not None] == ["/defects/csv"]
-        inverse = records("backlinks", "features/export", relationships, "--inverse-kind", "is-blocked-by",
-                          "--related-type", "Defect", "--details", cwd=relationships)
-        occurrences = [row["edge"] for row in inverse if row.get("kind") == "relationship"]
-        assert len(occurrences) == 1 and occurrences[0]["source"] == "/defects/csv"
-        assert occurrences[0]["authored_kind"] == "blocks"
-        unfiltered = records("backlinks", "features/export", relationships, cwd=relationships)
-        assert {row["id"] for row in unfiltered if row.get("trust_tier") is not None} == {"/defects/csv", "/notes/discussion"}
+        find = run_guide(BUNDLE / "guides/find-and-read-knowledge.md", ROOT,
+                         run_cli)
+        filtered = [output for args, output in find if args[0] == "list"]
+        assert "/commands/show" in filtered[0] and "(no concepts)" in filtered[1]
+        topics = next(output for args, output in find if args[0] == "links")
+        assert "/concepts/sources-and-provenance" in topics and "/concepts/verification-and-freshness" in topics
+        saved = tmp / "saved"
+        examples = run_guide(BUNDLE / "guides/save-and-run-queries.md", saved,
+                             run_cli)
+        assert any("/defects/csv" in output for args, output in examples if "all-open-blockers" in args)
+        rows = [json.loads(line) for args, result in examples if "--json" in args
+                for line in result.splitlines()]
+        projections = [row for row in rows if row.get("kind") == "projection"]
+        assert [row["id"] for row in projections] == ["/notes/triage", "/notes/triage"]
+        summaries = {row["name"]: row for row in rows if row.get("kind") == "saved-query-summary"}
+        assert summaries["triage-notes"]["strategy"] == "scope"
+        direct = summaries["triage-for-defect"]
+        assert direct["strategy"] == "outgoing" and direct["examination"]["examined_documents"] == 2
+        assert all(row["matching_complete"] and row["delivery_complete"] for row in summaries.values())
+        section = run("query", "notes-for-open-blockers", "features/export", "--bundle",
+                      saved / "product", "--section", '["Operations","Recovery"]', "--json")
+        section_rows = [json.loads(line) for line in section.splitlines()]
+        excerpt = next(row for row in section_rows if row.get("kind") == "section")
+        assert excerpt["id"] == "/notes/triage" and "Retry the export" in excerpt["text"]
+        assert "Escalation" not in excerpt["text"]
+        assert section_rows[-1]["completeness"]["delivery"] == "complete"
 
-        consumer = blocks("guides/automate-with-json.md")[0]
-        negative_checks = '''
-partial = subprocess.run(
-    ["okf", "list", "knowledge", "--type", "Command", "--scan-limit", "1", "--json"],
-    capture_output=True, text=True,
-)
-for label, output, exit_code in [
-    ("missing completion", "\\n".join(result.stdout.splitlines()[:-1]), 0),
-    ("failed process", result.stdout, 3),
-    ("partial scan", partial.stdout, partial.returncode),
-]:
-    try:
-        command_inventory(output, exit_code)
-    except ValueError:
-        pass
-    else:
-        raise AssertionError("Consumer accepted " + label)
-'''
-        shell_example(consumer.replace("\nPY\n", "\n" + negative_checks + "\nPY\n"), tmp)
-    print("Worked examples: nine guides plus quickstart passed; workflow inputs, relationship presets, and incomplete/failed JSON results checked")
+        check_feedback_guide(tmp / "feedback")
+        check_structured_guide(tmp / "structured")
+
+        inventory = runpy.run_path(str(BUNDLE / "references/command_inventory.py"))["command_inventory"]
+        inventory_examples = run_guide(BUNDLE / "guides/automate-with-json.md", ROOT, run_cli)
+        complete, partial = [output for _, output in inventory_examples]
+        assert "/commands/refresh" in {row["id"] for row in inventory(complete, 0)}
+        for label, output, code in [
+            ("missing completion", "\n".join(complete.splitlines()[:-1]), 0),
+            ("failed process", complete, 3),
+            ("partial scan", partial, 0),
+        ]:
+            try:
+                inventory(output, code)
+            except ValueError:
+                continue
+            raise AssertionError("Consumer accepted " + label)
+    print("Worked examples: guide and quickstart examples passed; saved-query endpoints and sections, reviewed feedback exports, and JSON completeness checked")
 
 
 def check_bundle():

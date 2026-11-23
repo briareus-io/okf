@@ -128,6 +128,8 @@ pub struct BundleSettings {
     pub ontology: Option<String>,
     #[serde(default)]
     pub query_presets: BTreeMap<String, QueryPreset>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub saved_queries: BTreeMap<String, SavedQuery>,
     #[serde(default)]
     pub query: QuerySettings,
     #[serde(default)]
@@ -408,7 +410,78 @@ fn historical(root: &Path, path: &Path, revision: &str) -> Result<HistoricalFile
     })?;
     Ok(HistoricalFile::Bytes(bytes))
 }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SavedQuery {
+    pub from: SavedStart,
+    #[serde(default)]
+    pub steps: Vec<SavedStep>,
+    #[serde(default)]
+    pub select: Vec<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged, deny_unknown_fields)]
+pub enum SavedStart {
+    Concept(String),
+    List { list: PresetStart },
+    Search { search: PresetStart },
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PresetStart {
+    pub preset: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged, deny_unknown_fields)]
+pub enum SavedStep {
+    Links {
+        links: crate::graph::filter::EdgeFilters,
+    },
+    Backlinks {
+        backlinks: crate::graph::filter::EdgeFilters,
+    },
+}
+impl SavedStep {
+    pub fn filters(&self) -> &crate::graph::filter::EdgeFilters {
+        match self {
+            Self::Links { links } => links,
+            Self::Backlinks { backlinks } => backlinks,
+        }
+    }
+}
 pub fn validate_settings(settings: &BundleSettings) -> Result<()> {
+    for (name, saved) in &settings.saved_queries {
+        if name.trim().is_empty() {
+            return Err(OkfError::Usage("saved query needs a name".into()));
+        }
+        let start = match &saved.from {
+            SavedStart::Concept(s) if s == "concept" => None,
+            SavedStart::Concept(_) => {
+                return Err(OkfError::Usage(format!(
+                    "invalid start for saved query {name}"
+                )));
+            }
+            SavedStart::List { list } => Some(("list", list)),
+            SavedStart::Search { search } => Some(("search", search)),
+        };
+        if let Some((op, start)) = start
+            && !settings
+                .query_presets
+                .get(&start.preset)
+                .is_some_and(|p| p.operations.iter().any(|x| x == op))
+        {
+            return Err(OkfError::Usage(format!(
+                "saved query {name}: missing or incompatible {op} preset {}",
+                start.preset
+            )));
+        }
+        for step in &saved.steps {
+            step.filters().compile()?;
+        }
+        for field in &saved.select {
+            crate::query::metadata::validate_projection_field(field)?;
+        }
+    }
     for (name, preset) in &settings.query_presets {
         if name.trim().is_empty() || preset.operations.is_empty() {
             return Err(OkfError::Usage(

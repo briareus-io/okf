@@ -52,7 +52,9 @@ shared source-health definitions.
 ## Reconcile
 
 1. Resolve bundle identity and the requested consumer scope before affected analysis; use detailed
-   semantic occurrences for nested relationships and retain unknown consumers outside scope. Inspect the concept with targeted `okf show` reads and the changed evidence. For a path-valued
+   semantic occurrences for nested relationships and retain unknown consumers outside scope. After `affected` identifies a consumer, inspect its changed evidence and relevant prose.
+   For a named subsection, use `okf show <concept-id> <bundle> --section '["Operations","Recovery"]'`.
+   An existing saved query can help read related concepts within that investigation. For a path-valued
    source, use `okf artifact resolve <resource> <bundle>` with `--from <concept-id>` only for document-relative references and bounded `okf
    artifact show`; use `okf show` when it resolves to a concept. Use `okf links <concept-id>
    <bundle> --details --json` when the concept's direct outbound relationships may have changed.

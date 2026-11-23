@@ -35,6 +35,11 @@ requirements from the reviewed model. To change rules, use `okf ontology update 
 flags use colon-separated declarations; concept `--set`/`--ref` flags use `key=value` instead. Read
 the reference before choosing other types or cardinalities.
 
+When changing a relationship kind, target type, or field, inspect the bundle's saved-query
+hops for uses of the old name. Manifest validation checks predicate syntax. Run affected
+queries against known related concepts to detect a renamed value that now silently yields
+zero matches. Preserve the manifest unless updating it is part of the task.
+
 ## Workflow
 
 1. Select the bundle and inspect its effective ontology path/settings before authoring; a configured

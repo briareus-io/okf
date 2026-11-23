@@ -65,6 +65,8 @@ pub enum Command {
     List(SearchArgs),
     /// Search concepts by type, tag, text, and/or frontmatter field.
     Search(SearchArgs),
+    /// Run a manifest-defined chain of read operations.
+    Query(SavedQueryArgs),
     /// Show one concept's content, heading outline, or selected line range.
     Show(ShowArgs),
     /// Show a directory's index.md, synthesizing it when absent.
@@ -472,7 +474,85 @@ pub struct IdArgs {
 }
 
 #[derive(Debug, Args)]
+pub struct SavedQueryArgs {
+    /// Saved query name in the primary bundle manifest.
+    pub name: String,
+    /// Starting concept for a concept-start query.
+    pub concept: Option<String>,
+    /// Path to the primary bundle.
+    #[arg(long)]
+    pub bundle: Option<String>,
+    /// Filter by exact concept `type`.
+    #[arg(long = "type")]
+    pub type_: Option<String>,
+    /// Filter by membership in the concept's `tags`.
+    #[arg(long = "tag")]
+    pub tag: Option<String>,
+    /// Text query (repeatable). Repeated phrases use AND semantics by default.
+    #[arg(long = "text")]
+    pub text: Vec<String>,
+    /// Text matching: phrase (default), all tokens, any token, or literal source text.
+    #[arg(long = "match", value_enum, default_value_t = SearchMatchArg::Phrase)]
+    pub match_mode: SearchMatchArg,
+    /// Text fields to search (comma-separated or repeatable).
+    #[arg(
+        long = "in",
+        value_enum,
+        value_delimiter = ',',
+        default_value = "id,title,description,body"
+    )]
+    pub in_: Vec<SearchFieldArg>,
+    /// Result order: deterministic relevance (default) or concept id.
+    #[arg(long, value_enum, default_value_t = SearchSortArg::Relevance)]
+    pub sort: SearchSortArg,
+    /// Return at most this many results after all filters and sorting.
+    #[arg(long)]
+    pub limit: Option<usize>,
+    /// Filter by a frontmatter field, `key=value` (repeatable; AND).
+    #[arg(long = "field")]
+    pub field: Vec<String>,
+    /// Typed selector condition: =, !=, [not] in, exists, absent, is [not] null; join with OR (repeatable; AND).
+    #[arg(long)]
+    pub facet_filter: Vec<String>,
+    /// Start page at this nonnegative offset; requires a positive limit.
+    #[arg(long, requires = "limit")]
+    pub offset: Option<usize>,
+    /// Maximum examined documents across scope (positive).
+    #[arg(long, conflicts_with = "full_scan")]
+    pub scan_limit: Option<usize>,
+    /// Examine the entire selected scope without a document scan budget.
+    #[arg(long, conflicts_with = "scan_limit")]
+    pub full_scan: bool,
+    /// Explicit metadata projection selector (repeatable). Computed fields: $id, $bundle, $version, $trust_tier, $effective_status.
+    #[arg(long)]
+    pub project: Vec<String>,
+    /// Read the body of each matching concept.
+    #[arg(long, conflicts_with_all=["outline","section","project"])]
+    pub body: bool,
+    /// Read the heading outline of each matching concept.
+    #[arg(long, conflicts_with_all=["section","project"])]
+    pub outline: bool,
+    /// Full heading path as a JSON array of titles.
+    #[arg(long, conflicts_with="project", value_parser=parse_heading_path)]
+    pub section: Option<HeadingPath>,
+}
+
+#[derive(Clone, Debug)]
+pub struct HeadingPath(pub Vec<String>);
+fn parse_heading_path(raw: &str) -> Result<HeadingPath, String> {
+    let path: Vec<String> =
+        serde_json::from_str(raw).map_err(|_| "expected a JSON array of heading titles")?;
+    if path.is_empty() || path.iter().any(|s| s.trim().is_empty()) {
+        return Err("heading path must contain nonempty titles".into());
+    }
+    Ok(HeadingPath(path))
+}
+
+#[derive(Debug, Args)]
 pub struct ShowArgs {
+    /// Select a Markdown section by its full JSON heading path.
+    #[arg(long, conflicts_with_all=["project","outline","lines","numbered","body"],value_parser=parse_heading_path)]
+    pub section: Option<HeadingPath>,
     /// Concept id (leading slash optional), e.g. `tables/customers`.
     pub concept: String,
     /// Bundle directory (explicit, then $OKF_BUNDLE, nearest okf.toml, or current directory).
@@ -1134,6 +1214,7 @@ pub fn supports_scope(name: &str) -> bool {
             | "lint"
             | "doctor"
             | "search"
+            | "query"
             | "list"
             | "artifact resolve"
             | "artifact show"
@@ -1157,6 +1238,7 @@ pub fn supports_revision(name: &str) -> bool {
             | "resolve"
             | "affected"
             | "search"
+            | "query"
             | "list"
             | "show"
             | "browse"

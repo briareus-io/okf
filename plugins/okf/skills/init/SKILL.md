@@ -28,8 +28,13 @@ command's `--help` output as the runtime authority.
 Inspect bundle content through `okf browse`, `okf search`, `okf list`, and targeted `okf show`. For
 text search, use `okf search <bundle> --text "query terms" --limit 10`; the positional is always the
 bundle path, never the query. Use `okf list <bundle>` for an unfiltered inventory. For a large
-concept, use `okf show <concept-id> <bundle> --outline`, then `okf show <concept-id> <bundle>
---lines <START:END>`.
+concept, use `okf show <concept-id> <bundle> --outline`, then select the full heading path
+with `--section` or the needed lines with `--lines <START:END>`.
+
+When setting up a repeated read, use a query preset for reusable filters on one operation.
+For a sequence of relationship hops, define a saved query in the primary bundle's manifest
+and exercise it on a known start. The [catalog example](references/multi-bundle.md#save-a-recurring-policy-lookup)
+includes a definition and a scoped invocation.
 
 ## Portable OKF versus local policy
 

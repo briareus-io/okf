@@ -37,6 +37,7 @@ pub fn bundle_slot(command: &mut Command) -> Option<&mut Option<String>> {
         Command::List(a) => &mut a.bundle,
         Command::Validate(a) => &mut a.bundle,
         Command::Search(a) => &mut a.bundle,
+        Command::Query(a) => &mut a.bundle,
         Command::Show(a) => &mut a.bundle,
         Command::Browse(a) => &mut a.bundle,
         Command::Backlinks { args: a, .. } | Command::Links(a) => &mut a.bundle,
@@ -133,28 +134,30 @@ fn print_node(node: &Node, kind: &str, json_output: bool) -> Result<()> {
     }
     Ok(())
 }
-fn print_scope(graph: &CatalogGraph, json_output: bool) -> Result<()> {
+pub(super) fn print_scope(
+    scope: &okf_core::graph::catalog::Scope,
+    json_output: bool,
+) -> Result<()> {
     if json_output {
         output::print_line(
-            &json!({"kind":"scope","requested":graph.scope.requested,"examined":graph.scope.examined,"unavailable":graph.scope.unavailable,"snapshot_examined":graph.scope.snapshot_examined}),
+            &json!({"kind":"scope","requested":scope.requested,"examined":scope.examined,"unavailable":scope.unavailable,"snapshot_examined":scope.snapshot_examined}),
         )?;
     } else {
-        output::print_text_line(format_args!("{}", scope_text(graph)))?;
+        output::print_text_line(format_args!("{}", scope_text(scope)))?;
     }
     Ok(())
 }
-fn scope_text(graph: &CatalogGraph) -> String {
+fn scope_text(scope: &okf_core::graph::catalog::Scope) -> String {
     format!(
         "scope: requested={} examined={} unavailable={}",
-        graph.scope.requested.join(","),
-        graph
-            .scope
+        scope.requested.join(","),
+        scope
             .examined
             .iter()
             .map(|e| format!("{}@{}", e.id, e.version))
             .collect::<Vec<_>>()
             .join(","),
-        graph.scope.unavailable.join(",")
+        scope.unavailable.join(",")
     )
 }
 pub fn catalog_path() -> Result<PathBuf> {
@@ -501,6 +504,60 @@ pub fn prepare(cli: &mut Cli) -> Result<Option<i32>> {
         )
         .map(Some);
     }
+    if let Command::Query(args) = &cli.command {
+        let scope = resolve_scope_at(
+            &context,
+            &cli.scope_bundle,
+            cli.catalog_scope,
+            cli.revision.as_deref(),
+        )?;
+        let primary = scope
+            .examined
+            .iter()
+            .find(|b| b.root == context.primary.root)
+            .ok_or_else(|| OkfError::Usage("primary bundle unavailable".into()))?;
+        let settings = &primary.interpretation.settings;
+        let query = settings
+            .saved_queries
+            .get(&args.name)
+            .ok_or_else(|| OkfError::Usage(format!("unknown saved query {:?}", args.name)))?;
+        let limit = if args.full_scan {
+            None
+        } else {
+            Some(
+                args.scan_limit
+                    .or(settings.query.scan_limit)
+                    .unwrap_or(1000),
+            )
+        };
+        super::saved_query::validate(args)?;
+        if !scoped
+            && !revision
+            && cli.workspace_revision.is_none()
+            && cli.bundle_revision.is_empty()
+            && primary.version == "working-tree"
+            && scope.requested.len() == 1
+            && scope.unavailable.is_empty()
+            && let Some(code) = super::saved_query::local_outgoing(
+                args, query, &context, primary, &scope, limit, cli.json,
+            )?
+        {
+            return Ok(Some(code));
+        }
+        let (graph, bundles) = okf_core::graph::catalog::saved_query_graph(
+            &context,
+            &cli.scope_bundle,
+            cli.catalog_scope,
+            cli.revision.as_deref(),
+            limit,
+            args.concept.as_deref(),
+        )?;
+        print_scope(&graph.scope, cli.json)?;
+        return super::saved_query::run(
+            args, settings, query, &context, &graph, &bundles, cli.json,
+        )
+        .map(Some);
+    }
     match &mut cli.command {
         Command::Search(a) => {
             super::filters::apply_primary(&context.primary.root, "search", a, cli.json)?;
@@ -573,7 +630,7 @@ pub fn prepare(cli: &mut Cli) -> Result<Option<i32>> {
                 scope,
                 ..Default::default()
             };
-            print_scope(&graph, cli.json)?;
+            print_scope(&graph.scope, cli.json)?;
             let roots = graph
                 .scope
                 .examined
@@ -633,9 +690,9 @@ pub fn prepare(cli: &mut Cli) -> Result<Option<i32>> {
         };
         if matches!(cli.command, Command::Graph(_)) && !cli.json {
             use std::io::Write;
-            writeln!(std::io::stderr().lock(), "{}", scope_text(&graph))?;
+            writeln!(std::io::stderr().lock(), "{}", scope_text(&graph.scope))?;
         } else {
-            print_scope(&graph, cli.json)?;
+            print_scope(&graph.scope, cli.json)?;
         }
         let graph = filter_scoped(cli, &context, &graph)?;
         return run_scoped(cli, &context, &graph).map(Some);

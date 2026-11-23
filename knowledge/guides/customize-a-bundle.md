@@ -18,28 +18,54 @@ description: >-
 ---
 # Customize a bundle
 
-Use a manifest when a bundle needs portable settings or task guidance. This example creates a
-small bundle with a required instruction file and a named workflow, then inspects that workflow
-without executing it. Run all blocks in one POSIX shell with a compatible `okf` on PATH.
+A requirements team wants every author to preserve source URLs and wants a standard procedure
+for importing a specification. The bundle manifest can carry both. This example also defines
+a filtered inventory of notes. Start in an empty working directory and run commands from that
+directory throughout.
 
-## Create the bundle and its instructions
+## Give the bundle one note
+
+Create a bundle named `bundle`.
 
 ```sh
-demo_root=$(mktemp -d)
-cd "$demo_root"
-okf init "$demo_root/bundle"
-okf ontology add Note "$demo_root/bundle"
-okf add notes/overview "$demo_root/bundle" --type Note --title "Vendor documentation" --description "Requirements collected from selected sources." --body "Record source observations separately from current facts."
-mkdir -p "$demo_root/bundle/.okf-bundle/references"
-cat > "$demo_root/bundle/.okf-bundle/references/import-specification.md" <<'MARKDOWN'
+okf init bundle
+```
+
+Declare the note type. This creates or updates `bundle/ontology.yaml`.
+
+```sh
+okf ontology add Note bundle
+```
+
+Add a note that the inventory can find.
+
+```sh
+okf add notes/overview bundle --type Note --title "Vendor documentation" --description "Requirements collected from selected sources." --body "Record source observations separately from current facts."
+```
+
+## Define instructions, a workflow, and a view
+
+Create the following two files, including the directories in their paths. The first file gives
+an author the procedure to follow when someone requests a specification import.
+
+**File: `bundle/.okf-bundle/references/import-specification.md`**
+
+```markdown
 # Import a supplied specification
 
 Establish which supplied document the source input identifies and the requested scope.
 Create requirements with provenance. Preserve source URLs without following every URL
 mentioned in the document. Report created concepts, unresolved questions, and validation.
 Use the selected review_level when explaining the evidence review.
-MARKDOWN
-cat > "$demo_root/bundle/okf-bundle.yaml" <<'YAML'
+```
+
+The manifest below makes the URL-preservation rule bundle-wide and adds a rule specific to
+relationship reads. The named workflow takes a required `source` and an optional `review_level`.
+The `overview` view selects fields for display and the `documented-notes` preset selects concepts.
+
+**File: `bundle/okf-bundle.yaml`**
+
+```yaml
 manifest_version: 1
 description: Requirements extracted from selected vendor documentation.
 settings:
@@ -82,125 +108,124 @@ workflows:
         type: enum
         values: [standard, detailed]
         default: standard
-YAML
-okf bundle validate "$demo_root/bundle"
-okf docs "$demo_root/bundle" --format index
-okf validate "$demo_root/bundle" --profile bundle
 ```
 
-The scratch bundle has only generated index prose, so the example regenerates its navigation.
-The manifest is valid, and the knowledge documents pass bundle-profile validation. The instruction
-file deliberately has no concept frontmatter. Default core validation includes that Markdown and
-may report a violation; the bundle tooling profile excludes the support namespace. See
-[bundles and concepts](../concepts/bundles-and-concepts.md) for the compatibility boundary.
-
-`manifest_version` identifies the schema, independently of the CLI release. A missing manifest uses
-defaults; an unsupported version or malformed manifest is an error. `ontology.yaml` remains
-separate. The catalog owns workspace IDs and locations, while the manifest travels with the bundle.
-
-## Use lint policy, views, and presets
+Check the manifest. A successful validation confirms its schema and configured resources.
 
 ```sh
-okf list "$demo_root/bundle" --view overview --json
-okf list "$demo_root/bundle" --preset documented-notes --view overview --json
-okf bundle context "$demo_root/bundle" --operation list --query '{"preset":"documented-notes"}' --json
-okf lint "$demo_root/bundle" --fail-on warn --json
+okf bundle validate bundle
 ```
 
-The view selects useful display fields. Its `extended_output: true` explicitly enables separate JSON
-projection records; callers still read the stream by record kind. The preset selects `Note` concepts
-and remains inactive unless requested. Context shows the effective query before execution. Lint
-uses the manifest's warning policy; warnings are advisory by default, while `--fail-on warn` turns
-them into this command's failure threshold. These three controls have different jobs: presentation,
-selection, and quality policy.
-
-## Inspect and select context
+Generate navigation for this new example bundle. In a bundle with curated indexes this
+command replaces authored index prose.
 
 ```sh
-okf bundle context "$demo_root/bundle" --json
-okf bundle context "$demo_root/bundle" --operation links --operation backlinks --json
-okf bundle context "$demo_root/bundle" --workflow import-specification --json
-okf bundle context "$demo_root/bundle" --workflow import-specification --inputs '{"source":"supplied-vendor-specification","review_level":"detailed"}' --json
-okf bundle context "$demo_root/bundle" --all --json
+okf docs bundle --format index
 ```
 
-The first response contains global instructions and inventories of scoped rules and workflows.
-Operation selection returns the full relationship rule. Selecting the workflow without inputs
-reports `inputs_complete: false` and the missing `source`; supplying it produces complete inputs.
-The optional `review_level` defaults to `standard` when omitted. Input completeness says nothing
-about whether the source was inspected or the workflow succeeded: these commands only return
-context. They do not import a document, fetch a URL, or run a script.
-
-`--all` returns every instruction body for inspection. It does not activate workflows. Canonical
-operation names include subcommands such as `artifact resolve`; omitted `operations` makes a rule
-bundle-wide, while an empty list is invalid.
-
-Batch known operations in the first request: it returns global guidance and applicable mandatory
-rules together. Incidental command guidance does not replace that pre-action read. JSON context
-retains the full settings by default; `--settings-detail compact` explicitly projects relevant
-groups, retains operational defaults, and reports omissions. This presentation choice does not
-change context identity. Text output explains origins, selection, and summary omissions.
-
-## Keep guidance concise
-
-Existing rules default to `tier: mandatory`. Use `tier: reference` on optional explanatory rules,
-with a useful `description`, and expand a named rule using `--rule ID`. Reference bodies stay
-inspection-only even when expanded. Missing reference files do not block an unrelated operation;
-explicit expansion must deliver the complete body. Named workflows remain the place for procedures.
-Do not remove all modeling rules from `edit`: edits can change type, ownership, and relationships.
-Keep a short mandatory invariant and move extended examples into references.
-
-`--stats` reports delivered instruction bytes per section. `--guidance-budget N` adds an advisory
-budget on mandatory instruction bytes; it neither truncates instructions nor fails the operation.
-Omitted bodies are not read for measurement. Byte counts are not model-token estimates.
-
-Global guidance, rules and workflows accept an optional `provenance` mapping for publisher metadata,
-returned as `origin.provenance`. Publishers can move generator boilerplate there. The CLI preserves
-instruction text exactly, including authored HTML comments.
-
-## Check context freshness
+Validate the knowledge documents using the bundle profile. Its scope excludes the workflow
+instructions in `.okf-bundle/`, which have no concept frontmatter.
 
 ```sh
-okf bundle context "$demo_root/bundle" --operation show --operation edit --operation validate --token --stats --json > "$demo_root/context.ndjson"
-python3 - "$demo_root/context.ndjson" "$demo_root/context-token.json" <<'PYTOKEN'
-import json, pathlib, sys
-records = [json.loads(line) for line in pathlib.Path(sys.argv[1]).read_text().splitlines()]
-assert records[-1]["kind"] == "operation-complete" and records[-1]["exit_code"] == 0
-pathlib.Path(sys.argv[2]).write_text(next(r["token"] for r in records if r["kind"] == "context-token"))
-PYTOKEN
-okf bundle context "$demo_root/bundle" --check-token "@$demo_root/context-token.json" --operation edit --json
-okf show notes/overview "$demo_root/bundle" --context "@$demo_root/context-token.json" --json
+okf validate bundle --profile bundle
 ```
 
-Token use is optional. When supplied, a token must be current and cover the operation, or the
-command fails before execution. Repeat `--context` for one token per explicitly examined bundle.
-The token binds resolved identity/root, snapshot, settings/ontology, loaded instruction files, and
-selected workflow resources. Context digest version 2 includes those resources. An ordinary concept
-edit does not invalidate context; changed guidance or workflow resources do. Load new context for
-new operations, workflow inputs, or examination scope. `--check-token` checks without replaying bodies.
+The manifest travels with the bundle. `manifest_version` names the schema version. A catalog
+owns workspace IDs and locations. [Configuration](../reference/configuration.md) describes
+the precedence of these settings.
 
-Tokens are stateless freshness receipts, not credentials or proof that instructions were followed.
-They do not bind command arguments or concept contents, and a check does not lock out later external
-changes. Existing mutation baselines, write gates, and validation still apply. `--all`, historical
-inspection, and workflows missing required inputs cannot issue execution tokens. Check both the
-process exit and terminal completion record before using a token from an output stream.
+## Display the inventory and check its quality
 
-## Choose where supporting material belongs
+Apply the preset and view together.
 
-Use exactly one of `instructions` and `instructions_file` for each instruction body. A selected mandatory
-instruction file is required guidance; optional workflow `resources` are supporting material to
-inspect when needed. Paths are relative to the bundle root.
+```sh
+okf list bundle --preset documented-notes --view overview --json
+```
 
-The `.okf-bundle/` directory can also contain scripts, templates, and operational reports. Ordinary
-knowledge queries hide these files; [bundle resource](../commands/bundle-resource-list.md) provides
-explicit inspection. Physical snapshots preserve them. Reports intended for ordinary knowledge
-search belong outside the support tree as concepts.
+Expect one `projection` record for `/notes/overview` with the selected ID, title and
+description. The manifest’s `extended_output: true` enables this view for JSON. To inspect
+the filters that the preset contributes before running a query, request its context.
 
-A workflow can request a script, but reading its definition does not execute or authorize it. An
-agent uses the declared working directory, treats inputs as data, checks unfamiliar actions against
-the task, and reports missing tools or failed steps. Managed remote write protection still applies
-to its support files.
+```sh
+okf bundle context bundle --operation list --query '{"preset":"documented-notes"}' --json
+```
 
-See [configuration](../reference/configuration.md) for setting ownership and precedence,
-[find and read knowledge](find-and-read-knowledge.md#find-defects-blocking-a-feature) for a query-preset
-recipe, and [remote dependencies](remote-dependencies.md) for explicit acquisition and locked revisions.
+The `effective-query` record contains the `Note` type filter. A preset can also select the
+starting concepts for a [saved query](save-and-run-queries.md).
+
+Check the manifest’s lint policy separately. The example should pass; a warning reaches the
+failure threshold specified here.
+
+```sh
+okf lint bundle --fail-on warn --json
+```
+
+## Select instructions for a task
+
+Request both planned operations together when checking relationship evidence.
+
+```sh
+okf bundle context bundle --operation links --operation backlinks --json
+```
+
+Look for the global instruction and the matching `relationship-evidence` rule. The rule's
+applicability comes from its `operations` list. Plain `bundle context` shows the inventory,
+and `--all` returns bodies for inspection.
+
+Select the import workflow and supply a fictional document identifier.
+
+```sh
+okf bundle context bundle --workflow import-specification --inputs '{"source":"supplied-vendor-specification","review_level":"detailed"}' --json
+```
+
+The workflow record reports `inputs_complete: true` and the effective values. Omit
+`review_level` to use `standard`. Omit the required `source` and the workflow record lists
+the missing input. Selecting the workflow loads instructions for an author. The author still
+needs to inspect the document, perform the requested import, and verify the result.
+
+## Check context freshness before using it
+
+If a later read or edit depends on exactly these instructions, request a token covering the
+planned operations.
+
+```sh
+okf bundle context bundle --operation show --operation edit --operation validate --token --stats --json
+```
+
+Check the process exit and the terminal `operation-complete` record. Save the **value of the
+`token` field** from the `context-token` record as `context-token.json` in the working
+directory. Save its decoded string contents, including the JSON braces, without the outer
+string quotes. Check the token for a planned edit.
+
+```sh
+okf bundle context bundle --check-token @context-token.json --operation edit --json
+```
+
+A current token covers this edit. Supply the same token on a covered read.
+
+```sh
+okf show notes/overview bundle --context @context-token.json --json
+```
+
+The read returns the note metadata. A stale token or uncovered operation fails before execution.
+Reload context after changing settings, ontology, instructions, workflow resources, or scope.
+Editing ordinary concept content alone leaves context current. Multi-bundle calls take one
+`--context` token per examined bundle. Tokens check freshness at command entry; writes still
+use their ordinary validation, baseline and authorization checks.
+
+## Keep guidance and supporting materials usable
+
+Use short mandatory rules for requirements that apply to every matching operation. Give an
+optional explanatory rule `tier: reference` and a useful `description` so authors can request
+its body with `--rule ID`. Named workflows hold procedures. `--stats` reports delivered bytes
+per section; `--guidance-budget N` compares mandatory instruction bytes with an advisory budget.
+An optional `provenance` mapping on instructions, rules or workflows records publisher
+metadata in `origin.provenance`.
+
+Choose one of `instructions` and `instructions_file` for each body. File and resource paths
+are relative to the bundle root. Keep templates, scripts and operational reports under
+`.okf-bundle/` when they need explicit inspection. Use an ordinary concept for a report
+readers should find through knowledge search. Reading a workflow definition leaves its
+scripts inert. The author decides which actions the task authorizes.
+
+For a preset applied to a relationship, see [Follow a relationship across two hops](find-and-read-knowledge.md#follow-a-relationship-across-two-hops).

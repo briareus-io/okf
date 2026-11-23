@@ -1,64 +1,20 @@
 ---
 type: Reference
 audience: contributor
-title: Multi-bundle capability
-description: Multi-bundle capability.
+title: Catalog identity and cross-bundle resolution
+description: Registration, path resolution, version evidence, and graph identity invariants for local catalogs.
 ---
-# Multi-bundle capability
+# Catalog identity and cross-bundle resolution
 
-Status: implemented local capability. The design below records the capability contract and
-its deliberate limits; the implemented CLI interface is recorded at the end. Configuration
-and output are discoverable through `okf schema` and the generated CLI reference.
+The local catalog identifies independently maintained bundle roots. The resolver associates
+each concept occurrence with its declaring bundle, original reference, examined version and
+resolution evidence. For a workspace setup and example queries, see
+[Work with multiple bundles](../../guides/work-with-multiple-bundles.md).
 
-This document defines the local catalog foundation. [Bundle manifests](bundle-manifest.md) define
-portable settings and current catalog discovery; [remote bundles](remote-bundles.md) extend it with
-Git acquisition, accepted locks, managed snapshots, and logical authored references. The legacy
-TOML examples below remain compatibility examples, not the preferred configuration for new bundles.
+[Bundle manifests](bundle-manifest.md) own portable settings. [Remote dependencies](remote-bundles.md)
+extend local catalog registration with acquisition, accepted locks and managed snapshots.
 
-## Motivation
-
-Knowledge often spans several domains with different owners and update cycles. A product bundle may
-depend on finance policies, engineering standards, and shared definitions. Keeping these as separate
-bundles allows each collection to be maintained independently, while references preserve the
-relationships between them without copying their content.
-
-The current single-bundle configuration does not express which bundles belong to a working context
-or how to identify targets across their boundaries. Directory names alone are poor identifiers:
-different repositories can use the same names, and local checkout locations can differ between
-users. A catalog makes bundle identity, location, and selection explicit and gives the CLI enough
-context to check references and trace dependencies across bundles.
-
-This capability keeps OKF's lightweight authoring model. It adds coordination for tools without
-requiring a central service, Git, an ontology, or a new document format. Ordinary paths and Markdown
-remain the portable reference surface; the catalog adds local context for resolving and inspecting
-them.
-
-## 1. Capability and restrictions
-
-The CLI will work with several independent OKF bundles through one local catalog. Bundles may be
-sibling directories in the same repository, directories in separate existing checkouts, or
-directories outside Git. Users or other tools make those files available; directory registration
-itself does not acquire remote content. Git acquisition is a separate explicit catalog lifecycle
-operation defined by the remote extension.
-
-The capability adds:
-
-- Stable, namespaced bundle IDs independent of directory names and locations.
-- Explicit selection of a bundle by ID or path, including selection from the current
-  directory when it belongs to a registered bundle.
-- References between bundles through ordinary Markdown links and provenance sources.
-- Cross-bundle graph queries, backlinks, affected analysis, and reference diagnostics
-  within an explicitly selected scope.
-- Optional snapshot expectations resolved against available local material, with clearly
-  labeled candidates when the requested content cannot be established.
-
-A bundle remains an ordinary OKF directory. It needs no catalog to be read independently, no
-ontology to establish its boundary, and no new identity manifest. The catalog supplies identity and
-location for this CLI's multi-bundle operations.
-
-### Restrictions introduced by the CLI
-
-These rules apply to the catalog feature, not to OKF conformance:
+## Registration and portability
 
 | Rule | Purpose and effect |
 | --- | --- |
@@ -103,119 +59,17 @@ self-contained distribution or a guarantee that every reader permits access outs
 selected bundle root. This limit is explicit rather than addressed by changing path meaning.
 No stronger claim of universal reader interoperability is made.
 
-## 2. Files, references, and behavior changes
+## Selection and effective paths
 
-### Catalog and existing configuration
+Catalog paths resolve relative to their declaring configuration file, registered locations
+relative to the catalog, and local overrides relative to the override file. ID and path
+selectors occupy separate namespaces. The containing registration takes precedence over a
+configured default. Conflicting registrations and overlapping canonical roots make qualified
+identity ambiguous. Keep local-directory registration independent of lockfiles, managed caches
+and ontology discovery. For precedence and legacy layout compatibility, see
+[configuration](../../reference/configuration.md).
 
-Keep `okf.toml` and add a separate `okf-catalog.yaml`:
-
-```toml
-# okf.toml
-catalog = "okf-catalog.yaml"
-default_bundle = { id = "acme.product" }
-```
-
-```yaml
-# okf-catalog.yaml
-catalog_version: 1
-
-bundles:
-  acme.product:
-    location:
-      type: directory
-      path: knowledge/product
-
-  acme.finance:
-    location:
-      type: directory
-      path: knowledge/finance
-
-  partner.standards:
-    location:
-      type: directory
-      path: ../standards-checkout/knowledge
-```
-
-The catalog path is resolved relative to its configuration file. Bundle paths are relative to the
-catalog file, not the command's working directory. The catalog may live outside Git. The version-1
-catalog foundation supports local directories, including existing checkouts. Version-2 Git locations
-and acquisition are defined by the remote dependency design; web/archive acquisition remains outside
-these capabilities.
-
-In legacy TOML configuration, the default selector is explicitly typed: `default_bundle = { id = "acme.product" }`
-selects a catalog ID, while `default_bundle = { path = "knowledge" }` selects a directory.
-Exactly one of `id` and `path` is permitted. Default paths resolve relative to `okf.toml`.
-The current `bundle` setting becomes a deprecated path-only compatibility alias;
-`bundle = "knowledge"` retains that meaning even when a catalog is added. If both settings
-are present, accept only equivalent path selectors and otherwise report a configuration
-error. Equal strings in an ID selector and a path selector do not establish equivalence.
-New configuration uses the catalog's `default_bundle` ID and bundle manifests as specified in the
-manifest design. Neither representation infers identity from directory spelling.
-
-Machine-local overrides can map a stable ID to a different local checkout, with explicit
-precedence and effective-location reporting. They cannot silently replace a requested
-snapshot. Override files use `bundles: {<registered-id>: <local-path>}`, with paths relative to the
-override file and effective locations reported by catalog inspection.
-
-Local catalog registration does not require a manifest, lockfile, or managed cache. Optional
-manifests and dependency locks are defined by their companion designs; they do not make directory
-registrations remote dependencies. `ontology.yaml` remains optional and is not a bundle marker.
-
-### Bundle selection and discovery
-
-For catalog-aware operations, selection follows this order:
-
-1. Explicit bundle path or bundle ID; conflicting selectors are rejected.
-2. The existing environment override, with `OKF_BUNDLE` retaining its path meaning.
-3. The registered bundle containing the current directory.
-4. The configured default bundle.
-5. The sole catalog entry, if unambiguous.
-6. Otherwise require selection and show the available choices.
-
-Without a catalog, existing single-bundle selection remains available. IDs and paths use distinct
-selectors so a directory name cannot accidentally become a bundle ID. Discovery can suggest
-candidate directories, but does not register them or infer authoritative roots from an ontology,
-index, or repository boundary.
-
-### Cross-bundle references
-
-For two bundles in the same repository:
-
-```text
-repo/
-  okf.toml
-  okf-catalog.yaml
-  knowledge/
-    product/metrics/revenue.md
-    finance/policies/margin-standard.md
-```
-
-The source entry in `product/metrics/revenue.md` can be:
-
-```yaml
-sources:
-  - id: margin-standard
-    resource: ../../finance/policies/margin-standard.md
-    bundle_ref:
-      id: acme.finance
-      path: policies/margin-standard.md
-```
-
-The body can use an ordinary link:
-
-```markdown
-See the [margin standard](../../finance/policies/margin-standard.md).
-```
-
-`resource` resolves relative to the containing document. `bundle_ref.path` is explicitly
-relative to the target bundle root. Both identify the same material. `sources[].id` remains
-the source attribution key; it is not the bundle ID. The target concept's standard ID is
-still `policies/margin-standard`.
-
-No copies are made. Readers that ignore `bundle_ref` can follow the ordinary path when
-the surrounding layout is available. Separate checkouts can use the same approach if their
-relative layout is reproduced. Moving a bundle may therefore require updating ordinary
-links as well as its catalog location: stable identity alone does not make paths relocatable.
+## Reference resolution
 
 The CLI resolves an ordinary local path, identifies the registered root containing its target, and
 assigns the qualified target. It must not collapse an above-root traversal into an unrelated concept
@@ -258,32 +112,18 @@ registration conflicts, reference mismatches, unchecked equivalence, and changed
 fingerprints. These are separate dimensions: a target can exist while its source has changed.
 Missing targets warn by default; CI may configure a stricter lint policy.
 
-### Optional snapshots
+### Snapshot evidence
 
-References may describe a requested snapshot using a Git commit, ref, human label, optional digest,
-or a combination. The whole snapshot object and each identifier are optional. An illustrative shape
-is:
+`bundle_ref.snapshot` supports `commit`, `ref`, `label` and `digest`. Commits are full immutable
+Git object IDs; refs and labels are hints. Digests describe raw referenced file bytes as SHA-256
+hex, optionally prefixed `sha256:`. Scope records also retain `snapshot_examined` for separately inspected historical target nodes.
+Snapshot results retain requested metadata, status, evidence,
+resolved identity and separately labeled candidate identity. Nodes use qualified bundle/concept
+identity and version evidence: current content is `working-tree`, commit material is `git:<SHA>`,
+and a digest-established snapshot is `sha256:<HEX>`. Explicit standalone subdirectories retain
+their own boundary; combining one with an overlapping registered root in scope is rejected.
 
-```yaml
-bundle_ref:
-  id: acme.finance
-  path: policies/margin-standard.md
-  snapshot:
-    ref: fy2026
-    label: FY2026 approved standard
-```
-
-An exact commit or digest may be added without requiring both. A digest, when supplied, describes
-the referenced file's raw bytes; it is not an unspecified whole-bundle hash. Exact identifiers
-constrain the evidence, while labels and mutable refs are lookup hints. Field names remain
-provisional.
-
-Initial authored snapshot support is limited to provenance source entries carrying
-`bundle_ref`. Body links and custom nested concept-reference strings use ordinary path
-resolution; they do not inherit snapshot expectations from a similar source entry. Snapshot
-metadata for those occurrences is not included in the initial capability.
-
-The policy is **prefer requested, allow labeled candidate**:
+The resolver distinguishes a requested snapshot from a current candidate.
 
 1. Attempt to establish the requested content from available local files or Git material.
 2. Report whether the request is matched, unverified, unavailable, or mismatched.
@@ -305,8 +145,7 @@ Primary bundle selection and examination scope are separate. The default scope c
 selected bundle. Examining additional bundles requires an explicit bundle set or an explicit
 catalog-wide scope; catalog registration alone does not authorize traversal. Cross-bundle references
 outside that scope remain visible with an out-of-scope status. Results report requested scope,
-actual examined bundle/version scope, and unavailable members. Exact scope-option syntax remains
-provisional.
+actual examined bundle/version scope, and unavailable members.
 
 Graph nodes are qualified by bundle identity, concept identity, and resolved version where
 available. Multiple revisions can coexist. Working-tree content is identified as such, not
@@ -321,79 +160,13 @@ Bundles in the same repository may be updated and committed together. When inspe
 local commit, they use that commit unless a reference explicitly requests another version. Ordinary
 working-tree reads do not promise an atomic snapshot across files.
 
-## 3. Out of scope and guarantees not provided
+## Ownership boundaries
 
-### Deferred functionality
+A catalog coordinates local reads. Multiple repositories may need separate edits when a move
+changes cross-bundle paths. A mutation in one bundle cannot claim to reconcile consumers outside
+its examined scope. Resolution and retrieval leave source verification, fingerprint refresh and
+acceptance of upstream revisions to their respective workflows.
 
-- Web-bundle acquisition, HTTP archives, publication manifests, and new web authentication.
-- Automatic branch-following reads, TTL refresh, and implicit acceptance of cached alternatives.
-  Explicit Git acquisition, immutable caches, reviewed lock updates, and cache recovery belong to
-  the [remote dependency extension](remote-bundles.md).
-- Catalog imports, implicit catalog merging, and a bundle identity sidecar.
-- Cross-bundle computation execution, executors, and attesters. Scoped logical artifact reads are
-  supported by the remote/reference extension; reading an artifact does not execute it.
-- Automatic cross-bundle rename/update orchestration. Skills may coordinate multiple CLI
-  calls and review a combined repository diff.
-- Self-contained export, dependency mirroring, and managed catalog/publication adapters.
-
-Further accepted follow-up work remains deferred: separately guarded caller-managed allocation
-state, value unions, and bounded binary retrieval. These are design directions, not implemented
-capabilities or release commitments. Selection receipts do not add them.
-
-### Deliberate limits
-
-- No nested bundle roots, alias layer, or central ID authority. Dependency lockfiles are defined
-  by the remote extension; they do not make mutable directory registrations immutable.
-- No guarantee that local content is the latest remote content. Directory reads use available
-  local content; managed Git reads use accepted locked revisions until explicitly updated.
-- No guarantee that all requested snapshots are available or provable. Digests are optional,
-  and a labeled candidate is not evidence that the requested snapshot was retrieved.
-- No guarantee of standalone distribution after separating bundles that use relative links.
-  Catalog-aware resolution cannot repair portability for readers that do not have the layout.
-- No global backlink inventory, transactional update across repositories, or atomic snapshot
-  of mutable working trees.
-- No automatic trust propagation, source verification, or execution of referenced code.
-- No inferred correspondence from matching names and no silent acceptance of known mismatches.
-
-These limits constrain the CLI capability. They do not prohibit ordinary OKF documents from
-containing external URLs, additional fields, incomplete knowledge, or broken references.
-
-## Implemented CLI interface
-
-Select a catalog identity with global `--bundle-id <id>` or select an ordinary path with the
-trailing bundle positional. These selectors conflict. `OKF_BUNDLE` remains path-only. Add
-examined registrations with repeatable `--scope-bundle <id>` or deliberate `--catalog-scope`;
-the default examines only the selected bundle. Qualified graph targets use
-`acme.finance:/policies/margin-standard`.
-
-`okf catalog` reports effective registrations without selecting a primary. With `--json`, it
-emits `bundle-registration` and `effective-settings` records including configured/effective
-locations, overrides, availability and interpretation context. Catalog inspection rejects
-bundle selection, scope and revision flags.
-
-Scope applies to graph, links, backlinks, resolve, affected, lint, search and list. Other commands
-reject additional scope. `--revision <ref>` applies only to graph, links, backlinks, resolve,
-affected, search and list. Historical reads identify examined commit material and effective ontology
-interpretation; unavailable revisions/settings remain diagnostics. Local Git commands disable
-implicit object fetching.
-
-Machine-local override storage is a YAML file selected by `catalog_overrides` in `okf.toml`,
-resolved relative to that configuration. `OKF_CATALOG_OVERRIDES` takes precedence and selects
-a path from the working directory. Override paths resolve relative to the override file:
-
-```yaml
-bundles:
-  acme.finance: ../finance-checkout/knowledge
-```
-
-`bundle_ref.snapshot` supports `commit`, `ref`, `label` and `digest`. Commits are full immutable
-Git object IDs; refs and labels are hints. Digests describe raw referenced file bytes as SHA-256
-hex, optionally prefixed `sha256:`. Scope records also retain `snapshot_examined` for separately inspected historical target nodes.
-Snapshot results retain requested metadata, status, evidence,
-resolved identity and separately labeled candidate identity. Nodes use qualified bundle/concept
-identity and version evidence: current content is `working-tree`, commit material is `git:<SHA>`,
-and a digest-established snapshot is `sha256:<HEX>`. Explicit standalone subdirectories retain
-their own boundary; combining one with an overlapping registered root in scope is rejected.
-
-See [generated CLI reference](../../commands/index.md) for actual argument tables and machine record
-contracts. Catalog/configuration errors remain separate from OKF content conformance.
+The CLI's leaf-command capability registry drives the scope and revision options advertised in
+[command contracts](../../reference/cli-contracts.md). Catalog registration errors are distinct
+from OKF document conformance.

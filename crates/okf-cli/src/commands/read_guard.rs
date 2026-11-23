@@ -9,6 +9,7 @@ use okf_core::mutate::transaction::{ReaderGuard, reader_locks};
 pub fn guards_command(command: &Command) -> bool {
     match command {
         Command::List(_)
+        | Command::Query(_)
         | Command::Search(_)
         | Command::Show(_)
         | Command::Browse(_)

@@ -304,13 +304,6 @@ cannot prove remote reachability or credential validity. Core document validatio
 validation, dependency availability, and advisory lint remain distinct checks. NDJSON envelopes
 and completeness evidence are retained across lifecycle and inspection commands.
 
-Verification covers initial acquisition, exact-pin updates, branch movement after planning,
-repository groups, registration changes, stale consumer/catalog/lock inputs, dirty caches,
-overrides, root-level bundles, unsupported entries, interrupted publication, protected destinations,
-logical scope, historical subpaths, and source snapshot conflicts. It must also verify negative
-boundaries: no implicit fetch, no instruction execution, no lock acceptance during planning, and no
-fingerprint refresh as an update side effect.
-
 Multiple accepted revisions per repository, writable remote registrations, upstream publication,
 LFS/submodule hydration, signature-based publisher trust, automatic garbage collection, development
 mode for mismatched overrides, generic link export, and managed OS execution isolation are deferred.

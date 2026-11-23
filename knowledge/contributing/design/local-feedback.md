@@ -11,10 +11,9 @@ sources:
 ---
 # Local authoring feedback
 
-Authors can capture a defect, feature request, guidance gap, or workflow lesson even when every
-command succeeds. The feedback skill helps an author express the goal, friction, workaround, and
-acceptance scenario using invented data. An optional local report supplies evidence about recurring
-CLI outcomes. The user decides whether to retain a draft or export it to a file.
+The feedback observer runs at CLI command completion. The storage, consent, and export
+contracts below apply to the CLI and its agent integration.
+For the author workflow, see [Capture local authoring feedback](../../guides/capture-local-feedback.md).
 
 ## Ownership and compatibility
 
@@ -75,57 +74,14 @@ evidence about commands, with no claim about distinct users, sessions, retries, 
 the importance of a request. Adding a signal requires a fixed identifier, an identified emission
 site or typed result, a denominator definition, and a privacy regression check.
 
-## Draft and export protocol
+## Template ownership and export confirmation
 
-1. Choose a kind and optionally a built-in pattern from the report. The CLI creates a private
-   template and prints its path and contents. The template contains neither actual counts nor
-   source material. A selected pattern supplies a fictional starting scenario to verify. The plugin asset `skills/feedback/assets/template.md` is the authoritative Markdown template.
-   The docs generator copies it to `crates/okf-cli/templates/feedback.md` for inclusion in the
-   standalone binary. The generated-document check detects drift.
-2. Write a fresh fictional scenario. A defect needs a synthetic reproduction, a request needs
-   a desired outcome, and a lesson needs the conditions where the practice works. Exclude actual
-   product names, personal details, paths, identifiers, logs, usage counts and real data. An agent
-   that cannot preserve the lesson safely should ask for a generalized account.
-3. Pass the managed filename and a chosen destination to the export command. The first call
-   returns the exact text, resolved destination and a SHA-256 confirmation over the destination
-   bytes, a zero separator and the UTF-8 draft. Review all three locally. A free-text draft
-   requires human judgment about identifying details.
-4. Repeat with the confirmation digest after approval. The CLI recomputes the digest, rejects a
-   changed draft or destination, and atomically creates a new file without overwriting an existing
-   one. Export has no network transport. The skill must never file or upload feedback.
+The plugin asset `skills/feedback/assets/template.md` supplies the Markdown template. The docs
+generator copies it to `crates/okf-cli/templates/feedback.md` for inclusion in the standalone
+binary. The generated-document check detects drift. A selected built-in pattern supplies a
+fictional starting scenario. Keep source material and actual counts out of both template paths.
 
-## Using the commands
-
-Start a manual request even if counting has never been enabled.
-
-```sh
-okf learn draft feature-request
-```
-
-Edit the returned Markdown file with the generalized account. For a pattern-based draft,
-first inspect the local report and use a matching registered identifier.
-
-```sh
-okf learn report
-okf learn draft defect --pattern broken-link
-```
-
-In this fictional example, replace the draft basename with the one the CLI returned.
-The preview writes no destination file. Read the entire text and verify the destination
-before using the digest from that preview.
-
-```sh
-okf learn export draft-AbCd12.md --output reviewed-feedback.md
-okf learn export draft-AbCd12.md --output reviewed-feedback.md --confirm "DIGEST_FROM_REVIEWED_PREVIEW"
-```
-
-## Validation
-
-Exercise collection disabled, enabled and purged in an isolated user state directory. Compare
-ordinary command results and inspect aggregates with distinctive synthetic input values. Verify
-that a successful workflow can produce a manual request without enabling collection. Edit a draft
-between preview and confirmation, try a different destination, and attempt a repeated export.
-Verify that purging leaves the exported file intact. See the
-[feedback skill](../../skills/feedback.md) and [commands](../../commands/index.md).
-
-Set `OKF_FEEDBACK_DIR` to an absolute UTF-8 path to use that exact directory for drafts, consent, and counts. Unset it to use the platform default. Changing directories does not move existing feedback.
+The preview computes a SHA-256 digest over the resolved destination bytes, a zero separator,
+and the UTF-8 draft. Confirmation recomputes the digest and atomically creates a new destination.
+A changed draft or destination invalidates an earlier confirmation. The export operation has no
+network transport. A reviewer supplies the judgment about identifying details in free text.

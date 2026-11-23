@@ -72,7 +72,7 @@ pub fn begin(command: &str, json: bool, write: bool, revision: bool) -> Result<(
     if !json {
         return Ok(());
     }
-    let matching = if matches!(command, "list" | "search") {
+    let matching = if matches!(command, "list" | "search" | "query") {
         "complete"
     } else {
         "not-applicable"
@@ -446,21 +446,11 @@ pub fn print_concept(concept: &Concept, json: bool) -> Result<()> {
 /// Print only the Markdown heading structure, with physical line numbers in the serialized
 /// concept document. ATX-like text inside fenced code blocks is ignored.
 pub fn print_concept_outline(concept: &Concept, json: bool) -> Result<()> {
+    if json {
+        return print_line(&outline_record(concept)?);
+    }
     let source = writer::write_concept(concept)?;
     let headings = headings(&source);
-    if json {
-        mark_partial("content", "outline-only");
-        let outline: Vec<Json> = headings
-            .iter()
-            .map(|h| serde_json::json!({"line": h.line, "level": h.level, "text": h.text}))
-            .collect();
-        return print_line(&serde_json::json!({
-            "kind": "outline",
-            "id": concept.id.0,
-            "trust_tier": concept.trust_tier().as_str(),
-            "headings": outline,
-        }));
-    }
     print_text_line(format_args!("# {}", concept.id.0))?;
     print_text_line(format_args!(
         "trust_tier: {}",
@@ -476,6 +466,23 @@ pub fn print_concept_outline(concept: &Concept, json: bool) -> Result<()> {
         ))?;
     }
     Ok(())
+}
+
+pub fn outline_record(concept: &Concept) -> Result<Json> {
+    let source = writer::write_concept(concept)?;
+    let headings = headings(&source);
+
+    mark_partial("content", "outline-only");
+    let outline: Vec<Json> = headings
+        .iter()
+        .map(|h| serde_json::json!({"line": h.line, "level": h.level, "text": h.text}))
+        .collect();
+    Ok(serde_json::json!({
+        "kind": "outline",
+        "id": concept.id.0,
+        "trust_tier": concept.trust_tier().as_str(),
+        "headings": outline,
+    }))
 }
 
 /// Print an inclusive, 1-based slice of the serialized concept document.
@@ -522,11 +529,64 @@ pub fn print_concept_lines(concept: &Concept, start: usize, end: usize, json: bo
     Ok(())
 }
 
+pub fn section_record(concept: &Concept, path: &[String]) -> Result<Json> {
+    let source = writer::write_concept(concept)?;
+    let outline = headings(&source);
+    let mut ancestors: Vec<&Heading<'_>> = Vec::new();
+    let mut found = None;
+    for (i, h) in outline.iter().enumerate() {
+        while ancestors.last().is_some_and(|a| a.level >= h.level) {
+            ancestors.pop();
+        }
+        ancestors.push(h);
+        if ancestors
+            .iter()
+            .map(|a| a.text)
+            .eq(path.iter().map(String::as_str))
+            && found.replace(i).is_some()
+        {
+            return Err(okf_core::error::OkfError::Usage(format!(
+                "ambiguous heading path {path:?} in {}",
+                concept.id.0
+            )));
+        }
+    }
+    let i = found.ok_or_else(|| {
+        okf_core::error::OkfError::Usage(format!(
+            "heading path {path:?} missing in {}",
+            concept.id.0
+        ))
+    })?;
+    let h = &outline[i];
+    let end = outline[i + 1..]
+        .iter()
+        .find(|next| next.level <= h.level)
+        .map_or_else(|| source.lines().count(), |next| next.line - 1);
+    let text: String = source
+        .split_inclusive('\n')
+        .skip(h.line - 1)
+        .take(end - h.line + 1)
+        .collect();
+    Ok(
+        serde_json::json!({"kind":"section","id":concept.id.0,"path":path,"start":h.line,"end":end,"text":text}),
+    )
+}
+pub fn print_section(record: &Json, json: bool) -> Result<()> {
+    mark_partial("content", "section-only");
+    if json {
+        print_line(record)
+    } else {
+        print_text(format_args!(
+            "{}",
+            record["text"].as_str().unwrap_or_default()
+        ))
+    }
+}
 fn headings(source: &str) -> Vec<Heading<'_>> {
     let mut result = Vec::new();
     let mut in_frontmatter = false;
     let mut frontmatter_closed = false;
-    let mut in_fence = false;
+    let mut fence: Option<(char, usize)> = None;
     for (i, line) in source.lines().enumerate() {
         if i == 0 && line.trim_end() == "---" {
             in_frontmatter = true;
@@ -543,12 +603,19 @@ fn headings(source: &str) -> Vec<Heading<'_>> {
             continue;
         }
         let trimmed = line.trim_start();
-        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
-            in_fence = !in_fence;
+        if let Some((marker, width)) = fence {
+            let run = trimmed.chars().take_while(|c| *c == marker).count();
+            if run >= width && trimmed[run..].trim().is_empty() {
+                fence = None;
+            }
             continue;
         }
-        if in_fence {
-            continue;
+        if let Some(marker @ ('`' | '~')) = trimmed.chars().next() {
+            let width = trimmed.chars().take_while(|c| *c == marker).count();
+            if width >= 3 {
+                fence = Some((marker, width));
+                continue;
+            }
         }
         let level = trimmed.chars().take_while(|c| *c == '#').count();
         if level == 0 || level > 6 {

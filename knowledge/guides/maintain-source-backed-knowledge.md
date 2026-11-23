@@ -22,86 +22,112 @@ description: >-
 ---
 # Maintain source-backed knowledge
 
-Use this workflow after a source changes: identify affected documents, compare their claims with the
-current source, edit what changed, and validate the result. Source relationships identify candidates
-for review; they do not decide which claims are wrong.
+When a source changes, use its recorded path to find documents that cite it. In this example a service changes from two retries to three. You will identify its dependent note, compare the source with the claim, and correct the note.
 
-## Find affected documentation in this repository
+## Record a source and its claim
 
-Run these read-only commands from the repository root:
+In an empty working directory, create a bundle named `bundle`.
 
 ```sh
-okf affected knowledge --changed crates/okf-core/src/mutate/refresh.rs --changed-base repo
-okf show commands/refresh knowledge
+okf init bundle
 ```
 
-Expect the refresh command page among the dependents. `--changed-base repo` means the input
-path starts at the Git worktree root. It does not change the meaning of stored source records.
-Read the current source file and the relevant prose before deciding whether an edit is needed.
+Save the service configuration beside the bundle.
 
-This manual stores current source paths and their kinds, but no fingerprints. It disables
-only the missing-baseline lint warning. `stale` can report missing/unavailable resources and
-unrecorded baselines, but cannot establish fingerprint drift without a baseline. Known changes
-and `affected` provide the maintenance starting point here.
+**File: `service.txt`**
 
-## Practice a source change without editing the manual
+```text
+retry_limit=2
+```
 
-The example starts with a service that retries twice. Its documentation cites a text artifact. Run
-from the repository root, in one shell; all writes stay under a temporary directory.
+Copy it to a stable location inside the bundle.
 
 ```sh
-demo_root=$(mktemp -d)
-okf init "$demo_root/bundle"
-printf 'retry_limit=2\n' > "$demo_root/service.txt"
-okf artifact put references/service.txt "@$demo_root/service.txt" "$demo_root/bundle"
-okf add notes/service "$demo_root/bundle" --type Note --title "Service retries" --description "Retry behavior from the service configuration" --body "The service retries twice."
-okf edit notes/service "$demo_root/bundle" --add-source 'resource=references/service.txt,kind=file'
+okf artifact put references/service.txt @service.txt bundle
 ```
 
-The source uses `kind=file`, whose resource resolves from the bundle root. Adding a source
-records attribution and resolution semantics; it does not create a fingerprint or a review.
-
-Now change the source and inspect the resulting review candidate:
+Create the note with the initial claim.
 
 ```sh
-printf 'retry_limit=3\n' > "$demo_root/service.txt"
-okf artifact put references/service.txt "@$demo_root/service.txt" "$demo_root/bundle" --replace
-okf affected "$demo_root/bundle" --changed references/service.txt
-okf artifact show references/service.txt "$demo_root/bundle"
-okf show notes/service "$demo_root/bundle"
+okf add notes/service bundle --type Note --title "Service retries" --description "Retry behavior from the service configuration" --body "The service retries twice."
 ```
 
-Expect `/notes/service` in the affected result. The source now says `retry_limit=3`, while the
-body still says twice. The contradiction is visible by reading both; no hash comparison was
-needed to identify this known change.
-
-## Reconcile the claim, then check it
+Record where the claim came from. A source with `kind=file` resolves from the bundle root.
 
 ```sh
-okf edit notes/service "$demo_root/bundle" --set-body "The service retries three times." --dry-run
-okf edit notes/service "$demo_root/bundle" --set-body "The service retries three times."
-okf show notes/service "$demo_root/bundle"
-okf validate "$demo_root/bundle"
-okf lint "$demo_root/bundle" --fail-on error
+okf edit notes/service bundle --add-source 'resource=references/service.txt,kind=file'
 ```
 
-Review the preview before applying the same edit. The final document should keep its source entry
-and say three times. Validation checks format; lint checks local conventions. Neither check verifies
-the service's real runtime behavior. Depending on the surrounding configuration, lint may report an
-unrecorded fingerprint as an advisory warning.
+## Find the note after the configuration changes
 
-## Choose the next action deliberately
+Update the local configuration file.
 
-| Observation | Action |
-| --- | --- |
-| Source changed but the documented behavior did not | Keep the prose; record your review through your team's process. |
-| Source and prose disagree | Correct the claim and inspect the resulting diff. |
-| Source is missing or inaccessible | Restore or replace the source evidence; do not invent its contents. |
-| Your own bundle tracks fingerprint baselines | After review, use [refresh](../commands/refresh.md) to record supported current fingerprints. |
-| A real document review has been performed | Use [verify](../commands/verify.md) with the actual reviewer and only the scope reviewed. |
+**File: `service.txt`**
 
-The checked-in manual deliberately does not track fingerprint baselines; do not run refresh
-against it merely to remove a diagnostic. For agent-assisted reconciliation, use the
-[update skill](../skills/update.md). See [provenance](../concepts/sources-and-provenance.md),
-[verification](../concepts/verification-and-freshness.md), and
-[source-health troubleshooting](../reference/troubleshooting.md) for the distinctions.
+```text
+retry_limit=3
+```
+
+Replace the bundled copy at the same path.
+
+```sh
+okf artifact put references/service.txt @service.txt bundle --replace
+```
+
+Find concepts that cite this resource.
+
+```sh
+okf affected bundle --changed references/service.txt
+```
+
+The result includes `/notes/service`. Read the current source and the claim it supports.
+
+```sh
+okf artifact show references/service.txt bundle
+```
+
+```sh
+okf show notes/service bundle --body
+```
+
+The artifact contains `retry_limit=3`. The note still says “The service retries twice.”
+
+## Correct and check the claim
+
+Preview the edit and inspect the changed line.
+
+```sh
+okf edit notes/service bundle --set-body "The service retries three times." --dry-run
+```
+
+Apply the reviewed edit.
+
+```sh
+okf edit notes/service bundle --set-body "The service retries three times."
+```
+
+Check the resulting prose and frontmatter.
+
+```sh
+okf show notes/service bundle
+```
+
+The note should say “The service retries three times.” Its `sources` entry should still identify `references/service.txt`. Check document conformance and local conventions with the following commands.
+
+```sh
+okf validate bundle
+```
+
+```sh
+okf lint bundle --fail-on error
+```
+
+An unrecorded fingerprint may appear as a lint warning. The known change and the two versions of the claim supply the evidence needed for this correction. If the source changes again but the claim still holds, keep the prose and record your review according to local practice. If the source is unavailable, restore or replace the evidence before revising the claim.
+
+Bundles that track fingerprint baselines can record the current fingerprint after review with [refresh](../commands/refresh.md). A reviewer who checked the document against its sources can record that separate event with [verify](../commands/verify.md).
+
+## Apply the same workflow to this manual
+
+The manual records repository-relative source paths and their kinds. From the repository root, run `okf affected knowledge --changed crates/okf-core/src/mutate/refresh.rs --changed-base repo`. The result includes `/commands/refresh`. Read that page with `okf show commands/refresh knowledge` and compare its claims with the current Rust source. The flag sets the base of the supplied changed path. Each stored source keeps its own resolution rules.
+
+The manual tracks provenance without storing fingerprint baselines, and suppresses the missing-baseline lint warning. For more about these choices see [provenance](../concepts/sources-and-provenance.md), [verification and freshness](../concepts/verification-and-freshness.md), and [source-health troubleshooting](../reference/troubleshooting.md). For agent-assisted reconciliation, use the [update skill](../skills/update.md).

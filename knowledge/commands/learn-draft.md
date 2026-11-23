@@ -10,7 +10,7 @@ sources:
 ---
 # okf learn draft
 
-Create a synthetic Markdown draft with collection on or off. See the [local feedback capability](../contributing/design/local-feedback.md).
+Create a synthetic Markdown draft with collection on or off. See the [feedback guide](../guides/capture-local-feedback.md).
 
 ## Arguments
 

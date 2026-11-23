@@ -16,10 +16,15 @@ Claude Code marketplace metadata lives in `.claude-plugin/marketplace.json`; the
 lives in `plugins/okf/.claude-plugin/plugin.json`. Claude auto-discovers the package's shared
 `skills/` directory.
 
-Install:
+Register this repository in Claude Code:
 
 ```text
-/plugin marketplace add briareus-io/okf   # this repo on GitHub, or a full git URL / local path
+/plugin marketplace add briareus-io/okf
+```
+
+This adds the marketplace. You can also supply a Git URL or local path. Install its OKF plugin:
+
+```text
 /plugin install okf
 ```
 
@@ -29,10 +34,15 @@ Codex marketplace metadata lives in `.agents/plugins/marketplace.json`; its pack
 in `plugins/okf/.codex-plugin/plugin.json`. It uses the same `plugins/okf/skills/` directory as
 Claude Code.
 
-Install this repository as a marketplace, then install the plugin:
+Register this repository as a Codex marketplace:
 
 ```sh
-codex plugin marketplace add briareus-io/okf   # or a full Git URL / local path
+codex plugin marketplace add briareus-io/okf
+```
+
+You can also register a Git URL or local path. Install the plugin from that marketplace:
+
+```sh
 codex plugin add okf@okf-marketplace
 ```
 
@@ -51,6 +61,7 @@ The skills are namespaced by the plugin in both agents:
 | Sync docs after changes | `/okf:update` | `$okf:update` |
 | Review & verify documents | `/okf:review-verify` | `$okf:review-verify` |
 | Repair or upgrade a bundle | `/okf:repair` | `$okf:repair` |
+| Capture local authoring feedback | `/okf:feedback` | `$okf:feedback` |
 | Reorganize the tree | `/okf:reorganize` | `$okf:reorganize` |
 
 The skills drive the `okf` CLI, so install the binary too (`cargo install --path crates/okf-cli`,

@@ -36,3 +36,6 @@ The workflow connects [verify](../commands/verify.md), [show](../commands/show.m
 Use [catalog](../commands/catalog.md) inspection to establish effective identity, local locations
 and interpretation settings. Additional bundle examination is explicit; report unavailable members
 and keep current candidates separate from requested snapshot evidence.
+
+A section read can locate a claim and its supporting passage. The verification event covers
+the whole concept, so review the rest of its claims and source evidence before recording it.

@@ -11,66 +11,57 @@ description: Accept structured results using process exit, operation completion 
 ---
 # Automate with JSON
 
-Use this guide when a program needs a complete command inventory. The example runs against
-this repository's `knowledge/` bundle, using Python 3's standard library and `okf` on PATH.
-It is read-only and prints the number and IDs of command concepts.
+Suppose an integration needs every command documented in this repository. Run the examples
+from the repository root. Each line on standard output is a separate JSON object.
 
-## Accept an inventory only after checking its evidence
-
-NDJSON is one JSON object per line. Operation control records, query summaries, concept
-payloads and extension records share the stream. Concept payloads preserve authored metadata;
-do not assume every record has `kind` or every line is a concept.
-
-This runnable consumer checks the process exit, stream version, terminal record, and query
-completeness before returning any command records:
+## Request the inventory
 
 ```sh
-python3 - <<'PY'
-import json
-import subprocess
-
-
-def command_inventory(stdout, exit_code):
-    rows = [json.loads(line) for line in stdout.splitlines() if line.strip()]
-    if not rows or rows[0].get("kind") != "operation-start":
-        raise ValueError("Missing operation start")
-    if rows[0].get("stream_version") != 1 or rows[0].get("schema_version") != 1:
-        raise ValueError("Unsupported stream version")
-    end = rows[-1]
-    if end.get("kind") != "operation-complete" or end.get("schema_version") != 1:
-        raise ValueError("Missing or unsupported completion record")
-    if exit_code != 0 or end.get("exit_code") != exit_code or end.get("outcome") != "ok":
-        raise ValueError("Operation did not complete successfully")
-    completeness = end.get("completeness", {})
-    if any(completeness.get(key) != "complete" for key in ("examination", "matching", "delivery")):
-        raise ValueError("Inventory is incomplete")
-    summaries = [row for row in rows if row.get("kind") == "query-summary"]
-    if len(summaries) != 1:
-        raise ValueError("Expected one query summary")
-    summary = summaries[0]
-    if not summary.get("scan_complete") or summary.get("partial") or summary.get("has_more"):
-        raise ValueError("Scan or page is incomplete")
-    commands = [row for row in rows if row.get("type") == "Command" and row.get("id")]
-    if len(commands) != summary.get("returned") or len(commands) != summary.get("total_matches"):
-        raise ValueError("Payload count does not match the query evidence")
-    return commands
-
-
-result = subprocess.run(
-    ["okf", "list", "knowledge", "--type", "Command", "--full-scan", "--json"],
-    capture_output=True, text=True,
-)
-commands = command_inventory(result.stdout, result.returncode)
-print(f"Accepted {len(commands)} commands")
-for command in commands:
-    print(command["id"])
-PY
+okf list knowledge --type Command --full-scan --json
 ```
 
-For this release, expect `Accepted 49 commands`, followed by IDs including `/commands/add`
-and `/commands/refresh`. Derive the count from the result rather than hard-coding it in an
-integration. If the CLI cannot start, Python raises an OS error; if the CLI fails or the
-stream is truncated, the consumer raises instead of reporting a successful empty inventory.
+The first record identifies the command and stream version. The stream then includes guidance,
+scope, and one concept record per matching command. For example, the record for `okf add`
+contains these fields (excerpt):
+
+```json
+{"id": "/commands/add", "type": "Command", "title": "okf add", "mutates": true}
+```
+
+Collect records with an ID and `type: Command`. A concept can have authored fields of its own,
+so assuming every record has a `kind` field would miss ordinary concepts.
+
+## Check whether every match arrived
+
+Near the end, the `query-summary` record reports what the CLI examined and delivered. For
+example, an uninterrupted run against a bundle containing 64 command concepts would include
+these summary fields:
+
+```json
+{"kind": "query-summary", "scan_complete": true, "partial": false, "has_more": false, "total_matches": 64, "returned": 64}
+```
+
+Accept a complete inventory when all three checks pass:
+
+1. The stream starts with a supported `operation-start` schema and stream version and ends with
+   a supported `operation-complete` record. The process exit and trailer exit code are both zero.
+2. The trailer reports `outcome: ok` and complete examination, matching, and delivery.
+3. Exactly one query summary reports a complete scan and no remaining page. The number of
+   collected commands equals both `returned` and `total_matches`. Read these counts from
+   the response each time.
+
+A [worked Python consumer](../references/command_inventory.py) implements these checks and
+prints the accepted IDs.
+
+## See what an incomplete scan returns
+
+```sh
+okf list knowledge --type Command --scan-limit 1 --json
+```
+
+The command examines at most one document. It can exit successfully while reporting partial
+examination. Reject that output when the task requires every command. Likewise, a missing
+trailer leaves a read incomplete, even if some valid command records arrived.
 
 ## Adapt acceptance to the question
 

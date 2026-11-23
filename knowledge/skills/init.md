@@ -54,6 +54,10 @@ Use [catalog](../commands/catalog.md) inspection to establish effective identity
 and interpretation settings. Additional bundle examination is explicit; report unavailable members
 and keep current candidates separate from requested snapshot evidence.
 
+When a new bundle needs a repeatable read, define it in `settings.saved_queries` and test it
+against a known starting concept. The worked guide shows the ontology, manifest, and expected
+endpoint together. [Save and run a query](../guides/save-and-run-queries.md)
+
 Structured authoring follows the ontology skill's shared example. Use structured declaration
 YAML/file inputs and bulk apply for dependent schemas; use concept `--set-yaml`, object paths,
 or RFC 6902 patches for frontmatter. Review dry-run and actual diffs, preserve source lineage,

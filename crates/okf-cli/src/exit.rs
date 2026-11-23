@@ -159,6 +159,7 @@ pub(crate) fn command_name(command: &crate::cli::Command) -> String {
         Command::Learn(sub) => format!("learn {}", sub.name()),
         Command::Version => "version".into(),
         Command::List(_) => "list".into(),
+        Command::Query(_) => "query".into(),
         Command::Search(_) => "search".into(),
         Command::Show(_) => "show".into(),
         Command::Browse(_) => "browse".into(),

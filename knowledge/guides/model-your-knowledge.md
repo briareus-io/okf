@@ -23,82 +23,151 @@ sources:
 ---
 # Model and edit structured knowledge
 
-Use this guide when you need to add structured metadata and make its relationships queryable. You
-need the CLI on PATH and a checkout containing the example artifacts.
+A guide can declare its intended audience and identify the commands it teaches. This example defines the `audience` field, changes its value with a guarded patch, and adds a typed `uses` relationship that can be queried from either end. Start in an empty working directory.
 
-Check the [standard frontmatter fields](../concepts/bundles-and-concepts.md#standard-frontmatter-fields)
-before choosing a field name. Ontology editing commands, including `--dry-run`, report incompatible
-top-level `status` declarations in the resulting ontology. Text output sends the advisory to stderr.
-With `--json`, the `change` record includes a `findings` array when advisories are present.
-Even an advisory configured as `error` permits an otherwise valid write.
+## Define the audience field
 
-## Define and edit one guide
-
-This exercise uses a [Guide definition](../references/authoring/guide.yaml) and a
-[guarded JSON patch](../references/authoring/concept-patch.json). Run from the repository root.
-`mktemp` creates a disposable destination; the checked-in manual is not edited.
+Create the bundle.
 
 ```sh
-demo_root=$(mktemp -d)
-okf init "$demo_root/bundle"
-okf ontology add Guide "$demo_root/bundle" --from @knowledge/references/authoring/guide.yaml
-okf add guides/example "$demo_root/bundle" --type Guide --title "Example guide" --description "A structured authoring example" --set audience=user --body "A guide for readers."
-okf edit guides/example "$demo_root/bundle" --patch @knowledge/references/authoring/concept-patch.json --dry-run
-okf edit guides/example "$demo_root/bundle" --patch @knowledge/references/authoring/concept-patch.json
-okf show guides/example "$demo_root/bundle"
-okf validate "$demo_root/bundle"
-okf lint "$demo_root/bundle" --fail-on error
+okf init bundle
 ```
 
-The definition constrains `audience` to user or contributor. The patch first tests that it is
-`user`, then changes it to `contributor` and adds tags. Repeating the patch should fail its test
-without changing the document. Query selectors and concrete JSON Pointer patch paths are
-different languages; `/audience` addresses one frontmatter property.
+Save the [Guide definition](../references/authoring/guide.yaml) beside it. This definition requires one of two audience values.
 
-The small definition introduces fields without unrelated dependencies. The manual's
-[actual ontology](../ontology.yaml) extends this idea with Guide-to-Command `uses` and
-Guide-to-Topic `explains` references. Inspect those real edges in the [bundle tour](tour-the-bundle.md).
-See [ontology and relationships](../concepts/ontology-and-relationships.md) for the model,
-[edit](../commands/edit.md) for mutation flags, and [selectors](../reference/selectors.md) for reads.
+**File: `guide.yaml`**
 
-## Add a relationship you can query
+```yaml
+description: A task guide for a named audience.
+fields:
+  audience:
+    type: enum
+    values: [user, contributor]
+    required: true
+```
 
-Continue in the same shell. Define a small command concept and declare that guides can use commands.
-The relationship supplies readable forward and inverse labels:
+Apply the definition.
 
 ```sh
-okf ontology add Command "$demo_root/bundle" --description "A command described by a guide"
-okf add commands/check "$demo_root/bundle" --type Command --title "Check" --description "A sample check command" --body "Inspect the sample bundle."
-okf ontology update Guide "$demo_root/bundle" --ref 'uses:Command:0..n' --relationship-yaml 'uses={reference: uses, kind: uses, inverse: used-by}'
-okf edit guides/example "$demo_root/bundle" --set-yaml 'uses=[/commands/check]'
-okf links guides/example "$demo_root/bundle" --details
-okf backlinks commands/check "$demo_root/bundle" --details
-okf search "$demo_root/bundle" --type Guide --expand uses --target-field title --json
-okf lint "$demo_root/bundle" --fail-on error
+okf ontology add Guide bundle --from @guide.yaml
 ```
 
-Expect a `uses` edge to `/commands/check`, an incoming `used-by` view from the guide, and
-related command metadata in the expanded query. The reference declaration creates the edge;
-a custom string that merely looks like a path would not do so by itself.
+Create a Guide for the `user` audience.
 
-An inverse label presents the incoming view of the same assertion. It does not author a
-second link in the command, grant consent, or establish that anyone ran the command.
-The manual's own `Guide.uses` rule follows the same pattern.
+```sh
+okf add guides/example bundle --type Guide --title "Example guide" --description "A structured authoring example" --set audience=user --body "A guide for readers."
+```
 
-## Choose an edit form
+The new file is `bundle/guides/example.md`. Its frontmatter includes:
 
-| Change | Use | Check before applying |
+```yaml
+type: Guide
+title: Example guide
+audience: user
+```
+
+Check the [standard frontmatter fields](../concepts/bundles-and-concepts.md#standard-frontmatter-fields) before choosing custom names. For instance, the CLI reports an incompatible top-level `status` declaration as an advisory. Text output sends it to stderr. JSON output includes advisories in the change record's `findings` array. An advisory configured as `error` still permits an otherwise valid ontology write.
+
+## Change the audience with a guarded patch
+
+Use the [example patch](../references/authoring/concept-patch.json) when changing a guide intended for users into a contributor guide. The first operation checks the current audience before the patch replaces it and adds tags.
+
+**File: `concept-patch.json`**
+
+```json
+[
+  {"op": "test", "path": "/audience", "value": "user"},
+  {"op": "replace", "path": "/audience", "value": "contributor"},
+  {"op": "add", "path": "/tags", "value": ["worked-example", "authoring"]}
+]
+```
+
+Preview the metadata diff.
+
+```sh
+okf edit guides/example bundle --patch @concept-patch.json --dry-run
+```
+
+After reviewing it, apply the patch.
+
+```sh
+okf edit guides/example bundle --patch @concept-patch.json
+```
+
+Inspect the guide.
+
+```sh
+okf show guides/example bundle
+```
+
+Expect `audience: contributor` and the tags `worked-example` and `authoring`. If you apply the patch again, its first test fails and the file stays unchanged. Patch paths use JSON Pointer syntax. Here `/audience` addresses the top-level frontmatter key.
+
+## Declare and query a relationship
+
+Define the type of the target concept.
+
+```sh
+okf ontology add Command bundle --description "A command described by a guide"
+```
+
+Create that concept.
+
+```sh
+okf add commands/check bundle --type Command --title "Check" --description "A sample check command" --body "Inspect the sample bundle."
+```
+
+Declare that a Guide can reference zero or more Commands through `uses`. Give the relationship a forward kind and an inverse label.
+
+```sh
+okf ontology update Guide bundle --ref 'uses:Command:0..n' --relationship-yaml 'uses={reference: uses, kind: uses, inverse: used-by}'
+```
+
+Set the list of targets on the guide.
+
+```sh
+okf edit guides/example bundle --set-yaml 'uses=[/commands/check]'
+```
+
+Inspect the authored assertion.
+
+```sh
+okf links guides/example bundle --details
+```
+
+Expect a `uses` relationship from `/guides/example` to `/commands/check`. Inspect the incoming view from the command.
+
+```sh
+okf backlinks commands/check bundle --details
+```
+
+The incoming view reports `used-by` for the same assertion. The target document needs no reverse link. To read the command title alongside the guide, expand the declared relationship rule.
+
+```sh
+okf search bundle --type Guide --expand uses --target-field title --json
+```
+
+Look for `Check` in the related concept's returned fields. The [manual's ontology](../ontology.yaml) also declares Guide-to-Topic `explains` references. The [bundle tour](tour-the-bundle.md) shows these relationships on real concepts.
+
+## Check the result and choose an edit form
+
+```sh
+okf validate bundle
+```
+
+Expect `conformant: no violations`. To check the authored concepts against the ontology, run:
+
+```sh
+okf lint bundle --fail-on error
+```
+
+Validation checks the document format. Lint checks local conventions and ontology findings. For future edits, choose the operation that matches the part you want to change.
+
+| Change | Use | What to check |
 | --- | --- | --- |
 | Replace a whole list or object | `--set-yaml` | The supplied value replaces the entire field. |
-| Change an object property | `--set-path` | Intermediate maps may be created; lists need a concrete patch. |
-| Edit a list item or require an old value | `--patch` | JSON Pointer addresses are concrete; a failed `test` prevents publication. |
-| Remove a metadata key | `--unset` or `--unset-path` | Deletion differs from assigning null. |
-| Change the explanation | `--set-body` or section flags | Review the prose and its references, not only schema validity. |
+| Change an object property | `--set-path` | An intermediate map may be created. |
+| Edit a list item or require an old value | `--patch` | Supply concrete JSON Pointer paths and guard dependent edits with `test`. |
+| Remove a metadata key | `--unset` or `--unset-path` | Deletion and assigning null have different effects. |
+| Change the explanation | `--set-body` or section flags | Review the prose and its references. |
 
-For this exercise the guarded patch changes `audience` from `user` to `contributor` and
-adds `worked-example` and `authoring` tags. A second application fails its initial test
-because the audience has already changed; the file should remain unchanged. A wrong audience
-value is an ontology issue, not proof that the Markdown format itself is invalid.
-
-Keep the temporary directory until you have inspected the results. None of these commands creates a
-review event or modifies the checked-in manual.
+See [edit](../commands/edit.md) for mutation flags and [selectors](../reference/selectors.md) for field reads. For queries that combine relationship attributes, projections, and facet counts, continue to [Query structured records and their relationships](query-structured-records.md).

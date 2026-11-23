@@ -156,12 +156,29 @@ repeated filters remain AND. Quoted strings and JSON arrays can contain the text
 becoming operators. An empty `tags` list and its `tags[]` traversal both count as present, although
 the latter has no selected element. Missing nested branches do not become selected empty lists.
 
+## Combine a primary query preset with CLI criteria
+
+`list` and `search` share their filters. Check that the manifest preset declares the chosen
+operation. For a preset named `with-owner` whose query contains `facet_filter: ["owner exists"]`,
+`okf search <bundle> --preset with-owner --text renewal` requires the field and the text.
+Supplying `--facet-filter 'status="open"'` replaces the entire inherited facet-filter list.
+To keep both, pass `--facet-filter 'owner exists' --facet-filter 'status="open"'`. Resolve
+type, tag, text, field, and facet-filter independently. Use `--clear-filter <category>` to
+remove an inherited category.
+
 ## Relationship filtering and snapshots
 
 Use explicit `--kind`, `--inverse-kind`, or `--preset` when the question needs a relationship subset.
 Authored kinds retain their meaning in incoming and outgoing queries; the related endpoint is the
 source for backlinks and the target for links. Edge predicates are evaluated on one occurrence.
 Expansion predicates affect expanded edges, not primary hits. Graph predicates constrain traversal.
+
+For a chain `Note → Defect → Feature`, use `graph <bundle> --root <feature-id> --direction
+incoming --depth 2` to inspect the neighborhood up to two hops away. To return just the notes
+that link to blocking defects, run `backlinks <feature-id> <bundle> --kind blocks --related-type Defect`,
+then `backlinks <defect-id> <bundle> --related-type Note` for each matching defect. This lets
+each hop use its own criteria. A graph filter applies at every hop. Check completeness at both
+steps before reporting all matching notes.
 
 Only declared metadata references create semantic edges. Inspect edge attributes together when
 conditions must belong to the same record. An inverse label does not assert acceptance or fulfillment.
@@ -172,3 +189,36 @@ A view with `extended_output: true` explicitly enables configured JSON projectio
 ordinary views preserve default machine output. Read records by kind and inspect expansion bounds.
 Historical reads must reopen the reported immutable identity; a changed working tree is not a
 substitute for unavailable historical evidence. The shared protocol owns snapshot/lock distinctions.
+
+## Run a saved read chain
+
+Choose a saved query when its starting set, hop directions, and filters answer a recurring
+question. Use direct `links` or `backlinks` for a one-off lookup with no matching definition.
+For example, the product bundle’s `metric-policies` query follows a metric to the policies
+it references. If finance owns the target policy, run:
+
+```sh
+okf query metric-policies metrics/revenue --bundle-id acme.product --scope-bundle acme.finance --json
+```
+
+Expect the projection for `acme.finance:/policies/margin-standard`. Check the examined scope
+and matching completeness before claiming these are all the policies. The
+[worked setup](../../init/references/multi-bundle.md#save-a-recurring-policy-lookup) shows the manifest.
+
+
+For a bundle defining `triage-notes` as incoming `blocks` from Defects followed by outgoing
+links to Notes, run `okf query triage-notes features/export --bundle-id acme.product --project owner --json`.
+A preset-start definition takes no concept argument. CLI filters such as `--tag urgent` apply to
+the final notes. Use `--outline` to discover a heading path and `--section '["Operations","Recovery"]'`
+to read it across matches. Check section warnings, stage counts and completeness in
+`saved-query-summary` and the operation trailer before making exhaustive claims. Older installations
+can use sequential links/backlinks and show with an outline and line range.
+
+For `strategy: outgoing`, examination counts cover documents reached by this local chain.
+A complete result supports a reachability claim within the selected scope. Use validation for
+a bundle-wide health claim.
+The `scope` strategy covers incoming hops, preset starts, explicit examination scope, and
+historical reads. In either strategy, a budget-deferred endpoint can leave later empty stages
+with partial matching. When a section path is missing or ambiguous, check its per-concept
+warning and `section_errors`, then inspect that concept’s outline. Other matches may still
+have delivered their sections.

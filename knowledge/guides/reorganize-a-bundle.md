@@ -17,65 +17,122 @@ sources:
 ---
 # Reorganize a bundle
 
-Use this guide when related records must move or disappear together. You need the CLI on PATH and
-the checked-in changeset artifact. The example has three starting records:
+Suppose `plans/current` is the maintained plan and `plans/obsolete` is ready to retire. A consumer still links to the obsolete plan. Move the maintained plan to its new name, redirect the consumer, and remove the obsolete plan in one reviewed changeset.
 
-| Record | Starting role | Final state |
-| --- | --- | --- |
-| `plans/current` | Maintained plan | Moved to `plans/revised` |
-| `plans/obsolete` | Superseded plan | Removed after references are retargeted |
-| `notes/consumer` | Links to the superseded plan | Links to `plans/revised` |
+## Create the starting records
 
-## Prepare the fixture and inspect a plan
-
-The [worked changeset](../references/changesets/reorganize.yaml) moves a current plan,
-retargets a consumer of an obsolete plan, and removes the obsolete record. Create the
-small fixture below in a disposable directory, from the repository root:
+In an empty working directory, initialize a bundle.
 
 ```sh
-demo_root=$(mktemp -d)
-okf init "$demo_root/bundle"
-okf add plans/current "$demo_root/bundle" --type Note --title "Current plan" --description "The current plan" --body "The maintained plan."
-okf add plans/obsolete "$demo_root/bundle" --type Note --title "Obsolete plan" --description "A superseded plan" --body "The old plan."
-okf add notes/consumer "$demo_root/bundle" --type Note --title "Plan consumer" --description "A plan dependency" --body '[Plan](../plans/obsolete.md)'
-okf changeset plan "$demo_root/bundle" --from @knowledge/references/changesets/reorganize.yaml --json
+okf init bundle
 ```
 
-## Review and apply the exact plan
+The starting bundle contains two plans and one note. Save each example under the indicated
+path, creating its parent directory if needed.
 
-Expect the preview to include the moved plan, removal of the obsolete plan, and a rewritten consumer
-link. The fixture must still be unchanged after the preview.
+**File: `bundle/plans/current.md`**
 
-Inspect the file diffs and returned `base_digest`. Copy that exact value into `base_digest`
-below, then apply the unchanged document against the same fixture:
+```markdown
+---
+type: Note
+title: Current plan
+description: The current plan
+---
+The maintained plan.
+```
+
+**File: `bundle/plans/obsolete.md`**
+
+```markdown
+---
+type: Note
+title: Obsolete plan
+description: A superseded plan
+---
+The old plan.
+```
+
+**File: `bundle/notes/consumer.md`**
+
+```markdown
+---
+type: Note
+title: Plan consumer
+description: A plan dependency
+---
+[Plan](../plans/obsolete.md)
+```
+
+## Describe and preview the changes
+
+Save the [worked changeset](../references/changesets/reorganize.yaml) beside the bundle. The operation order puts the destination in place before redirecting references to it.
+
+**File: `reorganize.yaml`**
+
+```yaml
+version: 1
+operations:
+  - op: move
+    from: plans/current
+    to: plans/revised
+  - op: retarget
+    from: plans/obsolete
+    to: plans/revised
+  - op: remove
+    path: plans/obsolete.md
+```
+
+Preview the diffs.
 
 ```sh
-base_digest=REPLACE_WITH_REVIEWED_BASE_DIGEST
-okf changeset apply "$demo_root/bundle" --from @knowledge/references/changesets/reorganize.yaml --expect "$base_digest"
-okf show notes/consumer "$demo_root/bundle"
-okf links notes/consumer "$demo_root/bundle"
-okf validate "$demo_root/bundle"
-okf lint "$demo_root/bundle" --fail-on error
+okf changeset plan bundle --from @reorganize.yaml --json
 ```
 
-The consumer should now link to `plans/revised`; `plans/current` and `plans/obsolete` should
-be absent. If another change invalidates the baseline, review a new plan rather than dropping
-`--expect`. Publication is journaled per file, not an atomic snapshot for concurrent readers.
-[Recovery](../reference/troubleshooting.md#recover-an-interrupted-write) handles interrupted writes.
+Look for the move to `plans/revised`, the changed link in `notes/consumer`, and removal of `plans/obsolete.md`. The preview leaves all three records in their original state. Copy `base_digest` from the `changeset-summary` after reviewing the diffs.
 
-For a single move use [mv](../commands/mv.md). Splits require explicit consumer mappings;
-automatic cross-bundle move orchestration is not provided. Curated indexes need editorial
-attention: [docs](../commands/docs.md) index generation replaces their prose.
+## Apply and check the reviewed plan
 
-## Resolve a conflict or unexpected result
+Replace `REVIEWED_BASE_DIGEST` with the value you just copied. Use the same bundle and changeset file.
 
-| Result | Next step |
+```sh
+okf changeset apply bundle --from @reorganize.yaml --expect REVIEWED_BASE_DIGEST
+```
+
+Read the consumer.
+
+```sh
+okf show notes/consumer bundle --body
+```
+
+The note now points to the revised plan:
+
+```markdown
+[Plan](../plans/revised.md)
+```
+
+Confirm that the target resolves:
+
+```sh
+okf links notes/consumer bundle
+```
+
+The result should identify `/plans/revised` as an existing target. Check the final bundle.
+
+```sh
+okf validate bundle
+```
+
+```sh
+okf lint bundle --fail-on error
+```
+
+## Handle a conflict or incomplete move
+
+| Result | Action |
 | --- | --- |
-| Baseline no longer matches | Inspect the intervening changes and create a fresh plan; keep `--expect`. |
-| Destination already exists | Choose a free destination or explicitly reconcile the two records. |
-| Dangling-reference check fails | Add the missing retarget or retain the referenced record until its consumers are handled. |
-| Publication was interrupted | Inspect the journal and use [changeset recover](../commands/changeset-recover.md); do not delete coordination files to force a retry. |
+| Baseline changed since the preview | Inspect the intervening changes. Run the plan again and review the new diffs and digest before applying. |
+| Destination already exists | Choose a free destination or reconcile the two records explicitly. |
+| Dangling-reference check fails | Add the missing retarget or retain the old record until you have handled its consumers. |
+| Publication was interrupted | Use [changeset recovery](../reference/troubleshooting.md#recover-an-interrupted-write) to inspect the journal and recover the per-file writes. |
 
-For your own bundle, start with an explicit old-to-new mapping and inspect incoming links. The tool
-can apply that mapping; it cannot infer which destination each consumer of a split record should
-use. Review curated navigation after a move, as well as concept-to-concept links.
+For a single move, use [mv](../commands/mv.md). When splitting a record, decide which new concept each consumer needs. Inspect references across the relevant bundles and coordinate their edits separately. Review curated navigation after a move. The [docs](../commands/docs.md) index generator replaces the prose in indexes it regenerates.

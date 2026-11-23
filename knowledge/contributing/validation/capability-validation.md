@@ -7,8 +7,9 @@ description: Multi-bundle and structured metadata validation.
 # Multi-bundle and structured metadata validation
 
 This audit exercises the implemented contracts in [multi-bundle capability](../design/multi-bundle-capability.md)
-and [structured metadata capability](../design/structured-metadata-capability.md). Provisional examples are
-interpreted using each document's implemented-interface section and the current CLI schema.
+and [structured metadata interpretation](../design/structured-metadata-capability.md). The
+structured fixture comes from the [worked guide](../../guides/query-structured-records.md).
+The current CLI schema supplies the command and output contracts.
 Tests use isolated temporary bundles and local Git repositories. No real remote content is fetched.
 
 The matrices below map the specified scenario families to executable assertions, including negative

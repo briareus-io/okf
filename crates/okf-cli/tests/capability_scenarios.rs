@@ -100,10 +100,9 @@ fn commit(root: &Path) -> String {
 }
 fn structured() -> tempfile::TempDir {
     let d = tempfile::tempdir().unwrap();
-    let doc =
-        include_str!("../../../knowledge/contributing/design/structured-metadata-capability.md");
+    let doc = include_str!("../../../knowledge/guides/query-structured-records.md");
     let ontology = doc
-        .split("```yaml\n# tooling/product-ontology.yaml\n")
+        .split("```yaml\n# ontology.yaml\n")
         .nth(1)
         .unwrap()
         .split("```")

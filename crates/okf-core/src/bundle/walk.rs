@@ -9,6 +9,15 @@ use crate::error::{OkfError, Result};
 
 const EXCLUDED_DIRS: &[&str] = &[".git", ".okf-transaction"];
 
+/// Direct concept lookups used for traversal must honor the walker's directory exclusions.
+pub fn is_excluded_directory_path(relative: &Path) -> bool {
+    relative.components().any(|part| {
+        part.as_os_str()
+            .to_str()
+            .is_some_and(|name| EXCLUDED_DIRS.contains(&name))
+    })
+}
+
 /// Walk every regular file below `root`, in bundle-relative order.
 pub fn walk_files(root: &Path) -> Result<Vec<PathBuf>> {
     if !root.is_dir() {

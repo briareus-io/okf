@@ -10,7 +10,7 @@ sources:
 ---
 # okf learn purge
 
-Delete managed counts and drafts and disable collection. See the [local feedback capability](../contributing/design/local-feedback.md).
+Delete managed counts and drafts and disable collection. See the [feedback guide](../guides/capture-local-feedback.md).
 
 ## Arguments
 

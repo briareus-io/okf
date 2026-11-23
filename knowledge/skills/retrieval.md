@@ -5,6 +5,7 @@ uses:
 - /commands/catalog
 - /commands/browse
 - /commands/search
+- /commands/query
 - /commands/show
 - /commands/links
 - /commands/backlinks
@@ -37,6 +38,12 @@ The workflow connects [browse](../commands/browse.md), [search](../commands/sear
 [computation check](../commands/computation-check.md),
 [artifact resolve](../commands/artifact-resolve.md), and
 [artifact show](../commands/artifact-show.md).
+
+For recurring relationship questions, inspect the bundle’s saved queries. A concept-start
+query takes a starting ID. A preset-start query gets its starting concepts from the preset.
+Use `--project` to return endpoint properties or `--section '["Operations","Recovery"]'`
+to read the same heading path across matches. Check matching and delivery separately,
+including any per-document section warnings. See [Save and run a query](../guides/save-and-run-queries.md).
 
 Use `links --details` when outgoing kinds, inverse labels, attributes and concrete field paths
 matter; use `backlinks --details` for incoming assertions. Preserve repeated semantic occurrences.

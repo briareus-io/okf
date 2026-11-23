@@ -10,7 +10,7 @@ sources:
 ---
 # okf learn report
 
-Rank affected invocations within each command and CLI version. See the [local feedback capability](../contributing/design/local-feedback.md).
+Rank affected invocations within each command and CLI version. See the [feedback guide](../guides/capture-local-feedback.md).
 
 ## Arguments
 

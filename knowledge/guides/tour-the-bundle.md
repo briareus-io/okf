@@ -30,13 +30,21 @@ scenarios use the separate disposable fixtures described below.
 
 ```sh
 okf catalog --json
+```
+
+The catalog identifies this manual as `okf.docs`. Inspect its effective configuration:
+
+```sh
 okf bundle context knowledge --json
+```
+
+The context includes lint policy, views, presets, and available workflows. To read the instructions for checking this manual, select its workflow:
+
+```sh
 okf bundle context knowledge --workflow check-documentation --json
 ```
 
-The catalog supplies `okf.docs`; the manifest supplies lint policy, views, explicit query presets,
-and guidance. The selected workflow returns its instructions and supporting-file origin without
-executing checks. Its instruction file lives in the support directory, which ordinary concept
+The response includes the selected workflow’s instructions and supporting-file origin. Its instruction file lives in the support directory, which ordinary concept
 queries exclude. Inspect it deliberately:
 
 ```sh
@@ -62,13 +70,21 @@ okf list --bundle-id okf.docs --preset writing-commands --view commands --full-s
 
 ```sh
 okf backlinks commands/refresh knowledge --details
+```
+
+Incoming relationships include the maintenance guide and update skill. Inspect the maintenance guide from the other end:
+
+```sh
 okf links guides/maintain-source-backed-knowledge knowledge --details
+```
+
+Its outgoing edges identify commands the guide uses and concepts it explains. To see these neighbors together, render the one-hop graph:
+
+```sh
 okf graph knowledge --root guides/maintain-source-backed-knowledge --direction outgoing --depth 1
 ```
 
-Expect the maintenance guide and update skill among incoming uses. Outbound guide edges connect
-to its commands and explanations. The ontology labels `uses` edges and their incoming `used-by`
-view. Body links and declared metadata are distinct evidence.
+The graph shows the guide and its direct neighbors. The ontology labels `uses` edges and their incoming `used-by` view.
 
 To select only guides with an authored `uses` relationship, rather than every ordinary backlink:
 
@@ -109,34 +125,21 @@ it does not decide whether the prose needs changing. Follow the
 
 ```sh
 okf bundle validate knowledge
+```
+
+Expect `manifest: valid`. To check the concepts with the bundle tooling profile, run:
+
+```sh
 okf validate knowledge --profile bundle
+```
+
+Expect `conformant: no violations`. To check the manual against its configured lint policy, run:
+
+```sh
 okf lint knowledge --fail-on any --json
 ```
 
-These check different contracts. The manifest preserves `source_unrecorded: off` because the manual
-records provenance without maintaining every source fingerprint; missing-source checks remain active.
-Core-profile validation additionally sees the support Markdown and is a separate interchange check.
-Repository-wide `python3 scripts/check-docs.py` verifies this live configuration and runs disposable
-examples for authoring, migration, views, workflow inputs, relationship presets, and recovery. The
-plugin workflow checks exercise remote planning against a local Git fixture without fetching a real
-upstream. Destructive examples and dependency acquisition belong in those isolated fixtures, not in
-ordinary reads of this manual.
-
-## Capability coverage
-
-The live manual and disposable examples serve different purposes:
-
-| Capability | Showcase | Executable evidence |
-| --- | --- | --- |
-| Portable configuration and default selection | This bundle's manifest and `okf.docs` catalog registration | Documentation checks assert the preserved lint policy and views. |
-| Guidance, instruction files, and named workflows | This bundle's check workflow; customization scratch bundle | Context identity, supplied/defaulted inputs, inspection roles, and hidden support files are checked. |
-| Views, typed queries, and presets | Commands and guides in this manual | Named writer/guide presets and projection records are checked. |
-| Relationship kinds, inverses, and expansion | Real guide/skill `uses` edges; blocking-defects fixture | Exact semantic filters, ordinary-link contrast, and expansion completeness are checked. |
-| Provenance and source impact | Command pages cite implementation paths | Affected analysis and source namespace behavior are checked without manufacturing verification. |
-| Authoring, migration, and recovery | Disposable bundles in the worked guides | Example commands and resulting artifacts are checked without mutating the manual. |
-| Remote acquisition and reviewed updates | Isolated local-Git fixtures | CLI/core tests check locks, plan/apply, integrity, scope, and read-only behavior; ordinary manual reads need no network. |
-
-Keep this coverage tied to behavior, not merely the number of command pages. Add a runnable example
-and an outcome assertion when a major feature is introduced. Live private-host authentication and
-agent judgment require separate integration/evaluation environments; neither is established by a
-successful local fixture or by a relationship declaring that a guide uses a command.
+The lint output reports any actionable findings, and `--fail-on any` makes them fail the
+command. The manual records source provenance without requiring a fingerprint for every
+source. Missing-source checks still apply. See [troubleshooting](../reference/troubleshooting.md)
+for help interpreting a finding.

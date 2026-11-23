@@ -25,6 +25,7 @@ Start with a task below. Each page owns its exact arguments and supported global
 - [okf ontology show](ontology-show.md) — Shows one concept type's fields and typed reference rules with cardinality.
 - [okf resolve](resolve.md) — Resolves a link or concept id to a concrete bundle-relative file path.
 - [okf search](search.md) — Searches concepts by type, tag, free text, and/or frontmatter field, returning matching concept records.
+- [okf query](query.md) — Run a named chain of concept and relationship reads.
 - [okf show](show.md) — Shows a concept in full, as a heading outline with line numbers, or as a selected line range.
 
 ## Check quality, freshness and impact

@@ -14,6 +14,7 @@
 - [links](../../../references/commands/links.md)
 - [resolve](../../../references/commands/resolve.md)
 - [search](../../../references/commands/search.md)
+- [query](../../../references/commands/query.md)
 - [show](../../../references/commands/show.md)
 - [list](../../../references/commands/list.md)
 - [ontology list](../../../references/commands/ontology-list.md)

@@ -10,7 +10,7 @@ sources:
 ---
 # okf learn enable
 
-Enable fixed-outcome counting after interactive consent. See the [local feedback capability](../contributing/design/local-feedback.md).
+Enable fixed-outcome counting after interactive consent. See the [feedback guide](../guides/capture-local-feedback.md).
 
 ## Arguments
 

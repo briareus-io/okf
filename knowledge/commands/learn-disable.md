@@ -10,7 +10,7 @@ sources:
 ---
 # okf learn disable
 
-Stop counting and retain managed feedback. See the [local feedback capability](../contributing/design/local-feedback.md).
+Stop counting and retain managed feedback. See the [feedback guide](../guides/capture-local-feedback.md).
 
 ## Arguments
 

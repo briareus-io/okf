@@ -10,7 +10,7 @@ sources:
 ---
 # okf learn export
 
-Preview a local destination and draft, then confirm the exact copy. See the [local feedback capability](../contributing/design/local-feedback.md).
+Preview a local destination and draft, then confirm the exact copy. See the [feedback guide](../guides/capture-local-feedback.md).
 
 ## Arguments
 

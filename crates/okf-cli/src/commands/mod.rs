@@ -16,6 +16,7 @@ pub mod ontology;
 pub mod query;
 pub mod read_guard;
 pub mod render;
+mod saved_query;
 pub mod schema;
 
 use crate::cli::{ArtifactCmd, Cli, Command, ComputationCmd, OntologyCmd};
@@ -297,6 +298,7 @@ pub fn run(mut cli: Cli) -> Result<i32> {
         Command::Version => schema::run_version(json),
         // QUERY
         Command::List(a) => query::run_list(a, json),
+        Command::Query(_) => unreachable!("saved queries run with resolved bundle context"),
         Command::Search(a) => query::run_search(a, json),
         Command::Show(a) => query::run_show(a, json),
         Command::Browse(a) => query::run_browse(a, json),

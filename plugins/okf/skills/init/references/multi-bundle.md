@@ -63,6 +63,12 @@ settings:
   facets:
     fields: [type, "tags[]"]
     max_distinct_values: 100
+  saved_queries:
+    metric-policies:
+      from: concept
+      steps:
+        - links: {related_type: [Policy]}
+      select: [title, description]
 ```
 
 Catalog locations resolve from the catalog file; manifest paths resolve from the bundle root.
@@ -133,6 +139,26 @@ command's supported options rather than assuming every mutation accepts scope.
 Use explicit `--bundle-id` throughout catalog work. `OKF_BUNDLE` stays path-only, and an explicit
 bundle path conflicts with `--bundle-id`. Use core-profile validation separately when assessing
 interchange with readers that do not understand the support namespace.
+
+## Save a recurring policy lookup
+
+The product manifest above includes an optional `metric-policies` definition under
+`settings.saved_queries`. Its `links` hop follows ordinary references from the metric and
+keeps Policy targets. Use a `kind` filter when the ontology declares the desired relationship.
+
+After saving the manifest, validate it, reload the affected context, then run from the workspace
+root. With the product and finance fixtures above, both references reach the same policy, so
+the query yields one projection for `acme.finance:/policies/margin-standard`.
+
+```sh
+okf bundle validate --bundle-id acme.product
+okf bundle context --bundle-id acme.product --scope-bundle acme.finance --operation query --json
+okf query metric-policies metrics/revenue --bundle-id acme.product --scope-bundle acme.finance --json
+```
+
+Use `--body` in place of the saved projection when you need the policy prose. Check
+`okf query --help` on the readers that will use the manifest. Older CLIs can reject
+`settings.saved_queries` while loading a bundle.
 
 ## Separate repositories
 

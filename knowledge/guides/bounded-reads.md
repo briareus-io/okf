@@ -43,6 +43,11 @@ For human navigation, an outline is often cheaper to consume than another broad 
 
 ```sh
 okf show reference/command-contracts knowledge --outline
+```
+
+The outline lists headings with line numbers. Use them to choose a passage. For example, to inspect the first 20 document lines:
+
+```sh
 okf show reference/command-contracts knowledge --lines 1:20
 ```
 
@@ -53,13 +58,15 @@ outline to choose a relevant window rather than assuming the first lines contain
 
 ```sh
 okf search knowledge --type Command --scan-limit 1 --limit 1 --json
+```
+
+Only one eligible document is examined. The scan-limit warning and partial examination explain why an empty result here cannot establish absence. To remove the scan budget while keeping the one-result page:
+
+```sh
 okf search knowledge --type Command --full-scan --limit 1 --json
 ```
 
-The first invocation examines at most one eligible document. In this manual it reports a scan-limit
-warning and partial examination even though the process exits zero. Its match count cannot establish
-the total number of commands. The second invocation removes the scan budget and reports complete
-examination while still displaying only one result.
+The second search reports complete examination and displays just one match.
 
 For a complete unpaginated inventory:
 
@@ -74,6 +81,11 @@ are alternative choices; an unavailable requested bundle still limits what can b
 
 ```sh
 okf search knowledge --type Command --full-scan --sort id --limit 5 --offset 0 --json
+```
+
+This returns the first five IDs in order. Request the next five by advancing the offset:
+
+```sh
 okf search knowledge --type Command --full-scan --sort id --limit 5 --offset 5 --json
 ```
 
@@ -86,20 +98,30 @@ is often simpler for an automation that needs all records.
 
 ```sh
 okf search knowledge --type Guide --text "Maintain source-backed knowledge" --in title --expand uses --expansion-edges 1 --json
+```
+
+The guide matches, but it uses several commands. The expansion summary records that only one edge was delivered. To bound a file read in bytes instead:
+
+```sh
 okf artifact show references/changesets/reorganize.yaml knowledge --max-bytes 32 --json
 ```
 
-The guide's primary match is complete, but the expansion summary reports truncation because
-it uses more than one command. The artifact result similarly sets `truncated: true`; 32 bytes
-cannot contain the whole changeset. Neither omission means the missing material does not exist.
+The artifact record sets `truncated: true` because the changeset is longer than 32 bytes.
 
 Retrieve the needed command directly, increase the relevant expansion bound, or read the small
 artifact in full:
 
 ```sh
 okf show commands/affected knowledge
+```
+
+The concept output contains the affected-command documentation. To retrieve the complete changeset file, use:
+
+```sh
 okf artifact show references/changesets/reorganize.yaml knowledge --json
 ```
+
+The artifact record contains the full example changeset and reports its byte count.
 
 ## Measure before choosing a performance budget
 

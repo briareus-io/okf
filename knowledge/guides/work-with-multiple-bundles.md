@@ -2,6 +2,7 @@
 type: Guide
 audience: user
 uses:
+- /commands/query
 - /commands/init
 - /commands/add
 - /commands/catalog
@@ -16,24 +17,42 @@ description: Register local bundles and request cross-bundle examination deliber
 ---
 # Work with multiple bundles
 
-Use separate bundles when ownership, access, or distribution differs. A second reading
-path alone does not require another bundle: this repository uses one manual for readers
-and contributors. This exercise creates two disposable bundles so you can see selection
-and scope independently. You need `okf` on PATH and a POSIX shell.
+A product overview refers to a retention rule owned by a policy team. You can keep each
+team's knowledge in a separate bundle and still inspect the relationship. Start in an empty
+working directory. Run each command from the directory that will contain the two bundles.
 
 ## Create two bundles and a local catalog
 
-Run the entire block in one shell. It changes into a temporary directory and does not modify this
-repository's configuration. Create the bundles before adding the catalog:
+Create the product bundle.
 
 ```sh
-demo_root=$(mktemp -d)
-cd "$demo_root"
 okf init product
+```
+
+Create its sibling, the policy bundle.
+
+```sh
 okf init policy
+```
+
+Give each bundle a concept containing the word “retention”. That shared term lets you see
+which bundles a search examined.
+
+```sh
 okf add notes/overview product --type Note --title "Product overview" --description "Product responsibilities" --body "Product teams follow the shared retention rule."
+```
+
+Add the rule to the policy team's bundle.
+
+```sh
 okf add policies/retention policy --type Policy --title "Retention rule" --description "Retention requirements" --body "Keep sample records for 30 days."
-cat > okf-catalog.yaml <<'YAML'
+```
+
+Register the two sibling directories in a workspace catalog.
+
+**File: `okf-catalog.yaml`**
+
+```yaml
 catalog_version: 2
 default_bundle: demo.product
 bundles:
@@ -41,43 +60,59 @@ bundles:
     location: {type: directory, path: product}
   demo.policy:
     location: {type: directory, path: policy}
-YAML
+```
+
+Inspect the registrations.
+
+```sh
 okf catalog --json
 ```
 
 Expect two available registrations. The CLI discovers `okf-catalog.yaml` from the working
-directory upward; each location is relative to that catalog. The roots are siblings rather
-than overlapping directories. These IDs identify local registrations, not authenticated
-publishers. Existing TOML configurations remain supported during compatibility; see the
-[migration guide](../reference/migrations/0.6.0.md) when updating an older workspace.
+directory upward. Each location is relative to the catalog. Use distinct, non-overlapping
+roots for separate registrations. For an older workspace configured with TOML, see the
+[migration guide](../reference/migrations/0.6.0.md).
 
 ## Observe selection before extending scope
 
-Stay in the same shell and directory:
+Search the product bundle. Its overview should be the only matching concept.
 
 ```sh
 okf search --bundle-id demo.product --text retention --json
+```
+
+Now include the policy bundle in examination scope.
+
+```sh
 okf search --bundle-id demo.product --scope-bundle demo.policy --text retention --json
 ```
 
-The first query examines only product and finds its overview. The second also examines
-policy and finds the retention rule. Inspect the query summary and scope records; adding a
-catalog entry did not silently expand the first search. A trailing bundle path is an
-alternative to `--bundle-id`, not something to combine with it.
+Expect a second result, the retention rule. The query summary and scope records identify the
+examined bundles and the number of matches. To select by path instead of catalog ID, give
+search the bundle directory as its positional argument.
 
 ## Add a cross-bundle link and inspect it
 
 Use a logical authored reference when the link should follow catalog identity even if a checkout
-moves:
+moves. Update the overview to link to the policy by catalog ID.
 
 ```sh
 okf edit notes/overview --bundle-id demo.product --set-body 'Product teams follow the [retention rule](okf://demo.policy/policies/retention.md).'
+```
+
+Inspect the overview’s outgoing link. Its target belongs to `demo.policy`.
+
+```sh
 okf links notes/overview --bundle-id demo.product --scope-bundle demo.policy --details --json
+```
+
+Starting from that policy, find its referring concepts.
+
+```sh
 okf backlinks demo.policy:/policies/retention --bundle-id demo.product --scope-bundle demo.policy --details --json
 ```
 
-Expect an outbound edge to the policy and an incoming reference from the overview. The
-stored Markdown uses `okf://demo.policy/policies/retention.md`. The qualified target in the
+Expect an incoming reference from the overview. The stored Markdown uses `okf://demo.policy/policies/retention.md`. The qualified target in the
 last command is CLI syntax, not an alternative spelling for the authored URI.
 
 An ordinary relative link, `../../policy/policies/retention.md`, is also valid from the overview
@@ -88,6 +123,75 @@ and available target. See [remote dependencies](remote-dependencies.md) for lock
 Copying product alone cannot make its policy target available. Registering a missing directory
 preserves diagnostic evidence; the CLI does not clone or fetch it, and an unavailable member cannot
 support a claim of complete coverage.
+
+## Run a saved query across bundles
+
+To repeat the policy lookup, define the query in the product bundle. Its single outgoing hop
+keeps concepts of type `Policy` and returns their titles.
+
+**File: `product/okf-bundle.yaml`**
+
+```yaml
+manifest_version: 1
+settings:
+  saved_queries:
+    referenced-policies:
+      from: concept
+      steps:
+        - links: {related_type: [Policy]}
+      select: [title]
+```
+
+Start at the product overview and include the policy bundle in scope:
+
+```sh
+okf query referenced-policies notes/overview --bundle-id demo.product --scope-bundle demo.policy --json
+```
+
+Expect one projection with bundle `demo.policy`, ID `/policies/retention`, and title
+`Retention rule`. The primary bundle supplies the definition and starting ID. The scope flag
+allows the hop to read the target in the second bundle.
+
+## Record the policy as a source
+
+A source can carry both an ordinary resource path and the catalog identity it is intended
+to address. From the same scratch directory, save this mapping. An ordinary relative resource and a qualified target point to the same file.
+
+**File: `retention-source.yaml`**
+
+```yaml
+id: retention
+resource: ../../policy/policies/retention.md
+bundle_ref:
+  id: demo.policy
+  path: policies/retention.md
+```
+
+Attach this source to the overview.
+
+```sh
+okf edit notes/overview --bundle-id demo.product --add-source-json @retention-source.yaml
+```
+
+Inspect the source edge alongside the body link.
+
+```sh
+okf links notes/overview --bundle-id demo.product --scope-bundle demo.policy --details --json
+```
+
+The relative resource starts at `product/notes/`. The `bundle_ref.path` starts at the
+policy bundle root. They should resolve to the same file. Inspect the source edge's
+`status`, `evidence`, and qualified target. If the paths disagree, correct the mapping
+before citing it. For a URL with a declared local mapping, an unchecked-equivalence result
+means you still need independent evidence that the two resources correspond.
+
+For a version-specific source, add a `snapshot` mapping under `bundle_ref`. An exact
+`commit` identifies a Git object and a SHA-256 `digest` identifies the referenced file's
+raw bytes. A `ref` or `label` can help locate the intended version. Inspect the snapshot's
+status, resolved identity, and separately labeled current candidate before opening the
+evidence. A missing local revision or mismatched digest means you cannot claim a match.
+Scope records identify any historical target examined separately. An ordinary Markdown
+link in the same document still follows its own destination.
 
 ## Apply this to a real workspace
 

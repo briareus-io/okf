@@ -519,6 +519,7 @@ fn settings_view(context: &manifest::BundleContext, detail: &str) -> Result<(Val
         || context.selection.all;
     for operation in &context.selection.operations {
         let relevant: &[&str] = match operation.as_str() {
+            "query" => &["saved_queries", "query_presets", "query"],
             "list" | "search" => &["views", "facets", "query_presets", "query"],
             "links" | "backlinks" | "graph" => &["query_presets", "query"],
             "show"

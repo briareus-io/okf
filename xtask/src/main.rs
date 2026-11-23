@@ -68,7 +68,7 @@ fn main() {
         }
         Some("install") => {
             eprintln!(
-                "OKF CLI/plugin 0.6.10 adds a custom local feedback directory via OKF_FEEDBACK_DIR. The plugin requires CLI >=0.6.8, <0.7.0. Review releases/0.6.10.md and knowledge/reference/migrations/0.6.0.md before installing."
+                "OKF CLI/plugin 0.6.11 adds saved queries and named section reads. Upgrade readers before adding settings.saved_queries to shared manifests. The plugin requires CLI >=0.6.8, <0.7.0. Review releases/0.6.11.md and knowledge/reference/migrations/0.6.0.md before installing."
             );
             if local_signing::enabled() {
                 let install_root = local_signing::install_root(&root);
@@ -219,6 +219,8 @@ fn run_docs(check: bool) {
             .is_some_and(|args| args.iter().any(|arg| arg["name"] == "bundle"));
         let invocation_note = if cmd["name"] == "schema" {
             "This command is always NDJSON; `--json` is accepted but unnecessary."
+        } else if cmd["name"] == "query" {
+            "Use `--bundle <path>` or `--bundle-id <id>` to select the primary bundle. Global `--json` requests NDJSON."
         } else if cmd["name"] == "format" {
             "Global `--json` requests NDJSON. `--bundle <path>` selects a directory; the optional \
              positional is a concept ID, not a bundle path. `--bundle-id` selects a catalog identity. \
@@ -574,6 +576,7 @@ fn command_example(name: &str) -> &'static str {
         "ontology apply" => {
             "knowledge --from '{field_types: {money: {base: int, min: 0}}}' --dry-run"
         }
+        "query" => "triage-notes features/export --bundle-id acme.product --project owner --json",
         "show" => "policies/review knowledge --lines 1:5 --json",
         "search" => {
             "--bundle-id acme.a --scope-bundle acme.b --type Policy --sort id --full-scan --limit 10 --json"
@@ -744,7 +747,7 @@ fn command_guidance(name: &str) -> &'static str {
         }
         "show" => {
             "Without `--json`, show includes the serialized frontmatter and full Markdown body. \
-            Plain `show --json` returns metadata only: frontmatter plus `id`, `trust_tier`, \
+            Use `--section '[\"Operations\",\"Recovery\"]'` for a unique full heading path. Plain `show --json` returns metadata only: frontmatter plus `id`, `trust_tier`, \
             `effective_status`, `effective_generated_at`, `latest_verified_at`, and \
             `verification_current`. It does not include the body. `--outline --json` returns \
             `headings` with `line`, `level`, and `text`; `--lines START:END --json` returns \

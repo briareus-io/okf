@@ -26,6 +26,12 @@ Search text must follow `--text`; the positional argument to search is the bundl
 use `okf list <bundle> --json` for an intended inventory. Use `okf browse <bundle> --directory
 <directory>` to descend; its positional is also the bundle.
 
+When the question matches a saved read chain, inspect its start and hops in
+`okf bundle context <bundle> --operation query --settings-detail compact --json`.
+Use `okf query <name> <concept-id> --bundle <bundle>` for a concept start. Omit the concept
+ID for a preset start. Select properties or prose on the final matches. See the
+[worked example](references/query-planning.md#run-a-saved-read-chain).
+
 ## Progressive disclosure
 
 For JSON operations, require the versioned `operation-start` and
@@ -64,7 +70,8 @@ concept's authored lifecycle `status`.
    use that line to request a small `show --lines` window. Treat snippets as navigation evidence,
    not enough context to answer from.
 4. Read a small candidate directly with `okf show <concept-id> <bundle>`. For large concepts, use
-   `okf show <concept-id> <bundle> --outline`, then `--lines <START:END>` around relevant sections.
+   `okf show <concept-id> <bundle> --outline`, then `--section '["Operations","Recovery"]'`
+   for a named subsection or `--lines <START:END>` around a match.
    Plain `show --json` contains metadata, not the body. For a small concept's prose alone, use
    `okf show <concept-id> <bundle> --body`; `--body --json` provides an explicit body record.
    `okf show <concept-id> <bundle> --numbered` (short form `-n`) uses the same document numbering

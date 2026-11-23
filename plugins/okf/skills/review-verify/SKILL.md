@@ -37,7 +37,8 @@ authority.
    use `--fail-on any` for a health gate and inspect the findings either way. Kind-less sources are
    not fingerprint-checked. Review evidence directly; do not refresh merely to make checks green.
 2. Read the complete relevant document, using `okf show <concept-id> <bundle> --outline`, then `okf
-   show <concept-id> <bundle> --lines <START:END>` when large. The concept argument is required even
+   show <concept-id> <bundle> --lines <START:END>` when large. Use `--section` with the full
+   path from the outline to read one named subsection at a time. The concept argument is required even
    when `OKF_BUNDLE` is set. Plain `show --json` is metadata only. Review all material claims,
    including tables, footnotes, and qualifications, against declared sources, applicable `resource`,
    and linked concepts. For sliced reads, track sections/claims covered and continue through the

@@ -11,7 +11,7 @@ sources:
 ---
 # CLI globals and record contracts
 
-Generated from `okf schema` for CLI 0.6.10. See the [command index](../commands/index.md) for individual arguments and [command contracts](command-contracts.md) for shared behavior.
+Generated from `okf schema` for CLI 0.6.11. See the [command index](../commands/index.md) for individual arguments and [command contracts](command-contracts.md) for shared behavior.
 
 Commands with a human form accept global `--json` for NDJSON; `schema` is always NDJSON. Most bundle-aware commands take an optional trailing `bundle` path or a separate `--bundle-id` selector; `format` uses `--bundle <path>` and an optional concept ID positional. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Catalog registration alone does not extend examination scope. Meta commands have no bundle, and `source-scan` takes an explicit arbitrary directory.
 
@@ -392,11 +392,29 @@ Scope and effective settings are interpretation context, not authored concept me
     "total_matches": "integer|null",
     "unresolved_candidates": "integer (scoped)"
   },
+  "saved-query-summary": {
+    "delivery_complete": "boolean",
+    "examination": "object",
+    "matching_complete": "boolean",
+    "name": "string",
+    "observed_matches": "integer",
+    "section_errors": "integer",
+    "stages": "array",
+    "strategy": "outgoing|scope",
+    "unresolved": "integer"
+  },
   "scope": {
     "examined": "array<{id:string,root:path,version:string,interpretation:interpretation-settings}>",
     "requested": "array<string>",
     "snapshot_examined": "array<qualified_identity> (optional)",
     "unavailable": "array<string>"
+  },
+  "section": {
+    "end": "integer",
+    "id": "string",
+    "path": "array<string>",
+    "start": "integer",
+    "text": "string"
   },
   "snapshot-context": {
     "evidence": "array<object>"

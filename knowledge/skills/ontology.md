@@ -47,6 +47,10 @@ Check modeled relationships with `links --details` on the declaring concept and
 `backlinks --details` on the target. Confirm both views preserve each record's attributes and
 configured inverse without introducing additional authored edges.
 
+When renaming a relationship kind or inverse label, check which saved-query hops filter on it.
+Rerun those chains with known endpoints to catch definitions that still validate but return
+different results. [Save and run a query](../guides/save-and-run-queries.md)
+
 Structured authoring follows the ontology skill's shared example. Use structured declaration
 YAML/file inputs and bulk apply for dependent schemas; use concept `--set-yaml`, object paths,
 or RFC 6902 patches for frontmatter. Review dry-run and actual diffs, preserve source lineage,
