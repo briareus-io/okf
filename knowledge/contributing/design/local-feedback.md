@@ -127,3 +127,5 @@ that a successful workflow can produce a manual request without enabling collect
 between preview and confirmation, try a different destination, and attempt a repeated export.
 Verify that purging leaves the exported file intact. See the
 [feedback skill](../../skills/feedback.md) and [commands](../../commands/index.md).
+
+Set `OKF_FEEDBACK_DIR` to an absolute UTF-8 path to use that exact directory for drafts, consent, and counts. Unset it to use the platform default. Changing directories does not move existing feedback.

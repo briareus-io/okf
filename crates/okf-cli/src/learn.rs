@@ -166,6 +166,15 @@ impl Default for State {
 }
 
 fn location() -> Result<PathBuf> {
+    if let Some(directory) = std::env::var_os("OKF_FEEDBACK_DIR") {
+        let directory = PathBuf::from(directory);
+        if !directory.is_absolute() || directory.to_str().is_none() {
+            return Err(OkfError::Usage(
+                "OKF_FEEDBACK_DIR must be an absolute UTF-8 path".into(),
+            ));
+        }
+        return Ok(directory);
+    }
     let env_path = |key| {
         std::env::var_os(key)
             .map(PathBuf::from)

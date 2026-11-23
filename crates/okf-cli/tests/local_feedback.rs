@@ -5,16 +5,19 @@ use std::path::Path;
 use std::process::{Command, Output};
 
 fn run(home: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_okf"))
-        .current_dir(home)
+    command(home).args(args).output().unwrap()
+}
+
+fn command(home: &Path) -> Command {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_okf"));
+    cmd.current_dir(home)
         .env("HOME", home)
         .env("LOCALAPPDATA", home)
         .env("XDG_STATE_HOME", home)
         .env_remove("OKF_BUNDLE")
         .env_remove("OKF_CATALOG")
-        .args(args)
-        .output()
-        .unwrap()
+        .env_remove("OKF_FEEDBACK_DIR");
+    cmd
 }
 
 fn data(home: &Path, args: &[&str]) -> Value {
@@ -32,6 +35,31 @@ fn data(home: &Path, args: &[&str]) -> Value {
     assert_eq!(rows[0]["kind"], "operation-start");
     assert_eq!(rows.last().unwrap()["kind"], "operation-complete");
     rows[1]["data"].clone()
+}
+
+#[test]
+fn feedback_directory_override_uses_the_exact_path() {
+    let home = tempfile::tempdir().unwrap();
+    let root = home.path().join("custom feedback");
+    let mut cmd = command(home.path());
+    let result = cmd
+        .env("OKF_FEEDBACK_DIR", &root)
+        .args(["learn", "draft", "workflow-lesson"])
+        .output()
+        .unwrap();
+    assert!(result.status.success());
+    assert_eq!(root.join("drafts").read_dir().unwrap().count(), 1);
+    let status = data(home.path(), &["learn", "status", "--json"]);
+    assert!(!Path::new(status["directory"].as_str().unwrap()).exists());
+    for invalid in ["", "relative"] {
+        let result = command(home.path())
+            .env("OKF_FEEDBACK_DIR", invalid)
+            .args(["learn", "status"])
+            .output()
+            .unwrap();
+        assert!(!result.status.success());
+        assert!(String::from_utf8_lossy(&result.stderr).contains("OKF_FEEDBACK_DIR"));
+    }
 }
 
 #[test]

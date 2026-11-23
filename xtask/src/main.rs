@@ -68,7 +68,7 @@ fn main() {
         }
         Some("install") => {
             eprintln!(
-                "OKF CLI/plugin 0.6.9 adds private local feedback, synthetic drafting, and reviewed export. The plugin requires CLI >=0.6.8, <0.7.0. Review releases/0.6.9.md and knowledge/reference/migrations/0.6.0.md before installing."
+                "OKF CLI/plugin 0.6.10 adds a custom local feedback directory via OKF_FEEDBACK_DIR. The plugin requires CLI >=0.6.8, <0.7.0. Review releases/0.6.10.md and knowledge/reference/migrations/0.6.0.md before installing."
             );
             if local_signing::enabled() {
                 let install_root = local_signing::install_root(&root);

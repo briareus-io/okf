@@ -6,10 +6,10 @@ description: Install a release, verify its checksum, and check CLI/plugin compat
 ---
 # Install OKF
 
-The 0.6.9 plugin requires stable CLI versions `>=0.6.8, <0.7.0`. Read the
+The 0.6.10 plugin requires stable CLI versions `>=0.6.8, <0.7.0`. Read the
 [0.6 migration guide](../reference/migrations/0.6.0.md) before updating configuration or automation.
-Review the [0.6.9 release notes](https://github.com/briareus-io/okf/blob/v0.6.9/releases/0.6.9.md)
-for feedback collection, private drafting, and reviewed export.
+Review the [0.6.10 release notes](https://github.com/briareus-io/okf/blob/v0.6.10/releases/0.6.10.md)
+for custom feedback storage with OKF_FEEDBACK_DIR.
 Install the matching CLI before using these features in automation.
 For upgrades from 0.6.0, also review the [0.6.1 release notes](https://github.com/briareus-io/okf/blob/v0.6.1/releases/0.6.1.md)
 for corrected typed-source paths and reader coordination.
@@ -36,13 +36,13 @@ okf version
 ```
 
 Alternatively, download the standalone installer from a **published release**, inspect it,
-then run it with an explicit version. Use the release version you selected; this example targets 0.6.9 once it is published:
+then run it with an explicit version. Use the release version you selected; this example targets 0.6.10 once it is published:
 
 ```sh
 curl --fail --location --proto '=https' --proto-redir '=https' \
-  https://github.com/briareus-io/okf/releases/download/v0.6.9/install.sh -o install.sh
+  https://github.com/briareus-io/okf/releases/download/v0.6.10/install.sh -o install.sh
 # Review install.sh before running it.
-sh install.sh 0.6.9
+sh install.sh 0.6.10
 ```
 
 The optional installer detects your platform, verifies the archive checksum, checks that the
