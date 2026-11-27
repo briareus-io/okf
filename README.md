@@ -12,21 +12,22 @@ inspect workflow context and artifacts, and trace source impact.
 
 ## Install
 
-**CLI/plugin 0.6.11 upgrade:** read the [migration guide](knowledge/reference/migrations/0.6.0.md)
+**CLI/plugin 0.6.12 upgrade:** read the [migration guide](knowledge/reference/migrations/0.6.0.md)
 before updating an existing installation or automation. Install CLI and plugin together;
-the 0.6.11 plugin supports stable CLI versions `>=0.6.8, <0.7.0`. The document format remains OKF v0.2.
-Read the [0.6.11 release notes](releases/0.6.11.md) for changes and upgrade guidance.
-Use CLI 0.6.11 or newer for saved queries and named section reads. Upgrade readers before adding
-`settings.saved_queries` to a shared bundle manifest.
+the 0.6.12 plugin supports stable CLI versions `>=0.6.8, <0.7.0`. The document format remains OKF v0.2.
+Read the [0.6.12 release notes](releases/0.6.12.md) for changes and upgrade guidance.
+Use CLI 0.6.12 for concise agent context and workflow query declarations. Upgrade shared-bundle
+readers before adding `uses_queries`. JSON consumers of bundle context should resolve
+`instructions_ref` when multiple entries share an instruction file.
 
 For a published release, download its matching installer, inspect it, then run it. If this
 checkout's version has not been published yet, use the source-build instructions below:
 
 ```sh
 curl --fail --location --proto '=https' --proto-redir '=https' \
-  https://github.com/briareus-io/okf/releases/download/v0.6.11/install.sh -o install.sh
+  https://github.com/briareus-io/okf/releases/download/v0.6.12/install.sh -o install.sh
 # Review install.sh before running it.
-sh install.sh 0.6.11
+sh install.sh 0.6.12
 export PATH="$HOME/.local/bin:$PATH"
 okf version
 ```

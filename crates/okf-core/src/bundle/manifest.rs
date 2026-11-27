@@ -110,6 +110,8 @@ pub struct Workflow {
     #[serde(default)]
     pub resources: Vec<String>,
     #[serde(default)]
+    pub uses_queries: BTreeSet<String>,
+    #[serde(default)]
     pub outputs: Vec<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -281,6 +283,13 @@ pub fn parse(text: &str) -> Result<Manifest> {
             return Err(usage("workflow ID and description must be nonempty"));
         }
         body_shape(&w.instructions, &w.instructions_file, true)?;
+        for query in &w.uses_queries {
+            if !manifest.settings.saved_queries.contains_key(query) {
+                return Err(usage(format!(
+                    "workflow {id:?} uses unknown saved query {query:?}"
+                )));
+            }
+        }
         for (name, input) in &w.inputs {
             if name.is_empty()
                 || !matches!(input.type_.as_str(), "string" | "boolean" | "enum" | "path")
@@ -614,6 +623,7 @@ pub fn context(
                 )?);
                 row["inputs"] = json!(w.inputs);
                 row["resources"] = json!(w.resources);
+                row["uses_queries"] = json!(w.uses_queries);
                 row["outputs"] = json!(w.outputs);
             }
             if full {

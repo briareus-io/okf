@@ -11,7 +11,7 @@ sources:
 ---
 # CLI globals and record contracts
 
-Generated from `okf schema` for CLI 0.6.11. See the [command index](../commands/index.md) for individual arguments and [command contracts](command-contracts.md) for shared behavior.
+Generated from `okf schema` for CLI 0.6.12. See the [command index](../commands/index.md) for individual arguments and [command contracts](command-contracts.md) for shared behavior.
 
 Commands with a human form accept global `--json` for NDJSON; `schema` is always NDJSON. Most bundle-aware commands take an optional trailing `bundle` path or a separate `--bundle-id` selector; `format` uses `--bundle <path>` and an optional concept ID positional. Selection uses explicit path or ID, `$OKF_BUNDLE` (path), registered containing bundle, configured default, sole catalog entry, then uncataloged cwd. Catalog registration alone does not extend examination scope. Meta commands have no bundle, and `source-scan` takes an explicit arbitrary directory.
 
@@ -250,12 +250,13 @@ Scope and effective settings are interpretation context, not authored concept me
     "schema_version": 1
   },
   "guidance": {
-    "content": "full|summary",
+    "content": "full|summary|shared",
     "context_digest": "string",
     "expand_argv": "array<string> (summary in explicit context)",
     "id": "string",
     "instruction_role": "task-guidance|inspected",
     "instructions": "string (full only)",
+    "instructions_ref": "{kind,id} of an earlier full record in this bundle (shared only)",
     "omission_reason": "string (summary)",
     "origin": "object",
     "selection_reason": "string (explicit context)",
@@ -431,10 +432,13 @@ Scope and effective settings are interpretation context, not authored concept me
     "schema_version": 1
   },
   "workflow": {
-    "content": "full|summary",
+    "content": "full|summary|shared",
     "id": "string",
     "inputs_complete": "boolean (selected only)",
-    "selected": "boolean"
+    "instructions": "string (full only)",
+    "instructions_ref": "{kind,id} of an earlier full record in this bundle (shared only)",
+    "selected": "boolean",
+    "uses_queries": "array<string> (full or shared workflow)"
   }
 }
 ```

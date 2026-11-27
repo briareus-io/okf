@@ -247,6 +247,9 @@ pub struct BundleContextArgs {
     pub workflow: Vec<String>,
     #[arg(long, conflicts_with_all = ["operation", "workflow", "rule", "token", "check_token"])]
     pub all: bool,
+    /// Render concise guidance, workflow resources, outputs, and saved queries. Conflicts with --json, --settings-detail, and --check-token.
+    #[arg(long, value_parser = ["agent"], conflicts_with_all = ["json", "settings_detail", "check_token"])]
+    pub format: Option<String>,
     /// Settings projection; full preserves the complete JSON contract, compact shows relevant values.
     #[arg(long, default_value = "full", value_parser = ["full", "compact"])]
     pub settings_detail: String,

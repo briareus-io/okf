@@ -43,7 +43,7 @@ class DistributionTests(unittest.TestCase):
                               env=self.env, capture_output=True, text=True)
 
     def test_compatibility_boundaries(self):
-        for version, accepted in [('0.5.2', False), ('0.6.0', False), ('0.6.1', False), ('0.6.2', False), ('0.6.3', False), ('0.6.4', False), ('0.6.5', False), ('0.6.6', False), ('0.6.7', False), ('0.6.8', True), ('0.6.9', True), ('0.6.10', True), ('0.6.11', True),
+        for version, accepted in [('0.5.2', False), ('0.6.0', False), ('0.6.1', False), ('0.6.2', False), ('0.6.3', False), ('0.6.4', False), ('0.6.5', False), ('0.6.6', False), ('0.6.7', False), ('0.6.8', True), ('0.6.9', True), ('0.6.10', True), ('0.6.11', True), ('0.6.12', True),
                                   ('0.7.0', False), ('0.7.10', False), ('0.8.0', False), ('1.0.0', False),
                                   ('0.6.9-beta.1', False), ('garbage', False)]:
             with self.subTest(version=version):

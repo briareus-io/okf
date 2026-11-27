@@ -3,6 +3,7 @@ type: Guide
 audience: user
 uses:
 - /commands/init
+- /commands/bundle-context
 - /commands/bundle-validate
 - /commands/query
 - /commands/show
@@ -23,7 +24,9 @@ criteria for each hop together.
 ## Model the example
 
 Use a directory named `product` for this example. Each file below has a path relative to its
-parent directory. From that parent, create the bundle with a CLI that supports `okf query --help`.
+parent directory. Use CLI 0.6.12 or newer for every reader of this example. CLI 0.6.11 supports
+saved queries but rejects the workflow field `uses_queries`.
+Run the commands from the parent directory.
 
 ```sh
 okf init product
@@ -108,13 +111,20 @@ Contact the owner.
 Save the following manifest. In `notes-for-open-blockers`, the first backlink hop finds an open
 defect that blocks the feature. The second finds owned notes linking to that defect.
 `triage-notes` changes direction at the defect and follows its declared triage relationship
-outward. Check that other readers support `okf query` before publishing a shared bundle with
-this setting. Older CLIs can reject manifests containing an unknown setting.
+outward.
 
 **File: `product/okf-bundle.yaml`**
 
 ```yaml
 manifest_version: 1
+workflows:
+  review-feature:
+    description: Review the triage note before editing a feature.
+    instructions: Read the triage note and check the proposed change with its owner.
+    uses_queries: [triage-notes]
+  copy-edit:
+    description: Copy edit a feature.
+    instructions: Preserve the meaning of its requirements.
 settings:
   query_presets:
     features:
@@ -153,7 +163,9 @@ settings:
 okf bundle validate product
 ```
 
-The command prints `manifest: valid`. Run the two-backlink query with the feature ID.
+The command prints `manifest: valid`. If validation reports an unknown field named
+`uses_queries`, upgrade that reader before using the manifest. The same parser handles
+both text and JSON output. Run the two-backlink query with the feature ID.
 
 ```sh
 okf query notes-for-open-blockers features/export --bundle product
@@ -186,6 +198,41 @@ Each stage passes distinct endpoints to the next. Two matching routes to one not
 result for its bundle, version, and concept ID. A later hop may revisit a concept. The length of
 the declared sequence bounds the read. To see individual occurrences, use `links --details` or
 `backlinks --details`. For a drawing of the neighborhood, use [graph](../commands/graph.md).
+
+## Give a workflow its saved queries
+
+Suppose a reviewer needs the triage note before editing a feature, while a copy editor only
+needs the feature text. The manifest above declares `uses_queries: [triage-notes]` for the reviewer. The copy edit omits
+the field. Compare their context before starting the edit.
+
+```sh
+okf bundle context product --workflow copy-edit --operation edit --format agent
+```
+
+```sh
+okf bundle context product --workflow review-feature --operation edit --format agent
+```
+
+The copy edit shows zero saved queries. The feature review includes one line beginning
+`[saved query triage-notes]`, with its starting point, hops, and selected fields. Listing
+both workflows together shows that definition once. A typo in `uses_queries` fails validation
+with the workflow and missing query name. Use a CLI that recognizes this manifest field on
+each reader before sharing the change.
+
+To run the lookup during the review, include the query operation when loading guidance, then
+invoke the query with the feature ID.
+
+```sh
+okf bundle context product --workflow review-feature --operation edit --operation query --format agent
+```
+
+```sh
+okf query triage-notes features/export --bundle product
+```
+
+The explicit query operation exposes all four definitions. Adding `--token` to that context
+request produces a receipt covering both edit and query. Declaring a query in a workflow
+controls discovery and leaves execution to the caller.
 
 ## Start from a group of concepts
 

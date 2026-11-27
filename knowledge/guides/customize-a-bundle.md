@@ -99,6 +99,9 @@ workflows:
   import-specification:
     description: Import a supplied specification under the authoring conventions.
     instructions_file: .okf-bundle/references/import-specification.md
+    outputs:
+      - Imported requirement records
+      - A list of unresolved questions
     inputs:
       source:
         type: string
@@ -172,7 +175,21 @@ Look for the global instruction and the matching `relationship-evidence` rule. T
 applicability comes from its `operations` list. Plain `bundle context` shows the inventory,
 and `--all` returns bodies for inspection.
 
-Select the import workflow and supply a fictional document identifier.
+Read the import instructions and expected deliverables before selecting a review level.
+
+```sh
+okf bundle context bundle --workflow import-specification --format agent
+```
+
+The workflow lists `Imported requirement records` and `A list of unresolved questions` under
+`Outputs`. It also reports the missing `source`. For the input schema, request the structured
+workflow record. Its `inputs.review_level.values` lists `standard` and `detailed`.
+
+```sh
+okf bundle context bundle --workflow import-specification --json
+```
+
+Supply a fictional document identifier and choose the detailed review.
 
 ```sh
 okf bundle context bundle --workflow import-specification --inputs '{"source":"supplied-vendor-specification","review_level":"detailed"}' --json
@@ -182,6 +199,15 @@ The workflow record reports `inputs_complete: true` and the effective values. Om
 `review_level` to use `standard`. Omit the required `source` and the workflow record lists
 the missing input. Selecting the workflow loads instructions for an author. The author still
 needs to inspect the document, perform the requested import, and verify the result.
+
+### Reuse an instruction file
+
+A rule and a workflow can point to the same bundle-relative `instructions_file`. When both are
+delivered, the first prints the file and the second identifies the earlier rule or workflow.
+For example, if global guidance and the import workflow share a file, the workflow shows
+`Same instructions as [rule $global]` along with its own inputs and outputs. A summary alone
+does not deliver the file. In JSON, resolve `content: shared` through `instructions_ref.kind`
+and `instructions_ref.id` within the same bundle. The referring record supplies its own role.
 
 ## Check context freshness before using it
 
@@ -229,3 +255,6 @@ readers should find through knowledge search. Reading a workflow definition leav
 scripts inert. The author decides which actions the task authorizes.
 
 For a preset applied to a relationship, see [Follow a relationship across two hops](find-and-read-knowledge.md#follow-a-relationship-across-two-hops).
+
+When a workflow depends on a recurring lookup, declare its saved-query names in
+`uses_queries`. See the [feature review example](save-and-run-queries.md#give-a-workflow-its-saved-queries).

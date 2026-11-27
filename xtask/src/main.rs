@@ -68,7 +68,7 @@ fn main() {
         }
         Some("install") => {
             eprintln!(
-                "OKF CLI/plugin 0.6.11 adds saved queries and named section reads. Upgrade readers before adding settings.saved_queries to shared manifests. The plugin requires CLI >=0.6.8, <0.7.0. Review releases/0.6.11.md and knowledge/reference/migrations/0.6.0.md before installing."
+                "OKF CLI/plugin 0.6.12 adds concise bundle context and shared instruction delivery. Upgrade readers before declaring workflow uses_queries, and update context consumers to resolve instructions_ref. The plugin requires CLI >=0.6.8, <0.7.0. Review releases/0.6.12.md and knowledge/reference/migrations/0.6.0.md before installing."
             );
             if local_signing::enabled() {
                 let install_root = local_signing::install_root(&root);
@@ -663,7 +663,8 @@ fn command_guidance(name: &str) -> &'static str {
         }
         "bundle context" => {
             "Batch known operations in the initial request to load global and mandatory scoped instructions together. \
-            Reference-tier rules expand with --rule; --all and historical context are inspection only. \
+            Within each bundle, a shared instruction file is delivered once. Later records carry content=shared and instructions_ref identifying the earlier record by kind and id. Each record retains its own instruction_role. Reference-tier rules expand with --rule; --all and historical context are inspection only. \
+            --format agent delivers concise rules, workflow resources and declared outputs, labels inspected bodies, lists available rules and workflows, and reports scope completion. Agent and compact context include definitions from the selected workflows' uses_queries lists. --operation query includes every saved query. For structured compact settings, replace --format agent with --settings-detail compact --json. Use full JSON for workflow input schemas, including enum choices. Run --check-token separately. \
             --settings-detail compact explicitly projects settings; full JSON remains the default. --stats reports delivered instruction bytes. \
             --token emits a stateless receipt after delivery; pass it with --context (or @file) on covered commands, or check with --check-token. \
             A stale supplied token fails before execution; tokens are optional and are not authorization or concept-content guards. \

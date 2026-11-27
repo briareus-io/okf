@@ -9,7 +9,11 @@ use okf_core::{
     error::{OkfError, Result},
 };
 use serde_json::{Value, json};
-use std::{collections::BTreeMap, io::Read, path::Path};
+use std::{
+    collections::BTreeMap,
+    io::Read,
+    path::{Component, Path, PathBuf},
+};
 
 pub fn read_selection(raw: &str) -> Result<okf_core::bundle::selection::SelectionReceipt> {
     let text = if let Some(path) = raw.strip_prefix('@') {
@@ -238,10 +242,12 @@ fn context(args: &BundleContextArgs, json_output: bool) -> Result<i32> {
             &json!({"kind":"context-scope","requested":scope.requested,"examined":scope.examined.iter().map(|e|json!({"bundle":e.id,"root":e.root,"version":e.version})).collect::<Vec<_>>(),"unavailable":scope.unavailable,"complete":scope.unavailable.is_empty()}),
         )?;
     } else {
-        output::print_text_line(format_args!(
-            "Context scope: {}",
-            scope.requested.join(", ")
-        ))?;
+        if args.format.is_none() {
+            output::print_text_line(format_args!(
+                "Context scope: {}",
+                scope.requested.join(", ")
+            ))?;
+        }
         if !scope.unavailable.is_empty() {
             output::print_text_line(format_args!(
                 "Unavailable: {}",
@@ -253,12 +259,23 @@ fn context(args: &BundleContextArgs, json_output: bool) -> Result<i32> {
         output::mark_partial("examination", "context-scope-unavailable");
     }
     for (index, member) in scope.examined.iter().enumerate() {
+        if args.format.is_some() && scope.requested.len() > 1 {
+            output::print_text_line(format_args!("Bundle: {}", member.id))?;
+        }
         context_one(
             args,
             &member.root,
             index == 0 && member.root == selected.primary.root,
             json_output,
         )?;
+    }
+    if args.format.is_some() {
+        let status = if scope.unavailable.is_empty() {
+            "complete"
+        } else {
+            "partial"
+        };
+        output::print_text_line(format_args!("Context: {status}"))?;
     }
     Ok(if scope.unavailable.is_empty() { 0 } else { 1 })
 }
@@ -355,7 +372,17 @@ fn context_one(
     } else {
         None
     };
-    let (settings, omitted) = settings_view(&context, &args.settings_detail)?;
+    let (settings, omitted) = settings_view(
+        &context,
+        if args.format.is_some() {
+            "compact"
+        } else {
+            &args.settings_detail
+        },
+        !args.workflow.is_empty(),
+    )?;
+
+    let mandatory_bytes = share_instruction_files(&mut context.records);
 
     if json_output {
         let mut head =
@@ -385,16 +412,36 @@ fn context_one(
         for record in &context.records {
             output::print_line(record)?;
         }
+    } else if args.format.is_some() {
+        print_agent_context(&context, settings)?;
     } else {
         output::print_text_line(format_args!(
             "Bundle root: {}\nContext digest: {}\nManifest: {}",
             root.display(),
             context.context_digest,
-            context
-                .manifest
-                .as_ref()
-                .map_or("absent".into(), std::string::ToString::to_string)
+            context.manifest.as_ref().map_or_else(
+                || "absent".into(),
+                |m| format!(
+                    "{} (digest: {})",
+                    manifest::FILENAME,
+                    m["digest"].as_str().unwrap_or_default()
+                )
+            )
         ))?;
+        if context.records.iter().any(|r| r["content"] == "summary") {
+            output::print_text_line(format_args!(
+                "Expand entries with: okf bundle context {} --json",
+                shell_word(&root.to_string_lossy())
+            ))?;
+        }
+        let mut settings = compact_query_steps(settings);
+        if args.settings_detail == "compact"
+            && let Some(queries) = settings["settings"]
+                .as_object_mut()
+                .and_then(|map| map.remove("saved_queries"))
+        {
+            print_query_definitions(&queries)?;
+        }
         output::print_text_line(format_args!(
             "Effective settings:\n{}",
             yaml_serde::to_string(&text_settings(settings))
@@ -420,7 +467,7 @@ fn context_one(
         ))?;
     }
     if args.stats || args.guidance_budget.is_some() {
-        print_stats(&context, args.guidance_budget, json_output)?;
+        print_stats(&context, mandatory_bytes, args.guidance_budget, json_output)?;
     }
     // Emit the receipt only after the instruction records have been written successfully.
     if let Some(token) = token {
@@ -445,7 +492,33 @@ fn annotate_origin(record: &mut Value, root: &Path, bundle: Option<&str>) {
 }
 
 fn shell_word(value: &str) -> String {
+    if value.chars().any(char::is_control) {
+        // Octal quoting keeps the command on one line and preserves the exact UTF-8 bytes.
+        let bytes: String = value.bytes().map(|b| format!("\\{b:03o}")).collect();
+        return format!("$'{bytes}'");
+    }
     format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+fn expansion_flag(record: &Value) -> &'static str {
+    if record["kind"] == "workflow" {
+        "--workflow"
+    } else {
+        "--rule"
+    }
+}
+
+// Keep text labels on one line and distinguish an escaped newline from a literal backslash-n.
+fn display_id(id: &str) -> String {
+    let mut label = String::with_capacity(id.len());
+    for ch in id.chars() {
+        if ch.is_control() || matches!(ch, '\\' | '\u{2028}' | '\u{2029}') {
+            label.extend(ch.escape_debug());
+        } else {
+            label.push(ch);
+        }
+    }
+    label
 }
 
 fn add_selection_metadata(record: &mut Value, selection: &manifest::ContextRequest, root: &Path) {
@@ -480,11 +553,7 @@ fn add_selection_metadata(record: &mut Value, selection: &manifest::ContextReque
     };
     record["selection_reason"] = json!(reason);
     if record["content"] == "summary" {
-        let flag = if record["kind"] == "workflow" {
-            "--workflow"
-        } else {
-            "--rule"
-        };
+        let flag = expansion_flag(record);
         let argv = vec![
             "okf".to_owned(),
             "bundle".into(),
@@ -506,7 +575,11 @@ fn add_selection_metadata(record: &mut Value, selection: &manifest::ContextReque
 
 /// A conservative projection: unknown operations and selected workflows keep all groups.
 /// Operational defaults remain visible; optional null/empty leaves can be omitted explicitly.
-fn settings_view(context: &manifest::BundleContext, detail: &str) -> Result<(Value, Vec<String>)> {
+fn settings_view(
+    context: &manifest::BundleContext,
+    detail: &str,
+    workflow_requested: bool,
+) -> Result<(Value, Vec<String>)> {
     let mut value = serde_json::to_value(&context.effective_settings)
         .map_err(|e| OkfError::Internal(e.to_string()))?;
     let mut omitted = Vec::new();
@@ -569,6 +642,34 @@ fn settings_view(context: &manifest::BundleContext, detail: &str) -> Result<(Val
         };
         groups.extend(relevant.iter().copied());
     }
+    if workflow_requested && !context.selection.operations.iter().any(|op| op == "query") {
+        let settings = value["settings"]
+            .as_object_mut()
+            .expect("settings serialize as an object");
+        if let Some(queries) = settings
+            .get_mut("saved_queries")
+            .and_then(Value::as_object_mut)
+        {
+            let declared: std::collections::BTreeSet<_> = context
+                .records
+                .iter()
+                .filter(|record| record["kind"] == "workflow" && record["selected"] == true)
+                .filter_map(|record| record["uses_queries"].as_array())
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect();
+            let before = queries.len();
+            queries.retain(|name, _| declared.contains(name.as_str()));
+            if queries.len() < before {
+                omitted.push("saved_queries: outside selected workflows".into());
+            }
+            if queries.is_empty() {
+                settings.remove("saved_queries");
+            }
+        } else {
+            omitted.push("saved_queries: unset or empty".into());
+        }
+    }
     if !all {
         value["settings"]
             .as_object_mut()
@@ -614,8 +715,166 @@ fn text_settings(mut value: Value) -> Value {
     value
 }
 
+// Remove only empty filter lists. An empty links/backlinks hop still means traverse.
+fn compact_query_steps(mut settings: Value) -> Value {
+    if let Some(queries) = settings
+        .pointer_mut("/settings/saved_queries")
+        .and_then(Value::as_object_mut)
+    {
+        for query in queries.values_mut() {
+            let Some(steps) = query.get_mut("steps").and_then(Value::as_array_mut) else {
+                continue;
+            };
+            for step in steps.iter_mut().filter_map(Value::as_object_mut) {
+                for filters in step.values_mut().filter_map(Value::as_object_mut) {
+                    filters.retain(|_, values| !values.as_array().is_some_and(Vec::is_empty));
+                }
+            }
+        }
+    }
+    settings
+}
+
+/// Project one bundle at a time. The first full record remains the body owner,
+/// even when a later record applies the same bytes in a different role.
+fn share_instruction_files(records: &mut [Value]) -> usize {
+    let mut owners: BTreeMap<_, (Value, bool)> = BTreeMap::new();
+    let mut mandatory_bytes = 0;
+    for record in records {
+        let Some(body) = record["instructions"].as_str() else {
+            continue;
+        };
+        let size = body.len();
+        let mandatory = record["instruction_role"] == "task-guidance";
+        let Some(file) = record["origin"]["instructions_file"].as_str() else {
+            if mandatory {
+                mandatory_bytes += size;
+            }
+            continue;
+        };
+        let path: PathBuf = Path::new(file)
+            .components()
+            .filter(|part| *part != Component::CurDir)
+            .collect();
+        // A changed file must never be represented by a reference to different bytes.
+        let key = (
+            path,
+            record["origin"]["instruction_digest"]
+                .as_str()
+                .expect("loaded instruction file has a digest")
+                .to_owned(),
+        );
+        if let Some((owner, counted_as_mandatory)) = owners.get_mut(&key) {
+            record
+                .as_object_mut()
+                .expect("instruction record is an object")
+                .remove("instructions");
+            record["content"] = json!("shared");
+            record["instructions_ref"] = owner.clone();
+            if mandatory && !*counted_as_mandatory {
+                mandatory_bytes += size;
+                *counted_as_mandatory = true;
+            }
+        } else {
+            owners.insert(
+                key,
+                (json!({"kind":record["kind"], "id":record["id"]}), mandatory),
+            );
+            if mandatory {
+                mandatory_bytes += size;
+            }
+        }
+    }
+    mandatory_bytes
+}
+
+fn print_instruction_body(record: &Value) -> Result<()> {
+    if let Some(body) = record["instructions"].as_str() {
+        output::print_text_line(format_args!("{body}"))?;
+    } else if let Some(owner) = record.get("instructions_ref") {
+        let kind = if owner["kind"] == "workflow" {
+            "workflow"
+        } else {
+            "rule"
+        };
+        output::print_text_line(format_args!(
+            "Same instructions as [{kind} {}]",
+            display_id(owner["id"].as_str().unwrap_or_default())
+        ))?;
+    }
+    Ok(())
+}
+
+fn print_agent_context(context: &manifest::BundleContext, settings: Value) -> Result<()> {
+    output::print_text_line(format_args!("Context digest: {}", context.context_digest))?;
+    for record in &context.records {
+        if record["kind"] == "effective-query" {
+            print_context_record(record)?;
+            continue;
+        }
+        let kind = if record["kind"] == "workflow" {
+            "workflow"
+        } else {
+            "rule"
+        };
+        let id = display_id(record["id"].as_str().unwrap_or_default());
+        if record["content"] == "summary" {
+            let description = record["description"].as_str().unwrap_or_default();
+            output::print_text_line(format_args!(
+                "[available {kind} {id}] {}",
+                description.split_whitespace().collect::<Vec<_>>().join(" ")
+            ))?;
+            continue;
+        }
+        let role = if record["instruction_role"] == "inspected" {
+            "inspect "
+        } else {
+            ""
+        };
+        output::print_text_line(format_args!("[{role}{kind} {id}]"))?;
+        print_instruction_body(record)?;
+        print_resources(record)?;
+        if let Some(outputs) = record["outputs"].as_array().filter(|v| !v.is_empty()) {
+            output::print_text_line(format_args!("Outputs:"))?;
+            for output in outputs.iter().filter_map(Value::as_str) {
+                output::print_text_line(format_args!("- {output}"))?;
+            }
+        }
+        if record["effective_inputs"]
+            .as_object()
+            .is_some_and(|v| !v.is_empty())
+        {
+            output::print_text_line(format_args!("Inputs: {}", record["effective_inputs"]))?;
+        }
+        if record["inputs_complete"] == false {
+            output::print_text_line(format_args!(
+                "Missing inputs: {}",
+                record["missing_required"]
+            ))?;
+        }
+    }
+    print_query_definitions(&compact_query_steps(settings)["settings"]["saved_queries"])
+}
+
+fn print_query_definitions(queries: &Value) -> Result<()> {
+    if let Some(queries) = queries.as_object() {
+        for (name, query) in queries {
+            output::print_text_line(format_args!("[saved query {}] {query}", display_id(name)))?;
+        }
+    }
+    Ok(())
+}
+
+fn print_resources(record: &Value) -> Result<()> {
+    if let Some(resources) = record["resources"].as_array().filter(|v| !v.is_empty()) {
+        output::print_text_line(format_args!("Resources: {}", json!(resources)))?;
+    }
+    Ok(())
+}
+
 fn print_stats(
     context: &manifest::BundleContext,
+    mandatory: usize,
     budget: Option<usize>,
     json_output: bool,
 ) -> Result<()> {
@@ -625,12 +884,7 @@ fn print_stats(
         .iter()
         .filter_map(|r| r["delivered_bytes"].as_u64())
         .sum();
-    let mandatory: u64 = sections
-        .iter()
-        .filter(|r| r["mandatory"] == true)
-        .filter_map(|r| r["delivered_bytes"].as_u64())
-        .sum();
-    let exceeded = budget.is_some_and(|b| mandatory > b as u64);
+    let exceeded = budget.is_some_and(|b| mandatory > b);
     if json_output {
         output::print_line(
             &json!({"kind":"context-stats","root":context.root,"sections":sections,"delivered_instruction_bytes":total,"mandatory_instruction_bytes":mandatory,"mandatory_budget":budget,"budget_exceeded":exceeded}),
@@ -640,7 +894,7 @@ fn print_stats(
             output::print_text_line(format_args!(
                 "Instruction bytes: {} {} = {}",
                 section["kind"].as_str().unwrap_or_default(),
-                section["id"].as_str().unwrap_or_default(),
+                display_id(section["id"].as_str().unwrap_or_default()),
                 section["delivered_bytes"]
             ))?;
         }
@@ -652,12 +906,23 @@ fn print_stats(
 }
 fn print_context_record(r: &Value) -> Result<()> {
     if r["kind"] == "effective-query" {
-        return output::print_text_line(format_args!("Effective query: {r}"));
+        let mut effective = json!({"operation": r["operation"]});
+        for key in ["query", "filters"] {
+            if let Some(filters) = r[key].as_object() {
+                let mut filters = filters.clone();
+                filters.retain(|_, v| !v.is_null() && !v.as_array().is_some_and(Vec::is_empty));
+                effective[key] = Value::Object(filters);
+            }
+        }
+        if let Some(details) = r.get("details") {
+            effective["details"] = details.clone();
+        }
+        return output::print_text_line(format_args!("Effective query: {effective}"));
     }
     output::print_text_line(format_args!(
         "{}: {} [{}]",
         r["kind"].as_str().unwrap_or("context"),
-        r["id"].as_str().unwrap_or(""),
+        display_id(r["id"].as_str().unwrap_or("")),
         r["content"].as_str().unwrap_or("")
     ))?;
     for key in [
@@ -671,20 +936,27 @@ fn print_context_record(r: &Value) -> Result<()> {
         }
     }
     if let Some(origin) = r["origin"].as_object() {
-        output::print_text_line(format_args!(
-            "  origin: {}",
-            text_settings(Value::Object(origin.clone()))
-        ))?;
+        let mut local = origin.clone();
+        for common in ["root", "bundle", "manifest", "manifest_digest"] {
+            local.remove(common);
+        }
+        let details = text_settings(Value::Object(local));
+        if details.as_object().is_some_and(|m| !m.is_empty()) {
+            output::print_text_line(format_args!("  origin: {details}"))?;
+        }
     }
-    if let Some(command) = r["expand_command"].as_str() {
-        output::print_text_line(format_args!("  expand: {command}"))?;
+    if r["content"] == "summary" {
+        output::print_text_line(format_args!(
+            "  expand arguments: {} {}",
+            expansion_flag(r),
+            shell_word(r["id"].as_str().unwrap_or_default())
+        ))?;
     }
     if let Some(d) = r["description"].as_str() {
         output::print_text_line(format_args!("  {d}"))?;
     }
-    if let Some(body) = r["instructions"].as_str() {
-        output::print_text_line(format_args!("{body}"))?;
-    }
+    print_instruction_body(r)?;
+    print_resources(r)?;
     if r.get("inputs_complete").is_some() {
         output::print_text_line(format_args!(
             "  inputs complete: {}; missing: {}",

@@ -152,7 +152,7 @@ the query yields one projection for `acme.finance:/policies/margin-standard`.
 
 ```sh
 okf bundle validate --bundle-id acme.product
-okf bundle context --bundle-id acme.product --scope-bundle acme.finance --operation query --json
+okf bundle context --bundle-id acme.product --scope-bundle acme.finance --operation query --format agent
 okf query metric-policies metrics/revenue --bundle-id acme.product --scope-bundle acme.finance --json
 ```
 

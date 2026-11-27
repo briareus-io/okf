@@ -33,11 +33,17 @@ metadata on global guidance, rules, or workflows; context returns it in `origin.
 Put generator identity there instead of prefixing every instruction body with boilerplate.
 The CLI preserves authored instruction bytes, including HTML comments.
 
-For a prose edit, request `bundle context --operation edit --stats --json`. The invariant is
+For a prose edit, request `bundle context --operation edit --stats --format agent`. The invariant is
 mandatory and delivered in full; examples are a reference stub. Expand them with
-`bundle context --rule modeling-examples --json` when useful. An expanded reference remains
+`bundle context --rule modeling-examples --format agent` when useful. An expanded reference remains
 inspected material. Selecting `--workflow remodel` loads that procedure but does not execute it.
 Keep a useful description on each reference so the reader can decide whether to expand it.
+
+When a rule and workflow need the same procedure, point both `instructions_file` fields at one
+bundle-relative file. Context delivers the file once per bundle per invocation. Separate files
+with identical prose and repeated inline instructions each contribute their own bodies.
+A summary leaves the file available for later delivery. If any delivered entry uses the shared
+file as task guidance, its bytes count once toward the mandatory budget.
 
 Use `--guidance-budget 4096` to report whether delivered mandatory instructions exceed an
 illustrative byte budget. This is advisory, never truncates instructions, and does not fail the
@@ -47,4 +53,7 @@ model-token estimates; omitted bodies are not read just to measure their size.
 `--settings-detail compact` keeps the union of relevant setting groups and operational defaults,
 with explicit omission reasons. It is independent of `--all`, which expands all guidance for
 inspection and cannot issue an execution token. Unknown operation dependencies and selected
-workflows conservatively retain all setting groups.
+workflows conservatively retain setting groups. Within `saved_queries`, a selected workflow exposes
+only names declared in its optional `uses_queries` list. Declare names from the same manifest.
+Multiple selected workflows contribute their combined lists. Include `--operation query` to
+load the entire saved-query inventory and request query coverage in a receipt.

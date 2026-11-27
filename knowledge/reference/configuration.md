@@ -46,6 +46,12 @@ Use `settings.query_presets` to name filters for individual operations and
 list/search preset. See [saved queries](../guides/save-and-run-queries.md) for a mixed-direction
 example with the corresponding ontology and manifest.
 
+Each workflow may declare `uses_queries`, a list of names defined under `settings.saved_queries`
+in the same manifest. An omitted or empty list declares no query dependencies. Agent and compact
+context show the combined definitions for selected workflows. An explicit `--operation query`
+includes every saved query. Full context retains all settings. Bundle validation reports both
+the workflow and the missing name if a query is removed or renamed.
+
 Selection follows explicit bundle path or `--bundle-id`, `OKF_BUNDLE`, a containing bundle,
 configured default, an unambiguous sole catalog entry, then the legacy uncataloged working-directory
 fallback. Path and ID selectors cannot be combined. `OKF_BUNDLE` always means a path. Use explicit

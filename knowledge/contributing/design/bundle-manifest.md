@@ -322,6 +322,10 @@ authorization, never because the CLI reads a manifest. An unfamiliar script is i
 understand its effects. Missing tools, failed scripts, or incomplete outputs remain visible. The
 agent inspects mutations and reruns relevant checks.
 
+A workflow's optional `uses_queries` list names entries in the manifest's `settings.saved_queries`.
+Agent and compact context combine dependencies across selected workflows. Selecting the query
+operation exposes the entire inventory. Each query still executes through its own command.
+
 Command selectors describe invocations, not workflow phases. `operations: [add, edit]` cannot mean
 “after ingestion,” which may span many commands. Post-ingestion formatting belongs in a selected
 workflow or explicitly conditional global guidance.

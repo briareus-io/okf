@@ -27,7 +27,7 @@ use `okf list <bundle> --json` for an intended inventory. Use `okf browse <bundl
 <directory>` to descend; its positional is also the bundle.
 
 When the question matches a saved read chain, inspect its start and hops in
-`okf bundle context <bundle> --operation query --settings-detail compact --json`.
+`okf bundle context <bundle> --operation query --format agent`.
 Use `okf query <name> <concept-id> --bundle <bundle>` for a concept start. Omit the concept
 ID for a preset start. Select properties or prose on the final matches. See the
 [worked example](references/query-planning.md#run-a-saved-read-chain).

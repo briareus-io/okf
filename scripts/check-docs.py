@@ -266,6 +266,9 @@ def check_examples():
         saved = tmp / "saved"
         examples = run_guide(BUNDLE / "guides/save-and-run-queries.md", saved,
                              run_cli)
+        contexts = [output for args, output in examples if args[:2] == ["bundle", "context"]]
+        assert [output.count("[saved query ") for output in contexts] == [0, 1, 4]
+        assert "[saved query triage-notes]" in contexts[1]
         assert any("/defects/csv" in output for args, output in examples if "all-open-blockers" in args)
         rows = [json.loads(line) for args, result in examples if "--json" in args
                 for line in result.splitlines()]
